@@ -10,6 +10,7 @@
 #define _MLTON_GC_H_
 
 #include "platform.h"
+#include "zmq.h"
 
 struct GC_state;
 typedef struct GC_state *GC_state;
@@ -74,5 +75,6 @@ typedef GC_state GCState_t;
 #include "gc/pack.h"
 #include "gc/size.h"
 #include "gc/share.h"
+#include "gc/zeromq.h"
 
 #endif /* _MLTON_GC_H_ */

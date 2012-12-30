@@ -1008,9 +1008,9 @@ fun commandLine (args: string list): unit =
                       if positionIndependent then
                       ["-lmlton-pic", "-lgdtoa-pic"]
                       else if !debugRuntime then
-                      ["-lmlton-gdb", "-lgdtoa-gdb"]
+                      ["-lmlton-gdb", "-lgdtoa-gdb", "-lzmq-gdb"]
                       else
-                      ["-lmlton", "-lgdtoa"],
+                      ["-lmlton", "-lgdtoa","-lzmq"],
                       addTargetOpts linkOpts]
       val linkArchives =
          if positionIndependent then
@@ -1018,10 +1018,12 @@ fun commandLine (args: string list): unit =
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-pic.a" }]
          else if !debugRuntime then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-gdb.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" }]
+          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" },
+          OS.Path.joinDirFile { dir = !libTargetDir, file = "libzmq-gdb.a" }]
          else
          [OS.Path.joinDirFile { dir = !libTargetDir, file =  "libmlton.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libgdtoa.a" }]
+          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libgdtoa.a" },
+          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libzmq.a" }]
       val _ =
          if not (hasCodegen (!codegen))
             then usage (concat ["can't use ",

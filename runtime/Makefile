@@ -127,9 +127,9 @@ ifeq ($(TARGET_OS), solaris)
 FLAGS += -funroll-all-loops
 endif
 
-# These flags can be overridden by the user 
+# These flags can be overridden by the user
 CPPFLAGS :=
-CFLAGS := 
+CFLAGS :=
 
 INCFLAGS := -I. -Iplatform
 OPTCFLAGS := $(CFLAGS) $(INCFLAGS) $(CPPFLAGS) $(FLAGS) $(OPTFLAGS)
@@ -269,7 +269,8 @@ PIC_OBJS   := $(patsubst %.o,%-pic.o,$(OBJS))
 
 
 ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a \
-       libmlton.a libmlton-gdb.a libmlton-pic.a
+       libmlton.a libmlton-gdb.a libmlton-pic.a \
+			 libzmq.a libzmq-gdb.a
 ALL += gen/c-types.sml gen/basis-ffi.sml gen/sizes
 ifeq ($(OMIT_BYTECODE), yes)
 else
@@ -305,6 +306,21 @@ libgdtoa.a:     $(GDTOA_OBJS)
 libgdtoa-gdb.a: $(GDTOA_DEBUG_OBJS)
 libgdtoa-pic.a: $(GDTOA_PIC_OBJS)
 
+libzmq.a: libzmq.zip
+	unzip libzmq.zip
+	mv libzmq-master libzmq
+	cd libzmq && ./autogen.sh && ./configure --prefix=`pwd`/local-install && make install
+	cp libzmq/local-install/include/* .
+	cp libzmq/local-install/lib/libzmq.a .
+	rm -rf libzmq
+
+libzmq-gdb.a: libzmq.zip
+	unzip libzmq.zip
+	mv libzmq-master libzmq
+	cd libzmq && ./autogen.sh && ./configure --enable-debug --prefix=`pwd`/local-install && make install
+	cp libzmq/local-install/include/* .
+	cp libzmq/local-install/lib/libzmq.a libzmq-gdb.a
+	rm -rf libzmq
 
 util-pic.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)
 	$(CC) $(PICCFLAGS) $(PICWARNCFLAGS) -c -o $@ $<
