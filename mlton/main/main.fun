@@ -1006,9 +1006,9 @@ fun commandLine (args: string list): unit =
       val linkOpts =
          List.concat [[concat ["-L", !libTargetDir]],
                       if positionIndependent then
-                      ["-lmlton-pic", "-lgdtoa-pic","-lzmq-pic"]
+                      ["-lmlton-pic", "-lgdtoa-pic","-lzmq"]
                       else if !debugRuntime then
-                      ["-lmlton-gdb", "-lgdtoa-gdb", "-lzmq-gdb"]
+                      ["-lmlton-gdb", "-lgdtoa-gdb", "-lzmq"]
                       else
                       ["-lmlton", "-lgdtoa","-lzmq"],
                       addTargetOpts linkOpts]
@@ -1018,12 +1018,10 @@ fun commandLine (args: string list): unit =
           OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-pic.a" }]
          else if !debugRuntime then
          [OS.Path.joinDirFile { dir = !libTargetDir, file = "libmlton-gdb.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file = "libzmq-gdb.a" }]
+          OS.Path.joinDirFile { dir = !libTargetDir, file = "libgdtoa-gdb.a" }]
          else
          [OS.Path.joinDirFile { dir = !libTargetDir, file =  "libmlton.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libgdtoa.a" },
-          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libzmq.a" }]
+          OS.Path.joinDirFile { dir = !libTargetDir, file =  "libgdtoa.a" }]
       val _ =
          if not (hasCodegen (!codegen))
             then usage (concat ["can't use ",
