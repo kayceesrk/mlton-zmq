@@ -49,7 +49,7 @@ signature MLTON =
       structure Process: MLTON_PROCESS
       structure Profile: MLTON_PROFILE
 (*      structure Ptrace: MLTON_PTRACE *)
-      structure Random: MLTON_RANDOM 
+      structure Random: MLTON_RANDOM
       structure Real: MLTON_REAL
       structure Real32: sig
                            include MLTON_REAL
@@ -78,4 +78,5 @@ signature MLTON =
       structure Word8Array: MLTON_MONO_ARRAY
       structure Word8Vector: MLTON_MONO_VECTOR
       structure World: MLTON_WORLD
+      structure ZMQ: MLTON_ZMQ
    end

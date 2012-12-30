@@ -117,6 +117,8 @@ PRIVATE extern const C_Int_t MLton_Syslog_Severity_LOG_INFO;
 PRIVATE extern const C_Int_t MLton_Syslog_Severity_LOG_NOTICE;
 PRIVATE extern const C_Int_t MLton_Syslog_Severity_LOG_WARNING;
 PRIVATE void MLton_Syslog_syslog(C_Int_t,NullString8_t);
+PRIVATE C_Errno_t(C_Pointer_t) MLton_ZMQ_init(void);
+PRIVATE C_Errno_t(C_Int_t) MLton_ZMQ_term(C_Pointer_t);
 PRIVATE Word32_t Net_htonl(Word32_t);
 PRIVATE Word16_t Net_htons(Word16_t);
 PRIVATE Word32_t Net_ntohl(Word32_t);

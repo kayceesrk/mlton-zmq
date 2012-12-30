@@ -269,8 +269,7 @@ PIC_OBJS   := $(patsubst %.o,%-pic.o,$(OBJS))
 
 
 ALL := libgdtoa.a libgdtoa-gdb.a libgdtoa-pic.a \
-       libmlton.a libmlton-gdb.a libmlton-pic.a \
-			 libzmq.a libzmq-gdb.a
+       libmlton.a libmlton-gdb.a libmlton-pic.a
 ALL += gen/c-types.sml gen/basis-ffi.sml gen/sizes
 ifeq ($(OMIT_BYTECODE), yes)
 else
@@ -317,9 +316,17 @@ libzmq.a: libzmq.zip
 libzmq-gdb.a: libzmq.zip
 	unzip libzmq.zip
 	mv libzmq-master libzmq
-	cd libzmq && ./autogen.sh && ./configure --enable-debug --prefix=`pwd`/local-install && make install
+	cd libzmq && ./autogen.sh && CFLAGS="$(CFLAGS) -g" ./configure --prefix=`pwd`/local-install && make install
 	cp libzmq/local-install/include/* .
 	cp libzmq/local-install/lib/libzmq.a libzmq-gdb.a
+	rm -rf libzmq
+
+libzmq-pic.a: libzmq.zip
+	unzip libzmq.zip
+	mv libzmq-master libzmq
+	cd libzmq && ./autogen.sh && CFLAGS="$(CFLAGS) -fPIC" ./configure --prefix=`pwd`/local-install && make install
+	cp libzmq/local-install/include/* .
+	cp libzmq/local-install/lib/libzmq.a libzmq-pic.a
 	rm -rf libzmq
 
 util-pic.o: util.c $(UTILCFILES) cenv.h $(UTILHFILES)

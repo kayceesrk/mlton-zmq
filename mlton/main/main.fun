@@ -1006,7 +1006,7 @@ fun commandLine (args: string list): unit =
       val linkOpts =
          List.concat [[concat ["-L", !libTargetDir]],
                       if positionIndependent then
-                      ["-lmlton-pic", "-lgdtoa-pic"]
+                      ["-lmlton-pic", "-lgdtoa-pic","-lzmq-pic"]
                       else if !debugRuntime then
                       ["-lmlton-gdb", "-lgdtoa-gdb", "-lzmq-gdb"]
                       else

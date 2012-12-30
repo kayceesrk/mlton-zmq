@@ -63,4 +63,3 @@ extern struct GC_state gcState;
 #include "gc/translate.c"
 #include "gc/weak.c"
 #include "gc/world.c"
-#include "gc/zeromq.c"

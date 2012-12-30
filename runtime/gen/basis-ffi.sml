@@ -165,6 +165,11 @@ val LOG_WARNING = _const "MLton_Syslog_Severity_LOG_WARNING" : C_Int.t;
 end
 val syslog = _import "MLton_Syslog_syslog" private : C_Int.t * NullString8.t -> unit;
 end
+structure ZMQ = 
+struct
+val init = _import "MLton_ZMQ_init" private : unit -> (C_Pointer.t) C_Errno.t;
+val term = _import "MLton_ZMQ_term" private : C_Pointer.t -> (C_Int.t) C_Errno.t;
+end
 end
 structure Net = 
 struct
