@@ -1,7 +1,7 @@
 mlton-zmq
 =========
 
-MLton extension for ZeroMQ (http://www.zeromq.org/). Checkout MLton.ZMQ module.
+MLton extension for ZeroMQ (http://www.zeromq.org/). Checkout MLton.ZMQ module @ basis-library/mlton/zmq.sig.
 
 Why do you need the entire compiler for ZeroMQ binding?
 ======================================================
