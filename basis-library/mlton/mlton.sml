@@ -15,9 +15,9 @@ val isMLton = true
 (* The ref stuff is so that the (de)serializer always deals with pointers
  * to heap objects.
  *)
-(*       val serialize = fn x => serialize (ref x)
- *       val deserialize = fn x => !(deserialize x)
- *)
+val serialize = fn x => serialize (ref x)
+val deserialize = fn x => !(deserialize x)
+
 
 val share = Primitive.MLton.share
 

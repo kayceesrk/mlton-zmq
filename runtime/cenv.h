@@ -136,6 +136,8 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 
 #include "gmp.h"
 #include "export.h"
+#include "uthash.h"
+#include "utarray.h"
 
 COMPILE_TIME_ASSERT(sizeof_uintptr_t__is__sizeof_voidStar,
                     sizeof(uintptr_t) == sizeof(void*));

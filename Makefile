@@ -54,7 +54,7 @@ endif
 
 .PHONY: all
 all:
-	$(MAKE) docs all-no-docs
+	$(MAKE) smlnj-mlton-quad
 
 .PHONY: all-no-docs
 all-no-docs:
@@ -106,7 +106,7 @@ compiler:
 	$(CP) "$(COMP)/$(AOUT)$(EXE)" "$(LIB)/"
 
 .PHONY: constants
-constants:
+constants: runtime/gc/gc_state.c
 	@echo 'Creating constants file.'
 	"$(BIN)/mlton" -target "$(TARGET)" -build-constants true >tmp.c
 	"$(BIN)/mlton" -target "$(TARGET)" -output tmp tmp.c
@@ -196,7 +196,7 @@ profiled:
 .PHONY: runtime
 runtime:
 	@echo 'Compiling MLton runtime system for $(TARGET).'
-	$(MAKE) -C runtime
+	$(MAKE) -j -C runtime
 	$(CP) include/*.h "$(INC)/"
 	$(CP) runtime/*.a "$(LIB)/targets/$(TARGET)/"
 	$(CP) runtime/gen/sizes "$(LIB)/targets/$(TARGET)/"
@@ -316,7 +316,7 @@ endif
 install: install-no-strip install-strip
 
 .PHONY: install-no-strip
-install-no-strip: install-docs install-no-docs move-docs 
+install-no-strip: install-docs install-no-docs move-docs
 
 MAN_PAGES :=  \
 	mllex.1 \

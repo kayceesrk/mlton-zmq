@@ -291,6 +291,7 @@ int GC_init (GC_state s, int argc, char **argv) {
   s->controls.ratios.stackMaxReserved = 8.0;
   s->controls.ratios.stackShrink = 0.5;
   s->controls.summary = FALSE;
+  s->copyObjectMap = NULL;
   s->cumulativeStatistics.bytesAllocated = 0;
   s->cumulativeStatistics.bytesCopied = 0;
   s->cumulativeStatistics.bytesCopiedMinor = 0;

@@ -1,4 +1,4 @@
-/* Copyright (C) 1999-2007 Henry Cejtin, Matthew Fluet, Suresh
+/* Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
  *
@@ -8,17 +8,13 @@
 
 #if (defined (MLTON_GC_INTERNAL_TYPES))
 
-struct GC_translateState {
-  pointer from;
-  pointer to;
-};
+#define BASE_ADDR (pointer)0x10000000
 
 #endif /* (defined (MLTON_GC_INTERNAL_TYPES)) */
 
 #if (defined (MLTON_GC_INTERNAL_FUNCS))
 
-static inline void translateObjptr (GC_state s, objptr *opp);
-static void translateHeap (GC_state s, pointer from, pointer to,
-                           size_t size, bool translateGlobals);
+PRIVATE pointer GC_serialize (GC_state s, pointer p, GC_header header);
+PRIVATE pointer GC_deserialize (GC_state s, pointer p);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

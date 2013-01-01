@@ -11,7 +11,7 @@
 /*                          translateHeap                           */
 /* ---------------------------------------------------------------- */
 
-void translateObjptr (GC_state s, 
+void translateObjptr (GC_state s,
                       objptr *opp) {
   pointer p;
   pointer from, to;
@@ -23,16 +23,17 @@ void translateObjptr (GC_state s,
   *opp = pointerToObjptr (p, to);
 }
 
-/* translateHeap (s, from, to, size)
+/* translateHeap (s, from, to, size, translateGlobals)
  */
-void translateHeap (GC_state s, pointer from, pointer to, size_t size) {
+void translateHeap (GC_state s, pointer from, pointer to,
+                    size_t size, bool translateGlobals) {
   pointer limit;
 
   if (from == to)
     return;
 
   if (DEBUG or s->controls.messages)
-    fprintf (stderr, 
+    fprintf (stderr,
              "[GC: Translating old-gen of size %s bytes of heap at "FMTPTR" from "FMTPTR".]\n",
              uintmaxToCommaString(size),
              (uintptr_t)to,
@@ -40,7 +41,8 @@ void translateHeap (GC_state s, pointer from, pointer to, size_t size) {
   s->translateState.from = from;
   s->translateState.to = to;
   /* Translate globals and heap. */
-  foreachGlobalObjptr (s, translateObjptr);
+  if (translateGlobals)
+    foreachGlobalObjptr (s, translateObjptr);
   limit = to + size;
   foreachObjptrInRange (s, alignFrontier (s, to), &limit, translateObjptr, FALSE);
 }

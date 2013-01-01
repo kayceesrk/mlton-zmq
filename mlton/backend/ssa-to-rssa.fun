@@ -268,6 +268,45 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "GC_size",
             writesStackTop = true}
+
+      (* CHECK; serialize with objptr *)
+      fun serialize t t' =
+         T {args = Vector.new3 (Type.gcState (), t, Type.objptrHeader()),
+            bytesNeeded = NONE,
+            convention = Cdecl,
+            ensuresBytesFree = false,
+            mayGC = true, (* MLton.serialize works by tracing an object.
+                           * Make sure all the GC invariants are true,
+                           * because tracing might encounter the current
+                           * stack in the heap.
+                           *)
+            maySwitchThreads = false,
+            modifiesFrontier = true,
+            prototype = (Vector.new3 (CType.gcState, CType.cpointer,
+                                      CType.objptrHeader()),
+                         SOME CType.cpointer),
+            readsStackTop = true,
+            return = t',
+            symbolScope = Private,
+            target = Direct "GC_serialize",
+            writesStackTop = true}
+
+      (* CHECK; deserialize with objptr *)
+      fun deserialize t t' =
+         T {args = Vector.new2 (Type.gcState (), t'),
+            bytesNeeded = NONE,
+            convention = Cdecl,
+            ensuresBytesFree = false,
+            mayGC = true,
+            maySwitchThreads = false,
+            modifiesFrontier = true,
+            prototype = (Vector.new2 (CType.gcState, CType.cpointer),
+                         SOME CType.cpointer),
+            readsStackTop = true,
+            return = t,
+            symbolScope = Private,
+            target = Direct "GC_deserialize",
+            writesStackTop = true}
    end
 
 structure Name =
@@ -1229,6 +1268,19 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                | MLton_size =>
                                     simpleCCallWithGCState
                                     (CFunction.size (Operand.ty (a 0)))
+                               | MLton_serialize =>
+                                   let
+                                     val header = ObjptrTycon (ObjptrTycon.wordVector Bits.inWord8)
+                                   in
+                                    case toRtype ty of
+                                          NONE => Error.bug "MLton_serialize saw unit"
+                                        | SOME t => ccall {args = Vector.concat [Vector.new1 GCState, vos args, Vector.new1 header],
+                                                           func = CFunction.serialize (Operand.ty (a 0)) t}
+                                   end
+                               | MLton_deserialize =>
+                                   (case toRtype ty of
+                                         NONE => Error.bug "MLton_deserialize saw unit"
+                                       | SOME t => simpleCCallWithGCState (CFunction.deserialize t (Operand.ty (a 0))))
                                | MLton_touch =>
                                     let
                                        val a = arg 0
