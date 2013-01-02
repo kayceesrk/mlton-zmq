@@ -196,7 +196,7 @@ profiled:
 .PHONY: runtime
 runtime:
 	@echo 'Compiling MLton runtime system for $(TARGET).'
-	$(MAKE) -j -C runtime
+	$(MAKE) -C runtime
 	$(CP) include/*.h "$(INC)/"
 	$(CP) runtime/*.a "$(LIB)/targets/$(TARGET)/"
 	$(CP) runtime/gen/sizes "$(LIB)/targets/$(TARGET)/"
