@@ -13,13 +13,16 @@ Along with MLton's dependencies,
 [__libzmq__](http://www.zeromq.org/docs:core-api) needs to be installed.
 
 
-## Serialization support and caveats
+## Notes
+========
+
+### Serialization support and caveats
 ====================================
 
 Serialization support is achieved through two new functions under MLton structure:
 
-	val serialize		: 'a -> Word8.word vector
-	val deserialize	:	Word8.word -> 'a
+	val serialize   : 'a -> Word8.word vector
+	val deserialize : Word8.word -> 'a
 
 The serilization support is very usable, but it has its caveats:
 
@@ -38,7 +41,7 @@ The serilization support is very usable, but it has its caveats:
 	must be statically prevented).
 
 
-## Why do you need all of MLton's distribution for ZeroMQ binding?
+### Why do you need all of MLton's distribution for ZeroMQ binding?
 =================================================================
 
 So as to take advantage of MLton's safe system call support, such that zeromq
