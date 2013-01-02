@@ -1,5 +1,5 @@
-# Distributed MLton
-===================
+# Distribution support for MLton
+================================
 
 MLton support for distribution through for ZeroMQ (http://www.zeromq.org/). A
 key feature of this implementation being marshalling of arbitrary ML datatypes,
