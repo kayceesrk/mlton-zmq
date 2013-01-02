@@ -1005,10 +1005,10 @@ fun commandLine (args: string list): unit =
                    :: ccOpts
       val linkOpts =
          List.concat [[concat ["-L", !libTargetDir]],
-                      if positionIndependent then
-                      ["-lmlton-pic", "-lgdtoa-pic","-lzmq"]
-                      else if !debugRuntime then
+                      if !debugRuntime then
                       ["-lmlton-gdb", "-lgdtoa-gdb", "-lzmq"]
+                      else if positionIndependent then
+                      ["-lmlton-pic", "-lgdtoa-pic","-lzmq"]
                       else
                       ["-lmlton", "-lgdtoa","-lzmq"],
                       addTargetOpts linkOpts]
