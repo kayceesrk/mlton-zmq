@@ -1,6 +1,8 @@
 signature MLTON_ZMQ =
 sig
 
+  exception ZMQError of string * Posix.Error.syserror option
+
   (* Context Management *)
   type context
   datatype context_option = IO_THREADS | MAX_SOCKETS

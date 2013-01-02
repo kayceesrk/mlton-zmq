@@ -3,6 +3,10 @@ struct
 
   structure SysCall = PosixError.SysCall
 
+  exception ZMQError of string * Posix.Error.syserror option
+
+  fun exnWrapper v = v handle PosixError.SysErr (str, errOpt) => raise ZMQError (str, errOpt)
+
   (* KC: For readability, primitive function names must be made to correspond
    * to the C function names they correspond to *)
   structure Prim = PrimitiveFFI.MLton.ZMQ
@@ -24,20 +28,20 @@ struct
   *     expect signals *always* due to MultiMLton's user-level threading.
   *)
   fun ctxNew () =
-    SysCall.simpleResultRestart' ({errVal = CUtil.C_Pointer.null}, Prim.ctx_new)
+    exnWrapper (SysCall.simpleResultRestart' ({errVal = CUtil.C_Pointer.null}, Prim.ctx_new))
 
   (* Using simpleRestart due to the following reasons
   * (1) errVal is default (~1).
   * (2) No result is expected.
   *)
   fun ctxDestroy context =
-    SysCall.simpleRestart (fn () => Prim.ctx_destroy context)
+    exnWrapper (SysCall.simpleRestart (fn () => Prim.ctx_destroy context))
 
   fun ctxSetOpt (ctx, opt, v) =
-    SysCall.simpleRestart (fn () => Prim.ctx_set (ctx, contextOptionToInt opt, v))
+    exnWrapper (SysCall.simpleRestart (fn () => Prim.ctx_set (ctx, contextOptionToInt opt, v)))
 
   fun ctxGetOpt (ctx, opt) =
-    SysCall.simpleResultRestart (fn () => Prim.ctx_get (ctx, contextOptionToInt opt))
+    exnWrapper (SysCall.simpleResultRestart (fn () => Prim.ctx_get (ctx, contextOptionToInt opt)))
 
 
   (* Sockets *)
@@ -64,18 +68,19 @@ struct
 
   fun sockCreate (ctxt, kind) =
   let
-    val hndl = SysCall.simpleResultRestart' ({errVal = CUtil.C_Pointer.null},
-                                              fn () => Prim.socket (ctxt, socketKindToInt kind))
+    val hndl = exnWrapper (SysCall.simpleResultRestart'
+                            ({errVal = CUtil.C_Pointer.null},
+                              fn () => Prim.socket (ctxt, socketKindToInt kind)))
   in
     SOCKET {hndl = hndl, kind = kind}
   end
 
   fun sockClose (SOCKET {hndl, ...}) =
-    SysCall.simpleRestart (fn () => Prim.close hndl)
+    exnWrapper (SysCall.simpleRestart (fn () => Prim.close hndl))
 
   fun sockConnect (SOCKET {hndl, ...}, endPoint) =
-    SysCall.simpleRestart (fn () => Prim.connect (hndl, NullString.nullTerm endPoint))
+    exnWrapper (SysCall.simpleRestart (fn () => Prim.connect (hndl, NullString.nullTerm endPoint)))
 
   fun sockBind (SOCKET {hndl,...}, endPoint) =
-    SysCall.simpleRestart (fn () => Prim.bind (hndl, NullString.nullTerm endPoint))
+    exnWrapper (SysCall.simpleRestart (fn () => Prim.bind (hndl, NullString.nullTerm endPoint)))
 end
