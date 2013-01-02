@@ -2,7 +2,7 @@
 =========
 
 MLton extension for ZeroMQ (http://www.zeromq.org/). Checkout MLton.ZMQ module
-@ basis-library/mlton/zmq.sig.
+@ src/basis-library/mlton/zmq.sig.
 
 ## Why do you need all of MLton's distribution for ZeroMQ binding?
 ===========================================================

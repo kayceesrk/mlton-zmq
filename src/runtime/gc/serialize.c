@@ -7,7 +7,6 @@
  */
 
 pointer GC_serialize (GC_state s, pointer p, GC_header header) {
-  pointer frontier;
   size_t objectClosureSize;
   pointer buffer;
   CopyObjectMap *e, *tmp;
@@ -16,10 +15,9 @@ pointer GC_serialize (GC_state s, pointer p, GC_header header) {
 
   objectClosureSize = GC_size (s, p);
   buffer = GC_arrayAllocate (s, 0, objectClosureSize, header);
-  assert (GC_size (s, buffer) == align (objectClosureSize, s->alignment));
 
   s->forwardState.toStart = s->forwardState.back = buffer;
-  s->forwardState.toLimit = (pointer)((char*)buffer + size);
+  s->forwardState.toLimit = (pointer)((char*)buffer + objectClosureSize);
 
   objptr op = pointerToObjptr (p, s->heap.start);
   enter (s);
@@ -32,7 +30,7 @@ pointer GC_serialize (GC_state s, pointer p, GC_header header) {
     free (e);
   }
   s->copyObjectMap = NULL;
-  translateHeap (s, buffer, BASE_ADDR, size, FALSE);
+  translateRange (s, buffer, s->heap.start, BASE_ADDR, objectClosureSize);
 
   return buffer;
 }
@@ -53,8 +51,8 @@ pointer GC_deserialize (GC_state s, pointer p) {
   s->frontier = newFrontier;
 
   //Copy data and translate
-  GC_memcpy (frontier, p, bytesRequested);
-  translateHeap (s, BASE_ADDR, frontier, bytesRequested, FALSE);
+  GC_memcpy (p, frontier, bytesRequested);
+  translateRange (s, frontier, BASE_ADDR, s->heap.start, bytesRequested);
   result = advanceToObjectData (s, frontier);
   return result;
 }

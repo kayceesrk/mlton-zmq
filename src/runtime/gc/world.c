@@ -33,7 +33,7 @@ void loadWorldFromFILE (GC_state s, FILE *f) {
   /* translateHeap must occur after loading the heap and globals,
    * since it changes pointers in all of them.
    */
-  translateHeap (s, start, s->heap.start, s->heap.oldGenSize, TRUE);
+  translateHeap (s, start, s->heap.start, s->heap.oldGenSize);
   setGCStateCurrentHeap (s, 0, 0);
   setGCStateCurrentThreadAndStack (s);
 }

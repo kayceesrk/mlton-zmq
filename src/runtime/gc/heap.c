@@ -517,7 +517,7 @@ copy:
   }
 done:
   unless (origStart == s->heap.start) {
-    translateHeap (s, origStart, s->heap.start, s->heap.oldGenSize, TRUE);
+    translateHeap (s, origStart, s->heap.start, s->heap.oldGenSize);
   }
   return;
 oom:

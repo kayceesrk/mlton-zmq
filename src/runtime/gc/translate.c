@@ -23,10 +23,9 @@ void translateObjptr (GC_state s,
   *opp = pointerToObjptr (p, to);
 }
 
-/* translateHeap (s, from, to, size, translateGlobals)
+/* translateHeap (s, from, to, size)
  */
-void translateHeap (GC_state s, pointer from, pointer to,
-                    size_t size, bool translateGlobals) {
+void translateHeap (GC_state s, pointer from, pointer to, size_t size) {
   pointer limit;
 
   if (from == to)
@@ -41,8 +40,24 @@ void translateHeap (GC_state s, pointer from, pointer to,
   s->translateState.from = from;
   s->translateState.to = to;
   /* Translate globals and heap. */
-  if (translateGlobals)
-    foreachGlobalObjptr (s, translateObjptr);
+  foreachGlobalObjptr (s, translateObjptr);
   limit = to + size;
   foreachObjptrInRange (s, alignFrontier (s, to), &limit, translateObjptr, FALSE);
+}
+
+/* translateRange: Translate the range from <base> to <base + size> from
+ * address <from> to address <to> */
+void translateRange (GC_state s, pointer base, pointer from, pointer to, size_t size) {
+  pointer limit;
+
+  if (from == to)
+    return;
+
+  if (DEBUG or s->controls.messages)
+    fprintf (stderr, "[GC: Translating range at "FMTPTR" of size %s bytes from "FMTPTR" to "FMTPTR".]\n",
+             (uintptr_t)base, uintmaxToCommaString(size), (uintptr_t)from, (uintptr_t)to);
+  s->translateState.from = from;
+  s->translateState.to = to;
+  limit = base + size;
+  foreachObjptrInRange (s, alignFrontier (s, base), &limit, translateObjptr, FALSE);
 }
