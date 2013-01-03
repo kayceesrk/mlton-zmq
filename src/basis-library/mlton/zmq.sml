@@ -152,7 +152,7 @@ struct
         marshalInt (if b then 1 else 0)
 
     (* word64 *)
-    val word64Len = Int.quot (Word64.sizeInBits, bitsPerByte)
+    val word64Len = 8 (* Word64.sizeInBits / bitsPerByte *)
     fun unmarshalWord64 (wa: optvalArr) : Word64.word =
         let
           fun loop (i, acc) =
@@ -199,36 +199,28 @@ struct
     let
       val milliSecs = unmarshalInt wa
     in
-      Time.fromMilliseconds (C_Int.toLarge milliSecs)
+      SOME (Time.fromMilliseconds (C_Int.toLarge milliSecs))
     end
     fun marshalOptTime (to: Time.time option) : optvalVec =
     let
       val millisecs = case to of
                            NONE => ~1
-                         | _ => C_Int.fromLarge (Time.toMilliseconds to)
+                         | SOME t => C_Int.fromLarge (Time.toMilliseconds t)
     in
       marshalInt millisecs
     end
 
-    datatype socket_event = POLL_IN | POLL_OUT | POLL_IN_OUT | POLL_ERR
 
-
-    fun sockEventFromInt event =
-      if event = Prim.POLLIN then POLL_IN
-      else if event = Prim.POLLOUT then POLL_OUT
-      else if event = C_Int.orb (Prim.POLLIN, Prim.POLLOUT) then POLL_IN_OUT
-      else POLL_ERR
-
-    fun make (oplen: int,
+    fun make (optlen: int,
               marshal: 'a -> optvalVec,
               unmarshal: optvalArr -> 'a) =
       let
-        fun getSockOpt optname SOCKET {hndl, ...} : 'a =
+        fun getSockOpt optname (SOCKET{hndl, ...}) : 'a =
         let
           val optval = Array.array (optlen, 0wx0)
           val optlen' = ref (C_Size.fromInt optlen)
           val () =
-            exnWrap (SysCall.simpleRestart
+            exnWrapper (SysCall.simpleRestart
             (fn () => Prim.getSockOpt (hndl, optname, optval, optlen')))
           val () =
             if C_Size.toInt (!optlen') <> optlen
@@ -243,7 +235,7 @@ struct
           val optval = marshal optval
           val optlen' = C_Size.fromInt optlen
           val () =
-            exnWrap (SysCall.simpleRestart
+            exnWrapper (SysCall.simpleRestart
             (fn () => Prim.setSockOpt (hndl, optname, optval, optlen')))
         in
           ()
@@ -255,26 +247,36 @@ struct
     val (getSockOptInt, setSockOptInt) = make (intLen, marshalInt, unmarshalInt)
     val (getSockOptBool, setSockOptBool) = make (intLen, marshalBool, unmarshalBool)
     val (getSockOptWord64, setSockOptWord64) = make (word64Len, marshalWord64, unmarshalWord64)
-    val (getSockOptTime, setSockOptTime) = make (intLen, marshalTime, unmarshalTime)
+    val (getSockOptTime, setSockOptTime) = make (intLen, marshalOptTime, unmarshalOptTime)
   end
 
-  fun getSockOptWord8Vector optname optlen (SOCKET {hndl, ...}) : Word8.vector =
+  datatype socket_event = POLL_IN | POLL_OUT | POLL_IN_OUT | POLL_ERR
+
+  fun sockEventFromInt event =
+    if event = Prim.POLLIN then POLL_IN
+    else if event = Prim.POLLOUT then POLL_OUT
+    else if event = C_Int.orb (Prim.POLLIN, Prim.POLLOUT) then POLL_IN_OUT
+    else POLL_ERR
+
+
+  fun getSockOptWord8Vector optname optlen (SOCKET {hndl, ...}) : Word8.word vector =
   let
     val optval = Array.array (optlen, 0wx0)
     val optlen' = ref (C_Size.fromInt optlen)
     val () =
-      exnWrap (SysCall.simpleRestart
+      exnWrapper (SysCall.simpleRestart
       (fn () => Prim.getSockOpt (hndl, optname, optval, optlen')))
+    val optlen = C_Size.toInt (!optlen')
   in
-    ArraySlice.vector (ArraySlice.slice (optval, 0, SOME (!optlen')))
+    ArraySlice.vector (ArraySlice.slice (optval, 0, SOME optlen))
   end
 
-  fun setSockOptWord8Vector optname (SOCKET {hndl, ...}, optval : Word8.vector) : unit =
+  fun setSockOptWord8Vector optname (SOCKET {hndl, ...}, optval : Word8.word vector) : unit =
   let
     val optlen = Vector.length optval
   in
-    exnWrap (SysCall.simpleRestart
-    (fn () => Prim.setSockOpt (hndl, optname, optval, optlen)))
+    exnWrapper (SysCall.simpleRestart
+    (fn () => Prim.setSockOpt (hndl, optname, optval, C_Size.fromInt optlen)))
   end
 
   val sockGetType = fn (SOCKET {kind, ...}) => kind
@@ -298,8 +300,8 @@ struct
   val sockGetSndTimeo = getSockOptInt Prim.SNDTIMEO
   val sockGetIPV4Only = getSockOptBool Prim.IPV4ONLY
   val sockGetDelayAttachOnConnect = getSockOptBool Prim.DELAY_ATTACH_ON_CONNECT
-  val sockGetFD = Sock.fromRep (C_Sock.castFromSysWord getSockOptInt Prim.FD)
-  val sockGetEvents = sockEventFromInt (getSockOptInt Prim.EVENTS)
+  val sockGetFD = fn s => Socket.fromRep (C_Sock.castFromSysWord (C_Int.castToSysWord (getSockOptInt Prim.FD s)))
+  val sockGetEvents = fn s => sockEventFromInt (getSockOptInt Prim.EVENTS s)
   val sockGetLastEndpoint = fn s => Byte.bytesToString (Word8Vector.fromPoly (getSockOptWord8Vector Prim.LAST_ENDPOINT 256 s))
   val sockGetTCPKeepalive = getSockOptInt Prim.TCP_KEEPALIVE
   val sockGetTCPKeepaliveIdle = getSockOptInt Prim.TCP_KEEPALIVE_IDLE
