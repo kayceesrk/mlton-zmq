@@ -1,4 +1,4 @@
-# Distribution support for MLton
+# Distributed MLton
 ================================
 
 MLton support for distribution through for ZeroMQ (http://www.zeromq.org/). A
