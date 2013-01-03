@@ -426,6 +426,11 @@ int main (__attribute__ ((unused)) int argc,
   writeStringWithNewline (cTypesSMLFd, "(* from \"gmp.h\" *)");
   chksystype(mp_limb_t, "MPLimb");
 
+
+  writeNewline (cTypesHFd);writeNewline (cTypesSMLFd);
+  ptrtype(void*, "ZMQ_Context");
+  ptrtype(void*, "ZMQ_Socket");
+
   writeNewline (cTypesHFd);writeNewline (cTypesSMLFd);
   for (int i = 0; cTypesHSuffix[i] != NULL; i++)
     writeStringWithNewline (cTypesHFd, cTypesHSuffix[i]);

@@ -23,8 +23,10 @@ sig
   val sockClose  : socket -> unit
 
   (* Wiring *)
-  val sockConnect : socket * string -> unit
-  val sockBind    : socket * string -> unit
+  val sockConnect    : socket * string -> unit
+  val sockDisconnect : socket * string -> unit
+  val sockBind       : socket * string -> unit
+  val sockUnbind     : socket * string -> unit
 
   (* Management *)
 
