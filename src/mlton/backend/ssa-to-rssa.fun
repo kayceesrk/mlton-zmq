@@ -1277,6 +1277,8 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                         | SOME t => ccall {args = Vector.concat [Vector.new1 GCState, vos args, Vector.new1 header],
                                                            func = CFunction.serialize (Operand.ty (a 0)) t}
                                    end
+                               | MLton_ZMQSend => Error.bug ("MLton_ZMQSend not implemented")
+                               | MLton_ZMQRecv => Error.bug ("MLton_ZMQRecv not implemented")
                                | MLton_deserialize =>
                                    (case toRtype ty of
                                          NONE => Error.bug "MLton_deserialize saw unit"

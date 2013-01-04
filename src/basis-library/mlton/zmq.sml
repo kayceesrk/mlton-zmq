@@ -9,7 +9,16 @@ struct
 
   (* KC: For readability, primitive function names must be made to correspond
    * to the C function names they correspond to *)
-  structure Prim = PrimitiveFFI.MLton.ZMQ
+  structure Prim =
+  struct
+    open PrimitiveFFI.MLton.ZMQ
+
+    val send = _prim "MLton_ZMQSend" : 'a ref * Word8.word vector * C_ZMQ_Socket.t * C_Int.t -> unit;
+    val recv = _prim "MLton_ZMQRecv" : C_ZMQ_Socket.t * C_Int.t -> 'a ref;
+
+    fun send (msg, prefix, sock, flag) = send (ref msg, prefix, sock, flag)
+    fun recv (sock, flag) = !(recv (sock, flag))
+  end
 
   (* Context Management *)
   type context = C_ZMQ_Context.t

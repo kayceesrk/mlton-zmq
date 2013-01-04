@@ -11,7 +11,7 @@
  * If you add new polymorphic primitives, you must modify extractTargs.
  *)
 
-functor Prim (S: PRIM_STRUCTS): PRIM = 
+functor Prim (S: PRIM_STRUCTS): PRIM =
 struct
 
 open S
@@ -59,8 +59,8 @@ datatype 'a t =
  | Exn_name (* implement exceptions *)
  | Exn_setExtendExtra (* implement exceptions *)
  | FFI of 'a CFunction.t (* ssa to rssa *)
- | FFI_Symbol of {name: string, 
-                  cty: CType.t option, 
+ | FFI_Symbol of {name: string,
+                  cty: CType.t option,
                   symbolScope: CFunction.SymbolScope.t } (* codegen *)
  | GC_collect (* ssa to rssa *)
  | IntInf_add (* ssa to rssa *)
@@ -86,7 +86,7 @@ datatype 'a t =
   * Makes a bogus value of any type.
   *)
  | MLton_bug (* ssa to rssa *)
- | MLton_deserialize (* unused *)
+ | MLton_deserialize (* backend *)
  | MLton_eq (* codegen *)
  | MLton_equal (* polymorphic equality *)
  | MLton_halt (* ssa to rssa *)
@@ -105,7 +105,9 @@ datatype 'a t =
   *)
  | MLton_handlesSignals (* closure conversion *)
  | MLton_installSignalHandler (* backend *)
- | MLton_serialize (* unused *)
+ | MLton_serialize (* backend *)
+ | MLton_ZMQSend (* backend *)
+ | MLton_ZMQRecv (* backend *)
  | MLton_share
  | MLton_size (* ssa to rssa *)
  | MLton_touch (* backend *)
@@ -275,6 +277,8 @@ fun toString (n: 'a t): string =
        | MLton_handlesSignals => "MLton_handlesSignals"
        | MLton_installSignalHandler => "MLton_installSignalHandler"
        | MLton_serialize => "MLton_serialize"
+       | MLton_ZMQSend => "MLton_ZMQSend"
+       | MLton_ZMQRecv => "MLton_ZMQRecv"
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
@@ -416,6 +420,8 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_handlesSignals, MLton_handlesSignals) => true
     | (MLton_installSignalHandler, MLton_installSignalHandler) => true
     | (MLton_serialize, MLton_serialize) => true
+    | (MLton_ZMQSend, MLton_ZMQSend) => true
+    | (MLton_ZMQRecv, MLton_ZMQRecv) => true
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
@@ -549,7 +555,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | Exn_name => Exn_name
     | Exn_setExtendExtra => Exn_setExtendExtra
     | FFI func => FFI (CFunction.map (func, f))
-    | FFI_Symbol {name, cty, symbolScope} => 
+    | FFI_Symbol {name, cty, symbolScope} =>
         FFI_Symbol {name = name, cty = cty, symbolScope = symbolScope}
     | GC_collect => GC_collect
     | IntInf_add => IntInf_add
@@ -580,6 +586,8 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_handlesSignals => MLton_handlesSignals
     | MLton_installSignalHandler => MLton_installSignalHandler
     | MLton_serialize => MLton_serialize
+    | MLton_ZMQSend => MLton_ZMQSend
+    | MLton_ZMQRecv => MLton_ZMQRecv
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
@@ -672,7 +680,7 @@ val bug = MLton_bug
 val cpointerAdd = CPointer_add
 val cpointerDiff = CPointer_diff
 val cpointerEqual = CPointer_equal
-fun cpointerGet ctype = 
+fun cpointerGet ctype =
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -690,7 +698,7 @@ fun cpointerGet ctype =
        | Word64 => CPointer_getWord (WordSize.fromBits (Bits.fromInt 64))
    end
 val cpointerLt = CPointer_lt
-fun cpointerSet ctype = 
+fun cpointerSet ctype =
    let datatype z = datatype CType.t
    in
       case ctype of
@@ -829,6 +837,8 @@ val kind: 'a t -> Kind.t =
        | MLton_handlesSignals => Functional
        | MLton_installSignalHandler => SideEffect
        | MLton_serialize => DependsOnState
+       | MLton_ZMQSend => DependsOnState
+       | MLton_ZMQRecv => Moveable
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
@@ -1029,6 +1039,8 @@ in
        MLton_handlesSignals,
        MLton_installSignalHandler,
        MLton_serialize,
+       MLton_ZMQSend,
+       MLton_ZMQRecv,
        MLton_share,
        MLton_size,
        MLton_touch,
@@ -1064,7 +1076,7 @@ in
            fun coerces (name, sizes, sizes', ac) =
               List.fold
               (sizes, ac, fn (s, ac) =>
-               List.fold 
+               List.fold
                (sizes', ac, fn (s', ac) =>
                 name (s, s') :: ac))
            fun coercesS (name, sizes, sizes', ac) =
@@ -1075,7 +1087,7 @@ in
            fun casts (name, sizes, ac) =
               List.fold (sizes, ac, fn (s, ac) => name s :: ac)
         in
-           casts (fn rs => Real_castToWord (rs, WordSize.fromBits (RealSize.bits rs)), real, 
+           casts (fn rs => Real_castToWord (rs, WordSize.fromBits (RealSize.bits rs)), real,
            coerces (Real_rndToReal, real, real,
            coercesS (Real_rndToWord, real, word,
            casts (fn rs => Word_castToReal (WordSize.fromBits (RealSize.bits rs), rs), real,
@@ -1154,6 +1166,12 @@ fun 'a checkApp (prim: 'a t,
          andalso equals (arg0', arg 0)
          andalso equals (arg1', arg 1)
          andalso equals (arg2', arg 2)
+      fun fourArgs (arg0', arg1', arg2', arg3') () =
+         4 = Vector.length args
+         andalso equals (arg0', arg 0)
+         andalso equals (arg1', arg 1)
+         andalso equals (arg2', arg 2)
+         andalso equals (arg3', arg 3)
       fun nArgs args' () =
          Vector.equals (args', args, equals)
       fun done (args, result') =
@@ -1289,6 +1307,8 @@ fun 'a checkApp (prim: 'a t,
        | MLton_handlesSignals => noTargs (fn () => (noArgs, bool))
        | MLton_installSignalHandler => noTargs (fn () => (noArgs, unit))
        | MLton_serialize => oneTarg (fn t => (oneArg t, word8Vector))
+       | MLton_ZMQSend => oneTarg (fn t => (fourArgs (t, word8Vector, cpointer, cint), unit))
+       | MLton_ZMQRecv => oneTarg (fn t => (twoArgs (cpointer, cint), t))
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
@@ -1420,6 +1440,8 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | MLton_equal => one (arg 0)
        | MLton_hash => one (arg 0)
        | MLton_serialize => one (arg 0)
+       | MLton_ZMQSend => one (arg 0)
+       | MLton_ZMQRecv => one result
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)
@@ -1531,7 +1553,7 @@ fun ('a, 'b) apply (p: 'a t,
             orelse IntInf.> (ii, maxIntInf)
       end
       val intInfTooBig =
-         Trace.trace 
+         Trace.trace
          ("Prim.intInfTooBig", IntInf.layout, Bool.layout)
          intInfTooBig
       fun intInf (ii:  IntInf.t): ('a, 'b) ApplyResult.t =
@@ -1585,7 +1607,7 @@ fun ('a, 'b) apply (p: 'a t,
       fun intInfBinary (i1, i2) =
          if intInfTooBig i1 orelse intInfTooBig i2
             then ApplyResult.Unknown
-         else 
+         else
             case p of
                IntInf_add => iio (IntInf.+, i1, i2)
              | IntInf_andb => iio (IntInf.andb, i1, i2)
@@ -1600,7 +1622,7 @@ fun ('a, 'b) apply (p: 'a t,
       fun intInfUnary (i1) =
          if intInfTooBig i1
             then ApplyResult.Unknown
-         else 
+         else
             case p of
                IntInf_neg => intInf (IntInf.~ i1)
              | IntInf_notb => intInf (IntInf.notb i1)
@@ -1608,7 +1630,7 @@ fun ('a, 'b) apply (p: 'a t,
       fun intInfShiftOrToString (i1, w2) =
          if intInfTooBig i1
             then ApplyResult.Unknown
-         else 
+         else
             case p of
                IntInf_arshift =>
                   intInf (IntInf.~>> (i1, Word.fromIntInf (WordX.toIntInf w2)))
@@ -1626,7 +1648,7 @@ fun ('a, 'b) apply (p: 'a t,
                      val base =
                         case WordX.toInt w2 of
                            2 => StringCvt.BIN
-                         | 8 => StringCvt.OCT 
+                         | 8 => StringCvt.OCT
                          | 10 => StringCvt.DEC
                          | 16 => StringCvt.HEX
                          | _ => Error.bug "Prim.apply: strange base for IntInf_toString"
@@ -1895,7 +1917,7 @@ fun ('a, 'b) apply (p: 'a t,
                           else Unknown
                in
                   case p of
-                     CPointer_add => 
+                     CPointer_add =>
                         if WordX.isZero w
                            then Var x
                         else Unknown
@@ -1980,9 +2002,9 @@ fun ('a, 'b) apply (p: 'a t,
              | (_, [Const (Real r), Var x]) => varReal (x, r, false)
              | (_, [Var x, Const (Word i)]) => varWord (x, i, true)
              | (_, [Const (Word i), Var x]) => varWord (x, i, false)
-             | (_, [Const (IntInf i1), Const (IntInf i2), _]) => 
+             | (_, [Const (IntInf i1), Const (IntInf i2), _]) =>
                   intInfBinary (i1, i2)
-             | (_, [Const (IntInf i1), Const (Word w2), _]) => 
+             | (_, [Const (IntInf i1), Const (Word w2), _]) =>
                   intInfShiftOrToString (i1, w2)
              | (_, [Const (IntInf i1), _]) => intInfUnary (i1)
              | (_, [Var x, Const (IntInf i), Var space]) =>

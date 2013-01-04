@@ -366,7 +366,7 @@ in
    ../mlton/world.sml
 	 ../mlton/zmq.sig
 	 ann
-	   "allowFFI true"
+	   "allowPrim true"
 	 in
 	   ../mlton/zmq.sml
 	 end
