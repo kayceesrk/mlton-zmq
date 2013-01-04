@@ -307,6 +307,48 @@ structure CFunction =
             symbolScope = Private,
             target = Direct "GC_deserialize",
             writesStackTop = true}
+
+      fun zmqSend t t' =
+         T {args = Vector.new5 (Type.gcState (), t, t',
+                                Type.cpointer (),
+                                Type.cint ()),
+            bytesNeeded = NONE,
+            convention = Cdecl,
+            ensuresBytesFree = false,
+            mayGC = true, (* MLton.zmqSend works by tracing an object.
+                           * Make sure all the GC invariants are true,
+                           * because tracing might encounter the current
+                           * stack in the heap.
+                           *)
+            maySwitchThreads = false,
+            modifiesFrontier = true,
+            prototype = (Vector.new5 (CType.gcState,
+                                      CType.cpointer, (* msg *)
+                                      CType.cpointer, (* prefix *)
+                                      CType.cpointer, (* ZMQ_Socket *)
+                                      CType.cint ()), (* flags *)
+                         SOME (CType.cint ())),
+            readsStackTop = true,
+            return = Type.cint (),
+            symbolScope = Private,
+            target = Direct "GC_zmqSend",
+            writesStackTop = true}
+
+      fun zmqRecv t t' =
+         T {args = Vector.new3 (Type.gcState (), t', Type.cint ()),
+            bytesNeeded = NONE,
+            convention = Cdecl,
+            ensuresBytesFree = false,
+            mayGC = true,
+            maySwitchThreads = false,
+            modifiesFrontier = true,
+            prototype = (Vector.new3 (CType.gcState, CType.cpointer, CType.cint ()),
+                         SOME CType.cpointer),
+            readsStackTop = true,
+            return = t,
+            symbolScope = Private,
+            target = Direct "GC_zmqRecv",
+            writesStackTop = true}
    end
 
 structure Name =
@@ -1277,8 +1319,18 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                         | SOME t => ccall {args = Vector.concat [Vector.new1 GCState, vos args, Vector.new1 header],
                                                            func = CFunction.serialize (Operand.ty (a 0)) t}
                                    end
-                               | MLton_ZMQSend => Error.bug ("MLton_ZMQSend not implemented")
-                               | MLton_ZMQRecv => Error.bug ("MLton_ZMQRecv not implemented")
+                               | MLton_ZMQSend =>
+                                   let
+                                     val header = ObjptrTycon (ObjptrTycon.wordVector Bits.inWord8)
+                                   in
+                                    case toRtype ty of
+                                          NONE => Error.bug "MLton_serialize saw unit"
+                                        | SOME t => simpleCCallWithGCState (CFunction.zmqSend (Operand.ty (a 0)) t)
+                                   end
+                               | MLton_ZMQRecv =>
+                                   (case toRtype ty of
+                                         NONE => Error.bug "MLton_deserialize saw unit"
+                                       | SOME t => simpleCCallWithGCState (CFunction.zmqRecv t (Operand.ty (a 0))))
                                | MLton_deserialize =>
                                    (case toRtype ty of
                                          NONE => Error.bug "MLton_deserialize saw unit"

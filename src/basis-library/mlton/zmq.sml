@@ -13,10 +13,11 @@ struct
   struct
     open PrimitiveFFI.MLton.ZMQ
 
-    val send = _prim "MLton_ZMQSend" : 'a ref * Word8.word vector * C_ZMQ_Socket.t * C_Int.t -> unit;
+    val send = _prim "MLton_ZMQSend" : 'a ref * Word8.word vector * C_ZMQ_Socket.t * C_Int.t -> (C_Int.t) C_Errno.t;
     val recv = _prim "MLton_ZMQRecv" : C_ZMQ_Socket.t * C_Int.t -> 'a ref;
 
-    fun send (msg, prefix, sock, flag) = send (ref msg, prefix, sock, flag)
+    fun send (msg, prefix, sock, flag) =
+      exnWrapper (SysCall.simpleRestart (fn () => send (ref msg, prefix, sock, flag)))
     fun recv (sock, flag) = !(recv (sock, flag))
   end
 

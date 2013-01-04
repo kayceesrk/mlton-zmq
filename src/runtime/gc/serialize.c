@@ -6,18 +6,13 @@
  * See the file MLton-LICENSE for details.
  */
 
-pointer GC_serialize (GC_state s, pointer p, GC_header header) {
-  size_t objectClosureSize;
-  pointer buffer;
+/* dstBuffer must have space for objectClosureSize bytes, and size ==
+ * GC_size(p) */
+void serializeHelper (GC_state s, pointer p, pointer dstBuffer, size_t objectClosureSize) {
   CopyObjectMap *e, *tmp;
 
-  assert (isPointer (p) && isPointerInHeap (s, p));
-
-  objectClosureSize = GC_size (s, p);
-  buffer = GC_arrayAllocate (s, 0, objectClosureSize, header);
-
-  s->forwardState.toStart = s->forwardState.back = buffer;
-  s->forwardState.toLimit = (pointer)((char*)buffer + objectClosureSize);
+  s->forwardState.toStart = s->forwardState.back = dstBuffer;
+  s->forwardState.toLimit = (pointer)((char*)dstBuffer + objectClosureSize);
 
   objptr op = pointerToObjptr (p, s->heap.start);
   enter (s);
@@ -30,29 +25,41 @@ pointer GC_serialize (GC_state s, pointer p, GC_header header) {
     free (e);
   }
   s->copyObjectMap = NULL;
-  translateRange (s, buffer, s->heap.start, BASE_ADDR, objectClosureSize);
+  translateRange (s, dstBuffer, s->heap.start, BASE_ADDR, objectClosureSize);
+}
 
+pointer GC_serialize (GC_state s, pointer p, GC_header header) {
+  size_t objectClosureSize;
+  pointer buffer;
+
+  assert (isPointer (p) && isPointerInHeap (s, p));
+
+  objectClosureSize = GC_size (s, p);
+  buffer = GC_arrayAllocate (s, 0, objectClosureSize, header);
+  serializeHelper (s, p, buffer, objectClosureSize);
   return buffer;
 }
 
-pointer GC_deserialize (GC_state s, pointer p) {
+pointer deserializeHelper (GC_state s, pointer bufferStart, size_t bufferSize) {
   pointer frontier, newFrontier, result;
-  size_t bytesRequested;
 
-  bytesRequested = GC_getArrayLength (p);
-  if (not hasHeapBytesFree (s, 0, bytesRequested)) {
+  if (not hasHeapBytesFree (s, 0, bufferSize)) {
     enter (s);
-    performGC (s, 0, bytesRequested, FALSE, TRUE);
+    performGC (s, 0, bufferSize, FALSE, TRUE);
     leave (s);
   }
   frontier = s->frontier;
-  newFrontier = frontier + bytesRequested;
+  newFrontier = frontier + bufferSize;
   assert (isFrontierAligned (s, newFrontier));
   s->frontier = newFrontier;
 
   //Copy data and translate
-  GC_memcpy (p, frontier, bytesRequested);
-  translateRange (s, frontier, BASE_ADDR, s->heap.start, bytesRequested);
+  GC_memcpy (bufferStart, frontier, bufferSize);
+  translateRange (s, frontier, BASE_ADDR, s->heap.start, bufferSize);
   result = advanceToObjectData (s, frontier);
   return result;
+}
+
+pointer GC_deserialize (GC_state s, pointer p) {
+  return deserializeHelper (s, p, GC_getArrayLength (p));
 }

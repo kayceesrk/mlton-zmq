@@ -1307,7 +1307,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_handlesSignals => noTargs (fn () => (noArgs, bool))
        | MLton_installSignalHandler => noTargs (fn () => (noArgs, unit))
        | MLton_serialize => oneTarg (fn t => (oneArg t, word8Vector))
-       | MLton_ZMQSend => oneTarg (fn t => (fourArgs (t, word8Vector, cpointer, cint), unit))
+       | MLton_ZMQSend => oneTarg (fn t => (fourArgs (t, word8Vector, cpointer, cint), cint))
        | MLton_ZMQRecv => oneTarg (fn t => (twoArgs (cpointer, cint), t))
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
