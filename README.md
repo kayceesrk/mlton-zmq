@@ -2,9 +2,14 @@
 ================================
 
 MLton support for distribution through for ZeroMQ (http://www.zeromq.org/). A
-key feature of this implementation being marshalling of arbitrary ML datatypes,
-including functions (with caveats, of course). Checkout MLton.ZMQ module @
-src/basis-library/mlton/zmq.sig.
+key feature of this implementation being automatic marshalling of arbitrary ML 
+datatypes, including functions (with caveats, of course). As a result, the basic
+send and receive functions are polymorphic, and are simply:
+
+	val send : socket * 'a -> unit
+	val recv : socket -> 'a
+
+Checkout MLton.ZMQ module @ src/basis-library/mlton/zmq.sig for more information.
 
 ## Dependencies
 ===============
@@ -29,7 +34,7 @@ The serilization support is very usable, but it has its caveats:
 * Serialization and deserialization can only be done by the same exact program.
 	In other words, if the serialized object is sent over the network, the
 	receiver program must be the same as the one which serialized the object.
-	Since MLton object headers are unique for every program, this restriction is
+	Since MLton object headers are unique for each program, this restriction is
 	in place.
 * Use of serialization breaks static type-checking guarantees. Deserialize
 	function's return type is determined by the type to which the result is
