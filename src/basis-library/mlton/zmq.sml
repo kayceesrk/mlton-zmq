@@ -13,12 +13,8 @@ struct
   struct
     open PrimitiveFFI.MLton.ZMQ
 
-    val send = _prim "MLton_ZMQSend" : 'a ref * Word8.word vector * C_ZMQ_Socket.t * C_Int.t -> (C_Int.t) C_Errno.t;
-    val recv = _prim "MLton_ZMQRecv" : C_ZMQ_Socket.t * C_Int.t -> 'a ref;
-
-    fun send (msg, prefix, sock, flag) =
-      exnWrapper (SysCall.simpleRestart (fn () => send (ref msg, prefix, sock, flag)))
-    fun recv (sock, flag) = !(recv (sock, flag))
+    val send = _prim "MLton_ZMQ_Send" : 'a ref * Word8.word vector * C_ZMQ_Socket.t * C_Int.t -> (C_Int.t) C_Errno.t;
+    val deserializeZMQMsg = _prim "MLton_deserializeZMQMsg" : C_ZMQ_Message.t -> 'a;
   end
 
   (* Context Management *)
@@ -345,4 +341,41 @@ struct
   val sockSetTCPKeepaliveCnt = setSockOptInt Prim.TCP_KEEPALIVE_CNT
   val sockSetTCPKeepaliveIntvl = setSockOptInt Prim.TCP_KEEPALIVE_INTVL
   val sockSetTCPAcceptFilter = setSockOptWord8Vector Prim.TCP_ACCEPT_FILTER
+
+  (* Sends and Receives *)
+
+  datatype send_flag = S_DONT_WAIT | S_SEND_MORE | S_NONE
+
+  fun sendFlgToInt flg =
+    case flg of
+         S_DONT_WAIT => Prim.DONTWAIT
+       | S_SEND_MORE => Prim.SNDMORE
+       | S_NONE => 0
+
+  datatype recv_flag = R_DONT_WAIT | R_NONE
+
+  fun recvFlgToInt flg =
+    case flg of
+         R_DONT_WAIT => Prim.DONTWAIT
+       | R_NONE => 0
+
+  (* Send always works with references *)
+  fun sendWithPrefixAndFlag (sock, msg, prefix, flg) =
+      exnWrapper (SysCall.simpleRestart
+      (fn () => Prim.send (ref msg, prefix, sock, sendFlgToInt flg)))
+
+  (* Since all sent messages are references, we need to dereference the
+    * deserialized message to get the actual value *)
+  fun recvWithFlag (sock, flg) =
+    let
+      val zmqMsg =
+        exnWrapper (SysCall.simpleResultRestart'
+        ({errVal = CUtil.C_Pointer.null}, fn () => Prim.recv (sock, recvFlgToInt flg)))
+    in
+      !(Prim.deserializeZMQMsg zmqMsg)
+    end
+
+  fun sendWithPrefix (sock, msg, prefix) = sendWithPrefixAndFlag (sock, msg, prefix, S_NONE)
+  fun send (sock, msg) = sendWithPrefix (sock, msg, Vector.tabulate (0, fn _ => 0wx0 : Word8.word))
+  fun recv (sock) = recvWithFlag (sock, R_NONE)
 end

@@ -18,5 +18,6 @@ void serializeHelper (GC_state s, pointer msg, pointer dstBuffer, size_t msgSize
 pointer deserializeHelper (GC_state s, pointer bufferStart, size_t bufferSize);
 PRIVATE pointer GC_serialize (GC_state s, pointer p, GC_header header);
 PRIVATE pointer GC_deserialize (GC_state s, pointer p);
+PRIVATE pointer GC_deserializeZMQMsg (GC_state s, C_ZMQ_Message_t msg);
 
 #endif /* (defined (MLTON_GC_INTERNAL_FUNCS)) */

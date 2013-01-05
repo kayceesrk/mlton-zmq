@@ -427,17 +427,17 @@ fun primApply {prim: Type.t Prim.t, args: t vector, resultTy: Type.t}: t =
                ; result ()
             end
        | MLton_deserialize => serialValue resultTy
+       | MLton_deserializeZMQMsg => serialValue resultTy
        | MLton_serialize =>
             let val arg = oneArg ()
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | MLton_ZMQSend =>
+       | MLton_ZMQ_Send =>
             let val (arg,_,_,_) = fourArgs ()
             in coerce {from = arg, to = serialValue (ty arg)}
                ; result ()
             end
-       | MLton_ZMQRecv => serialValue resultTy
        | Ref_assign =>
             let val (r, x) = twoArgs ()
             in (case dest r of

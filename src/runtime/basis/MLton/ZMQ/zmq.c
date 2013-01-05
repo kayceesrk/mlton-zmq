@@ -58,6 +58,10 @@ const C_Int_t MLton_ZMQ_POLLIN = ZMQ_POLLIN;
 const C_Int_t MLton_ZMQ_POLLOUT = ZMQ_POLLOUT;
 const C_Int_t MLton_ZMQ_POLLERR = ZMQ_POLLERR;
 
+/* Send/Recv options */
+const C_Int_t MLton_ZMQ_DONTWAIT = ZMQ_DONTWAIT;
+const C_Int_t MLton_ZMQ_SNDMORE = ZMQ_SNDMORE;
+
 
 C_Errno_t(C_ZMQ_Context_t) MLton_ZMQ_ctx_new (void) {
 	return (C_ZMQ_Context_t) (Pointer) zmq_ctx_new ();
@@ -107,4 +111,17 @@ C_Errno_t(C_Int_t) MLton_ZMQ_getSockOpt (C_ZMQ_Socket_t sock, C_Int_t opt,
 C_Errno_t(C_Int_t) MLton_ZMQ_setSockOpt (C_ZMQ_Socket_t sock, C_Int_t opt,
                                          Vector(Word8_t) argp, C_Size_t optlen) {
   return zmq_setsockopt ((void*)sock, (int)opt, (void*)argp, (size_t)optlen);
+}
+
+C_Errno_t(C_ZMQ_Message_t) MLton_ZMQ_recv (C_ZMQ_Socket_t sock, C_Int_t flags) {
+  zmq_msg_t *msg = (zmq_msg_t*)malloc (sizeof(zmq_msg_t));
+  int rc = zmq_msg_init (msg);
+  assert (rc == 0);
+  rc = zmq_msg_recv (msg, (void*)sock, flags);
+
+  if (rc == -1) {
+    free (msg);
+    return -1;
+  }
+  return msg;
 }

@@ -63,3 +63,15 @@ pointer deserializeHelper (GC_state s, pointer bufferStart, size_t bufferSize) {
 pointer GC_deserialize (GC_state s, pointer p) {
   return deserializeHelper (s, p, GC_getArrayLength (p));
 }
+
+pointer GC_deserializeZMQMsg (GC_state s, C_ZMQ_Message_t p) {
+  zmq_msg_t* msg = (zmq_msg_t*)p;
+  void* data = zmq_msg_data (msg);
+  size_t size = zmq_msg_size (msg);
+  pointer retVal = deserializeHelper (s, (pointer)data, size);
+  int rc = zmq_msg_close (msg);
+  assert (rc == 0 && "EFAULT");
+  rc = rc; //Suppress GCC warnings
+  free (msg); //Allocation was performed in MLton_ZMQ_Recv
+  return retVal;
+}

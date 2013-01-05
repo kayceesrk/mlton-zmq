@@ -86,7 +86,8 @@ datatype 'a t =
   * Makes a bogus value of any type.
   *)
  | MLton_bug (* ssa to rssa *)
- | MLton_deserialize (* backend *)
+ | MLton_deserialize (* ssa to rssa *)
+ | MLton_deserializeZMQMsg (* ssa to rssa *)
  | MLton_eq (* codegen *)
  | MLton_equal (* polymorphic equality *)
  | MLton_halt (* ssa to rssa *)
@@ -105,9 +106,8 @@ datatype 'a t =
   *)
  | MLton_handlesSignals (* closure conversion *)
  | MLton_installSignalHandler (* backend *)
- | MLton_serialize (* backend *)
- | MLton_ZMQSend (* backend *)
- | MLton_ZMQRecv (* backend *)
+ | MLton_serialize (* ssa to rssa *)
+ | MLton_ZMQ_Send (* ssa to rssa *)
  | MLton_share
  | MLton_size (* ssa to rssa *)
  | MLton_touch (* backend *)
@@ -270,6 +270,7 @@ fun toString (n: 'a t): string =
        | MLton_bogus => "MLton_bogus"
        | MLton_bug => "MLton_bug"
        | MLton_deserialize => "MLton_deserialize"
+       | MLton_deserializeZMQMsg => "MLton_deserializeZMQMsg"
        | MLton_eq => "MLton_eq"
        | MLton_equal => "MLton_equal"
        | MLton_halt => "MLton_halt"
@@ -277,8 +278,7 @@ fun toString (n: 'a t): string =
        | MLton_handlesSignals => "MLton_handlesSignals"
        | MLton_installSignalHandler => "MLton_installSignalHandler"
        | MLton_serialize => "MLton_serialize"
-       | MLton_ZMQSend => "MLton_ZMQSend"
-       | MLton_ZMQRecv => "MLton_ZMQRecv"
+       | MLton_ZMQ_Send => "MLton_ZMQ_Send"
        | MLton_share => "MLton_share"
        | MLton_size => "MLton_size"
        | MLton_touch => "MLton_touch"
@@ -413,6 +413,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_bogus, MLton_bogus) => true
     | (MLton_bug, MLton_bug) => true
     | (MLton_deserialize, MLton_deserialize) => true
+    | (MLton_deserializeZMQMsg, MLton_deserializeZMQMsg) => true
     | (MLton_eq, MLton_eq) => true
     | (MLton_equal, MLton_equal) => true
     | (MLton_halt, MLton_halt) => true
@@ -420,8 +421,7 @@ val equals: 'a t * 'a t -> bool =
     | (MLton_handlesSignals, MLton_handlesSignals) => true
     | (MLton_installSignalHandler, MLton_installSignalHandler) => true
     | (MLton_serialize, MLton_serialize) => true
-    | (MLton_ZMQSend, MLton_ZMQSend) => true
-    | (MLton_ZMQRecv, MLton_ZMQRecv) => true
+    | (MLton_ZMQ_Send, MLton_ZMQ_Send) => true
     | (MLton_share, MLton_share) => true
     | (MLton_size, MLton_size) => true
     | (MLton_touch, MLton_touch) => true
@@ -579,6 +579,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_bogus => MLton_bogus
     | MLton_bug => MLton_bug
     | MLton_deserialize => MLton_deserialize
+    | MLton_deserializeZMQMsg => MLton_deserializeZMQMsg
     | MLton_eq => MLton_eq
     | MLton_equal => MLton_equal
     | MLton_halt => MLton_halt
@@ -586,8 +587,7 @@ val map: 'a t * ('a -> 'b) -> 'b t =
     | MLton_handlesSignals => MLton_handlesSignals
     | MLton_installSignalHandler => MLton_installSignalHandler
     | MLton_serialize => MLton_serialize
-    | MLton_ZMQSend => MLton_ZMQSend
-    | MLton_ZMQRecv => MLton_ZMQRecv
+    | MLton_ZMQ_Send => MLton_ZMQ_Send
     | MLton_share => MLton_share
     | MLton_size => MLton_size
     | MLton_touch => MLton_touch
@@ -830,6 +830,7 @@ val kind: 'a t -> Kind.t =
        | MLton_bogus => Functional
        | MLton_bug => SideEffect
        | MLton_deserialize => Moveable
+       | MLton_deserializeZMQMsg => Moveable
        | MLton_eq => Functional
        | MLton_equal => Functional
        | MLton_halt => SideEffect
@@ -837,8 +838,7 @@ val kind: 'a t -> Kind.t =
        | MLton_handlesSignals => Functional
        | MLton_installSignalHandler => SideEffect
        | MLton_serialize => DependsOnState
-       | MLton_ZMQSend => DependsOnState
-       | MLton_ZMQRecv => Moveable
+       | MLton_ZMQ_Send => DependsOnState
        | MLton_share => SideEffect
        | MLton_size => DependsOnState
        | MLton_touch => SideEffect
@@ -1032,6 +1032,7 @@ in
        MLton_bogus,
        MLton_bug,
        MLton_deserialize,
+       MLton_deserializeZMQMsg,
        MLton_eq,
        MLton_equal,
        MLton_halt,
@@ -1039,8 +1040,7 @@ in
        MLton_handlesSignals,
        MLton_installSignalHandler,
        MLton_serialize,
-       MLton_ZMQSend,
-       MLton_ZMQRecv,
+       MLton_ZMQ_Send,
        MLton_share,
        MLton_size,
        MLton_touch,
@@ -1300,6 +1300,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_bogus => oneTarg (fn t => (noArgs, t))
        | MLton_bug => noTargs (fn () => (oneArg string, unit))
        | MLton_deserialize => oneTarg (fn t => (oneArg word8Vector, t))
+       | MLton_deserializeZMQMsg => oneTarg (fn t => (oneArg cpointer, t))
        | MLton_eq => oneTarg (fn t => (twoArgs (t, t), bool))
        | MLton_equal => oneTarg (fn t => (twoArgs (t, t), bool))
        | MLton_halt => noTargs (fn () => (oneArg cint, unit))
@@ -1307,8 +1308,7 @@ fun 'a checkApp (prim: 'a t,
        | MLton_handlesSignals => noTargs (fn () => (noArgs, bool))
        | MLton_installSignalHandler => noTargs (fn () => (noArgs, unit))
        | MLton_serialize => oneTarg (fn t => (oneArg t, word8Vector))
-       | MLton_ZMQSend => oneTarg (fn t => (fourArgs (t, word8Vector, cpointer, cint), cint))
-       | MLton_ZMQRecv => oneTarg (fn t => (twoArgs (cpointer, cint), t))
+       | MLton_ZMQ_Send => oneTarg (fn t => (fourArgs (t, word8Vector, cpointer, cint), cint))
        | MLton_share => oneTarg (fn t => (oneArg t, unit))
        | MLton_size => oneTarg (fn t => (oneArg t, csize))
        | MLton_touch => oneTarg (fn t => (oneArg t, unit))
@@ -1436,12 +1436,12 @@ fun ('a, 'b) extractTargs (prim: 'b t,
        | Exn_setExtendExtra => one (#2 (deArrow (arg 0)))
        | MLton_bogus => one result
        | MLton_deserialize => one result
+       | MLton_deserializeZMQMsg => one result
        | MLton_eq => one (arg 0)
        | MLton_equal => one (arg 0)
        | MLton_hash => one (arg 0)
        | MLton_serialize => one (arg 0)
-       | MLton_ZMQSend => one (arg 0)
-       | MLton_ZMQRecv => one result
+       | MLton_ZMQ_Send => one (arg 0)
        | MLton_share => one (arg 0)
        | MLton_size => one (arg 0)
        | MLton_touch => one (arg 0)

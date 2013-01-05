@@ -430,6 +430,7 @@ int main (__attribute__ ((unused)) int argc,
   writeNewline (cTypesHFd);writeNewline (cTypesSMLFd);
   ptrtype(void*, "ZMQ_Context");
   ptrtype(void*, "ZMQ_Socket");
+  ptrtype(void*, "ZMQ_Message");
 
   writeNewline (cTypesHFd);writeNewline (cTypesSMLFd);
   for (int i = 0; cTypesHSuffix[i] != NULL; i++)

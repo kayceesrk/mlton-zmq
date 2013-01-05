@@ -1040,7 +1040,7 @@ fun closureConvert
                                               v1 (coerce (convertVarInfo y,
                                                           VarInfo.value y, v)))
                                   end
-                             | MLton_ZMQSend =>
+                             | MLton_ZMQ_Send =>
                                  let
                                    val y = varExpInfo (arg 0)
                                    val v =

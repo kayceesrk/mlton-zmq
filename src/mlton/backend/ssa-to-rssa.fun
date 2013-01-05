@@ -308,6 +308,24 @@ structure CFunction =
             target = Direct "GC_deserialize",
             writesStackTop = true}
 
+      (* CHECK; deserialize with objptr *)
+      fun deserializeZMQMsg t =
+         T {args = Vector.new2 (Type.gcState (), Type.cpointer ()),
+            bytesNeeded = NONE,
+            convention = Cdecl,
+            ensuresBytesFree = false,
+            mayGC = true,
+            maySwitchThreads = false,
+            modifiesFrontier = true,
+            prototype = (Vector.new2 (CType.gcState, CType.cpointer),
+                         SOME CType.cpointer),
+            readsStackTop = true,
+            return = t,
+            symbolScope = Private,
+            target = Direct "GC_deserializeZMQMsg",
+            writesStackTop = true}
+
+
       fun zmqSend t t' =
          T {args = Vector.new5 (Type.gcState (), t, t',
                                 Type.cpointer (),
@@ -332,22 +350,6 @@ structure CFunction =
             return = Type.cint (),
             symbolScope = Private,
             target = Direct "GC_zmqSend",
-            writesStackTop = true}
-
-      fun zmqRecv t t' =
-         T {args = Vector.new3 (Type.gcState (), t', Type.cint ()),
-            bytesNeeded = NONE,
-            convention = Cdecl,
-            ensuresBytesFree = false,
-            mayGC = true,
-            maySwitchThreads = false,
-            modifiesFrontier = true,
-            prototype = (Vector.new3 (CType.gcState, CType.cpointer, CType.cint ()),
-                         SOME CType.cpointer),
-            readsStackTop = true,
-            return = t,
-            symbolScope = Private,
-            target = Direct "GC_zmqRecv",
             writesStackTop = true}
    end
 
@@ -1319,22 +1321,22 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                         | SOME t => ccall {args = Vector.concat [Vector.new1 GCState, vos args, Vector.new1 header],
                                                            func = CFunction.serialize (Operand.ty (a 0)) t}
                                    end
-                               | MLton_ZMQSend =>
+                               | MLton_ZMQ_Send =>
                                    let
                                      val header = ObjptrTycon (ObjptrTycon.wordVector Bits.inWord8)
                                    in
                                     case toRtype ty of
-                                          NONE => Error.bug "MLton_serialize saw unit"
+                                          NONE => Error.bug "MLton_ZMQ_Send saw unit"
                                         | SOME t => simpleCCallWithGCState (CFunction.zmqSend (Operand.ty (a 0)) t)
                                    end
-                               | MLton_ZMQRecv =>
-                                   (case toRtype ty of
-                                         NONE => Error.bug "MLton_deserialize saw unit"
-                                       | SOME t => simpleCCallWithGCState (CFunction.zmqRecv t (Operand.ty (a 0))))
                                | MLton_deserialize =>
                                    (case toRtype ty of
                                          NONE => Error.bug "MLton_deserialize saw unit"
                                        | SOME t => simpleCCallWithGCState (CFunction.deserialize t (Operand.ty (a 0))))
+                               | MLton_deserializeZMQMsg =>
+                                   (case toRtype ty of
+                                         NONE => Error.bug "MLton_deserializeZMQMsg saw unit"
+                                       | SOME t => simpleCCallWithGCState (CFunction.deserializeZMQMsg t))
                                | MLton_touch =>
                                     let
                                        val a = arg 0

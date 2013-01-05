@@ -135,6 +135,7 @@ COMPILE_TIME_ASSERT(sizeof_double__is_eight, sizeof(double) == 8);
 #endif
 
 #include "gmp.h"
+#include "zmq.h"
 #include "export.h"
 #include "uthash.h"
 #include "utarray.h"

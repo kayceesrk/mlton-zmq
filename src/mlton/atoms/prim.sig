@@ -78,6 +78,7 @@ signature PRIM =
               *)
              | MLton_bug (* ssa to rssa *)
              | MLton_deserialize (* backend *)
+             | MLton_deserializeZMQMsg (* backend *)
              | MLton_eq (* ssa to rssa *)
              | MLton_equal (* polymorphic equality *)
              | MLton_halt (* ssa to rssa *)
@@ -97,8 +98,7 @@ signature PRIM =
              | MLton_handlesSignals (* closure conversion *)
              | MLton_installSignalHandler (* backend *)
              | MLton_serialize (* backend *)
-             | MLton_ZMQSend (* backend *)
-             | MLton_ZMQRecv (* backend *)
+             | MLton_ZMQ_Send (* backend *)
              | MLton_share
              | MLton_size (* ssa to rssa *)
              | MLton_touch (* backend *)
