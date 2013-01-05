@@ -7,7 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-val f = print
-val ser_f = MLton.serialize f
-val f' : string -> unit = MLton.deserialize ser_f
-val _ = f' (Int.toString 0)
+val v = "ABCD"
+val ser_v = MLton.serialize v
+val v' = MLton.deserialize ser_v
+val _ = print (v' ^ "\n")
