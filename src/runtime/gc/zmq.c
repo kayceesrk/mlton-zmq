@@ -13,19 +13,11 @@ static void zmqFreeHelper (void* data, __attribute__((unused)) void* hint) {
 C_Errno_t(C_Int_t) GC_zmqSend (GC_state s, pointer msg, pointer prefix,
                                C_ZMQ_Socket_t sock, C_Int_t flags) {
   size_t msgSize = GC_size (s, msg);
-  size_t prefixSize = getArrayLength (prefix);
+  size_t prefixSize = GC_size (s, prefix);
   pointer buffer = (pointer) malloc_safe (prefixSize + msgSize);
 
-  /*
-  GC_objectTypeTag tag;
-  uint16_t bytesNonObjptrs, numObjptrs;
-  splitHeader (s, getHeader (prefix), &tag, NULL, &bytesNonObjptrs, &numObjptrs);
-  fprintf (stderr, "tag = %s bytesNonObjptrs = %"PRIu16" numObjptrs = %"PRIu16"\n",
-            objectTypeTagToString(tag),
-            bytesNonObjptrs, numObjptrs);
-  */
-
-  GC_memcpy (prefix, buffer, prefixSize);
+  //Prefix is always a Word8.word vector
+  GC_memcpy (prefix - GC_ARRAY_HEADER_SIZE, buffer, prefixSize);
   serializeHelper (s, msg, buffer + prefixSize, msgSize);
 
   zmq_msg_t zmqMsg;

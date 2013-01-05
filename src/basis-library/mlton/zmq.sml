@@ -373,6 +373,9 @@ struct
       exnWrapper (SysCall.simpleRestart
       (fn () => Prim.send (ref msg, prefix, hndl, sendFlgToInt flg)))
 
+  fun sendWithPrefix (sock, msg, prefix) = sendWithPrefixAndFlag (sock, msg, prefix, S_NONE)
+  fun send (sock, msg) = sendWithPrefix (sock, msg, Vector.tabulate (0, fn _ => 0wx0 : Word8.word))
+
   (* Since all sent messages are references, we need to dereference the
     * deserialized message to get the actual value *)
   fun recvWithFlag (SOCKET {hndl, ...}, flg) =
@@ -384,7 +387,5 @@ struct
       !(Prim.deserializeZMQMsg zmqMsg)
     end
 
-  fun sendWithPrefix (sock, msg, prefix) = sendWithPrefixAndFlag (sock, msg, prefix, S_NONE)
-  fun send (sock, msg) = sendWithPrefix (sock, msg, Vector.tabulate (0, fn _ => 0wx0 : Word8.word))
   fun recv (sock) = recvWithFlag (sock, R_NONE)
 end

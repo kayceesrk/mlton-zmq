@@ -68,10 +68,22 @@ pointer GC_deserializeZMQMsg (GC_state s, C_ZMQ_Message_t p) {
   zmq_msg_t* msg = (zmq_msg_t*)p;
   void* data = zmq_msg_data (msg);
   size_t size = zmq_msg_size (msg);
-  pointer retVal = deserializeHelper (s, (pointer)data, size);
+
+  /* Drop prefix - prefix is always a Word8.word vector. */
+  pointer prefix = (pointer)data + GC_ARRAY_HEADER_SIZE;
+  size_t arrayLength = getArrayLength (prefix);
+  /* Empty arrays have space for forwarding pointer. See sizeofArrayNoHeader.
+   * */
+  if (arrayLength == 0)
+    arrayLength = OBJPTR_SIZE;
+  size_t prefixSize = GC_ARRAY_HEADER_SIZE + arrayLength;
+
+  pointer retVal = deserializeHelper (s, (pointer)data + prefixSize , size - prefixSize);
+
   int rc = zmq_msg_close (msg);
   assert (rc == 0 && "EFAULT");
   rc = rc; //Suppress GCC warnings
+
   free (msg); //Allocation was performed in MLton_ZMQ_Recv
   return retVal;
 }

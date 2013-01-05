@@ -99,6 +99,8 @@ sig
   (* Communication *)
   datatype send_flag = S_DONT_WAIT | S_SEND_MORE | S_NONE
   val send : socket * 'a -> unit
+  (* Prefix is used for subscriptions. Importantly, prefix is DROPPED by the
+   * receiver, and only receives the message *)
   val sendWithPrefix : socket * 'a * Word8.word vector -> unit
   val sendWithPrefixAndFlag : socket * 'a * Word8.word vector * send_flag -> unit
 
