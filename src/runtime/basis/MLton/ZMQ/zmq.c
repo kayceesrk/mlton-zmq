@@ -121,7 +121,7 @@ C_Errno_t(C_ZMQ_Message_t) MLton_ZMQ_recv (C_ZMQ_Socket_t sock, C_Int_t flags) {
 
   if (rc == -1) {
     free (msg);
-    return -1;
+    return (C_ZMQ_Message_t)0;
   }
-  return msg;
+  return (C_ZMQ_Message_t)msg;
 }

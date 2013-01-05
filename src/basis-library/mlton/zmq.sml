@@ -1,3 +1,12 @@
+(* Copyright (C) 2010 Matthew Fluet.
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ * Copyright (C) 1997-2000 NEC Research Institute.
+ *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
+ *)
+
 structure MLtonZMQ : MLTON_ZMQ =
 struct
 
@@ -360,17 +369,17 @@ struct
        | R_NONE => 0
 
   (* Send always works with references *)
-  fun sendWithPrefixAndFlag (sock, msg, prefix, flg) =
+  fun sendWithPrefixAndFlag (SOCKET {hndl, ...}, msg, prefix, flg) =
       exnWrapper (SysCall.simpleRestart
-      (fn () => Prim.send (ref msg, prefix, sock, sendFlgToInt flg)))
+      (fn () => Prim.send (ref msg, prefix, hndl, sendFlgToInt flg)))
 
   (* Since all sent messages are references, we need to dereference the
     * deserialized message to get the actual value *)
-  fun recvWithFlag (sock, flg) =
+  fun recvWithFlag (SOCKET {hndl, ...}, flg) =
     let
       val zmqMsg =
         exnWrapper (SysCall.simpleResultRestart'
-        ({errVal = CUtil.C_Pointer.null}, fn () => Prim.recv (sock, recvFlgToInt flg)))
+        ({errVal = CUtil.C_Pointer.null}, fn () => Prim.recv (hndl, recvFlgToInt flg)))
     in
       !(Prim.deserializeZMQMsg zmqMsg)
     end

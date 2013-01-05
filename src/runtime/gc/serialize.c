@@ -25,7 +25,7 @@ void serializeHelper (GC_state s, pointer p, pointer dstBuffer, size_t objectClo
     free (e);
   }
   s->copyObjectMap = NULL;
-  translateRange (s, dstBuffer, s->heap.start, BASE_ADDR, objectClosureSize);
+  translateRange (s, dstBuffer, dstBuffer, BASE_ADDR, objectClosureSize);
 }
 
 pointer GC_serialize (GC_state s, pointer p, GC_header header) {
@@ -55,7 +55,7 @@ pointer deserializeHelper (GC_state s, pointer bufferStart, size_t bufferSize) {
 
   //Copy data and translate
   GC_memcpy (bufferStart, frontier, bufferSize);
-  translateRange (s, frontier, BASE_ADDR, s->heap.start, bufferSize);
+  translateRange (s, frontier, BASE_ADDR, frontier, bufferSize);
   result = advanceToObjectData (s, frontier);
   return result;
 }

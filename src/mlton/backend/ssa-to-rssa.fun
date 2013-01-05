@@ -270,7 +270,7 @@ structure CFunction =
             writesStackTop = true}
 
       (* CHECK; serialize with objptr *)
-      fun serialize t t' =
+      fun serialize t =
          T {args = Vector.new3 (Type.gcState (), t, Type.objptrHeader()),
             bytesNeeded = NONE,
             convention = Cdecl,
@@ -286,14 +286,14 @@ structure CFunction =
                                       CType.objptrHeader()),
                          SOME CType.cpointer),
             readsStackTop = true,
-            return = t',
+            return = Type.wordVector WordSize.word8,
             symbolScope = Private,
             target = Direct "GC_serialize",
             writesStackTop = true}
 
       (* CHECK; deserialize with objptr *)
-      fun deserialize t t' =
-         T {args = Vector.new2 (Type.gcState (), t'),
+      fun deserialize t =
+         T {args = Vector.new2 (Type.gcState (), Type.wordVector WordSize.word8),
             bytesNeeded = NONE,
             convention = Cdecl,
             ensuresBytesFree = false,
@@ -308,9 +308,9 @@ structure CFunction =
             target = Direct "GC_deserialize",
             writesStackTop = true}
 
-      (* CHECK; deserialize with objptr *)
       fun deserializeZMQMsg t =
-         T {args = Vector.new2 (Type.gcState (), Type.cpointer ()),
+         T {args = Vector.new2 (Type.gcState (),
+                                Type.word (WordSize.cpointer ())),
             bytesNeeded = NONE,
             convention = Cdecl,
             ensuresBytesFree = false,
@@ -326,9 +326,10 @@ structure CFunction =
             writesStackTop = true}
 
 
-      fun zmqSend t t' =
-         T {args = Vector.new5 (Type.gcState (), t, t',
-                                Type.cpointer (),
+      fun zmqSend t =
+         T {args = Vector.new5 (Type.gcState (), t,
+                                Type.wordVector WordSize.word8,
+                                Type.word (WordSize.cpointer ()),
                                 Type.cint ()),
             bytesNeeded = NONE,
             convention = Cdecl,
@@ -1316,23 +1317,15 @@ fun convert (program as S.Program.T {functions, globals, main, ...},
                                    let
                                      val header = ObjptrTycon (ObjptrTycon.wordVector Bits.inWord8)
                                    in
-                                    case toRtype ty of
-                                          NONE => Error.bug "MLton_serialize saw unit"
-                                        | SOME t => ccall {args = Vector.concat [Vector.new1 GCState, vos args, Vector.new1 header],
-                                                           func = CFunction.serialize (Operand.ty (a 0)) t}
+                                     ccall {args = Vector.concat [Vector.new1 GCState, vos args, Vector.new1 header],
+                                            func = CFunction.serialize (Operand.ty (a 0))}
                                    end
                                | MLton_ZMQ_Send =>
-                                   let
-                                     val header = ObjptrTycon (ObjptrTycon.wordVector Bits.inWord8)
-                                   in
-                                    case toRtype ty of
-                                          NONE => Error.bug "MLton_ZMQ_Send saw unit"
-                                        | SOME t => simpleCCallWithGCState (CFunction.zmqSend (Operand.ty (a 0)) t)
-                                   end
+                                  simpleCCallWithGCState (CFunction.zmqSend (Operand.ty (a 0)))
                                | MLton_deserialize =>
                                    (case toRtype ty of
                                          NONE => Error.bug "MLton_deserialize saw unit"
-                                       | SOME t => simpleCCallWithGCState (CFunction.deserialize t (Operand.ty (a 0))))
+                                       | SOME t => simpleCCallWithGCState (CFunction.deserialize t))
                                | MLton_deserializeZMQMsg =>
                                    (case toRtype ty of
                                          NONE => Error.bug "MLton_deserializeZMQMsg saw unit"

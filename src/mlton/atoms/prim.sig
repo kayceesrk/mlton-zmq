@@ -97,8 +97,8 @@ signature PRIM =
               *)
              | MLton_handlesSignals (* closure conversion *)
              | MLton_installSignalHandler (* backend *)
-             | MLton_serialize (* backend *)
-             | MLton_ZMQ_Send (* backend *)
+             | MLton_serialize (* ssa to rssa *)
+             | MLton_ZMQ_Send (* ssa to rssa *)
              | MLton_share
              | MLton_size (* ssa to rssa *)
              | MLton_touch (* backend *)

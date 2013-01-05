@@ -1,3 +1,12 @@
+(* Copyright (C) 2010 Matthew Fluet.
+ * Copyright (C) 1999-2008 Henry Cejtin, Matthew Fluet, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ * Copyright (C) 1997-2000 NEC Research Institute.
+ *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
+ *)
+
 signature MLTON_ZMQ =
 sig
 
@@ -86,4 +95,14 @@ sig
   val sockSetTCPKeepaliveCnt      : socket * int -> unit
   val sockSetTCPKeepaliveIntvl    : socket * int -> unit
   val sockSetTCPAcceptFilter      : socket * Word8.word vector -> unit
+
+  (* Communication *)
+  datatype send_flag = S_DONT_WAIT | S_SEND_MORE | S_NONE
+  val send : socket * 'a -> unit
+  val sendWithPrefix : socket * 'a * Word8.word vector -> unit
+  val sendWithPrefixAndFlag : socket * 'a * Word8.word vector * send_flag -> unit
+
+  datatype recv_flag = R_DONT_WAIT | R_NONE
+  val recv : socket -> 'a
+  val recvWithFlag : socket * recv_flag -> 'a
 end
