@@ -110,6 +110,11 @@ C_Errno_t(C_Int_t) MLton_ZMQ_getSockOpt (C_ZMQ_Socket_t sock, C_Int_t opt,
 
 C_Errno_t(C_Int_t) MLton_ZMQ_setSockOpt (C_ZMQ_Socket_t sock, C_Int_t opt,
                                          Vector(Word8_t) argp, C_Size_t optlen) {
+  /* For subscribe and unsubscribe, include the vector header */
+  if (opt == ZMQ_SUBSCRIBE || opt == ZMQ_UNSUBSCRIBE) {
+    argp = (pointer)argp - (sizeof(void*) * 3);
+    optlen += (sizeof (void*) * 3);
+  }
   return zmq_setsockopt ((void*)sock, (int)opt, (void*)argp, (size_t)optlen);
 }
 
