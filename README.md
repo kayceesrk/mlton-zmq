@@ -2,7 +2,7 @@
 ================================
 
 MLton support for distribution through for ZeroMQ (http://www.zeromq.org/). A
-key feature of this implementation being automatic marshalling of arbitrary ML 
+key feature of this implementation being automatic marshalling of arbitrary ML
 datatypes, including functions (with caveats, of course). As a result, the basic
 send and receive functions are polymorphic, and are simply:
 
@@ -18,10 +18,10 @@ Along with MLton's dependencies,
 [__libzmq__](http://www.zeromq.org/docs:core-api) needs to be installed.
 
 
-## Notes
+## Notes + FAQ
 ========
 
-### Serialization support and caveats
+### 1. Serialization support and caveats
 ====================================
 
 Serialization support is achieved through two new functions under MLton structure:
@@ -46,7 +46,7 @@ The serilization support is very usable, but it has its caveats:
 	must be statically prevented).
 
 
-### Why do you need all of MLton's distribution for ZeroMQ binding?
+### 2. Why do you need all of MLton's distribution for ZeroMQ binding?
 =================================================================
 
 So as to take advantage of MLton's safe system call support, such that zeromq
@@ -55,3 +55,17 @@ Since MLton's system call library is not exposed to the end user, ZMQ binding
 is packaged as a module in MLton's basis library. As an added benefit, this
 also leads to a concise implementation since we take advantage of safe system
 call's error handling support.
+
+### 3. PUB/SUB and Prefixes
+===========================
+
+In ZeroMQ, SUB sockets must set a subscription prefix using zmq_setsockopt() in
+order to receive any messages. The subscriptions are matched with the message
+prefix, and only those messages that match the subscription prefix. Since send
+and receive primitives in the MLton bindings operate over 'a messages, a send
+primitive with an explicit prefix argument is provided.
+
+	val sendWithPrefix : socket * 'a * Word8.word vector -> unit
+
+MLton.ZMQ.recv primitive always [__drops__] the prefix, and only returns the 'a
+message. See tests/weather.sml for an example usage of pub-sub sockets.

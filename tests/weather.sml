@@ -20,7 +20,7 @@ let
     val temp = randNat 215
     val hum = randNat 50 + 10
     val prefix = MLton.serialize (Int.toString zip)
-    val _ = ZMQ.sendWithPrefix (publisher, (zip,temp,hum), prefix)
+    val _ = ZMQ.sendWithPrefix (publisher, {zip = zip,temp=temp,hum=hum}, prefix)
   in
     loop ()
   end
@@ -38,7 +38,7 @@ let
     if n = 0 then ()
     else
       let
-        val (zip, temp, hum) = ZMQ.recv (subscriber)
+        val {zip, temp, hum} = ZMQ.recv (subscriber)
         val _ = print (concat [Int.toString zip, " ",
                               Int.toString temp, " ",
                               Int.toString hum, "\n"])
