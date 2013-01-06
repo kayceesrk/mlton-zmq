@@ -13,7 +13,6 @@ fun server context =
 let
   val publisher = ZMQ.sockCreate (context, ZMQ.Pub)
   val _ = ZMQ.sockBind (publisher, "tcp://*:5556")
-  val _ = ZMQ.sockBind (publisher, "ipc://weather.ipc")
   fun randNat x = Word.toInt (Word.mod (MLton.Random.rand (), Word.fromInt x))
   fun loop () =
   let
@@ -21,10 +20,7 @@ let
     val temp = randNat 215
     val hum = randNat 50 + 10
     val prefix = MLton.serialize (Int.toString zip)
-    val _ = print (concat [Int.toString zip, " ",
-                          Int.toString temp, " ",
-                          Int.toString hum, "\n"])
-    val _ = ZMQ.sendWithPrefix (publisher, [zip,temp,hum], prefix)
+    val _ = ZMQ.sendWithPrefix (publisher, (zip,temp,hum), prefix)
   in
     loop ()
   end
@@ -34,7 +30,6 @@ end
 
 fun client context zip =
 let
-  val _ = print zip
   val subscriber = ZMQ.sockCreate (context, ZMQ.Sub)
   val _ = ZMQ.sockConnect (subscriber, "tcp://localhost:5556")
   val filter = MLton.serialize zip
@@ -43,7 +38,7 @@ let
     if n = 0 then ()
     else
       let
-        val [zip, temp, hum] = ZMQ.recv (subscriber)
+        val (zip, temp, hum) = ZMQ.recv (subscriber)
         val _ = print (concat [Int.toString zip, " ",
                               Int.toString temp, " ",
                               Int.toString hum, "\n"])
