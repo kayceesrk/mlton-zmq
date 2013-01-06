@@ -67,5 +67,5 @@ primitive with an explicit prefix argument is provided.
 
 	val sendWithPrefix : socket * 'a * Word8.word vector -> unit
 
-MLton.ZMQ.recv primitive always [__drops__] the prefix, and only returns the 'a
+MLton.ZMQ.recv primitive always __drops__ the prefix, and only returns the 'a
 message. See tests/weather.sml for an example usage of pub-sub sockets.
