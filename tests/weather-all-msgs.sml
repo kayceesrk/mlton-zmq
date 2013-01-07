@@ -17,8 +17,8 @@ let
   fun loop () =
   let
     val zip = randNat 100000
-    val temp = randNat 215
-    val hum = randNat 50 + 10
+    val temp = randNat 115
+    val hum = randNat 60 + 10
     val prefix = MLton.serialize (Int.toString zip)
     val _ = ZMQ.sendWithPrefix (publisher, {zip = zip,temp=temp,hum=hum}, prefix)
   in

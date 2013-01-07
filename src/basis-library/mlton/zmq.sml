@@ -391,12 +391,13 @@ struct
 
 
   (* Poll *)
-  fun poll {ins, outs, inouts, timeout} =
+  fun poll {ins : socket list, outs : socket list,
+            inouts : socket list, timeout : int} =
     let
       local
         fun mk l =
           let
-            val vec = Vector.fromList l
+            val vec = Vector.map (fn SOCKET {hndl, ...} => hndl) (Vector.fromList l)
             val arr = Array.array (Vector.length vec, 0)
           in
             (vec, arr)
@@ -425,7 +426,7 @@ struct
             in
                (mk (ins, in_arr),
                 mk (outs, out_arr),
-                mk (intouts, inout_arr))
+                mk (inouts, inout_arr))
             end
     in
       {ins = ins, outs = outs, inouts = inouts}

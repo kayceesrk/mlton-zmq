@@ -39,7 +39,7 @@ sig
 
   (* Management *)
 
-  datatype socket_event = POLL_IN | POLL_OUT | POLL_IN_OUT | POLL_ERR
+  datatype socket_event = POLL_IN | POLL_OUT | POLL_IN_OUT | NO_EVENT
 
   val sockGetType                 : socket -> socket_kind
   val sockGetRcvMore              : socket -> bool

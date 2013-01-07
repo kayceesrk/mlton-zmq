@@ -132,7 +132,7 @@ C_Errno_t(C_ZMQ_Message_t) MLton_ZMQ_recv (C_ZMQ_Socket_t sock, C_Int_t flags) {
   return (C_ZMQ_Message_t)msg;
 }
 
-C_Errno_t(C_Int_t) MLton_ZMQ_Poll (Vector(C_ZMQ_Socket_t) in_vec,
+C_Errno_t(C_Int_t) MLton_ZMQ_poll (Vector(C_ZMQ_Socket_t) in_vec,
                                    Vector(C_ZMQ_Socket_t) out_vec,
                                    Vector(C_ZMQ_Socket_t) inout_vec,
                                    Array(C_Int) in_arr,

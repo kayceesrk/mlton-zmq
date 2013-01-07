@@ -17,8 +17,8 @@ let
   fun loop () =
   let
     val zip = randNat 100000
-    val temp = randNat 215
-    val hum = randNat 50 + 10
+    val temp = randNat 115
+    val hum = randNat 60 + 10
     val prefix = MLton.serialize (Int.toString zip)
     val _ = ZMQ.sendWithPrefix (publisher, {zip = zip,temp=temp,hum=hum}, prefix)
   in
@@ -52,6 +52,4 @@ end
 
 val args::tl = CommandLine.arguments ()
 val context = ZMQ.ctxNew ()
-val _ = if args = "server" then server context else ()
-val zip::_ = tl
-val _ = client context zip
+val _ = if args = "server" then server context else client context (hd tl)
