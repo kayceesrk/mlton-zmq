@@ -265,13 +265,13 @@ struct
     val (getSockOptTime, setSockOptTime) = make (intLen, marshalOptTime, unmarshalOptTime)
   end
 
-  datatype socket_event = POLL_IN | POLL_OUT | POLL_IN_OUT | POLL_ERR
+  datatype socket_event = POLL_IN | POLL_OUT | POLL_IN_OUT | NO_EVENT
 
   fun sockEventFromInt event =
     if event = Prim.POLLIN then POLL_IN
     else if event = Prim.POLLOUT then POLL_OUT
     else if event = C_Int.orb (Prim.POLLIN, Prim.POLLOUT) then POLL_IN_OUT
-    else POLL_ERR
+    else NO_EVENT
 
 
   fun getSockOptWord8Vector optname optlen (SOCKET {hndl, ...}) : Word8.word vector =
@@ -388,4 +388,46 @@ struct
     end
 
   fun recv (sock) = recvWithFlag (sock, R_NONE)
+
+
+  (* Poll *)
+  fun poll {ins, outs, inouts, timeout} =
+    let
+      local
+        fun mk l =
+          let
+            val vec = Vector.fromList l
+            val arr = Array.array (Vector.length vec, 0)
+          in
+            (vec, arr)
+          end
+      in
+        val (in_vec, in_arr) = mk ins
+        val (out_vec, out_arr) = mk outs
+        val (inout_vec, inout_arr) = mk inouts
+      end
+      val res =
+        exnWrapper (SysCall.simpleResult
+        (fn () =>
+          Prim.poll (in_vec, out_vec, inout_vec,
+                     in_arr, out_arr, inout_arr, timeout)))
+      val (ins, outs, inouts) =
+         if res = 0
+            then ([],[],[])
+         else
+            let
+               fun mk (l, arr) =
+                  (List.rev o #1)
+                  (List.foldl (fn (sd, (l, i)) =>
+                               (if Array.sub (arr, i) <> 0 then sd::l else l, i + 1))
+                              ([],0)
+                              l)
+            in
+               (mk (ins, in_arr),
+                mk (outs, out_arr),
+                mk (intouts, inout_arr))
+            end
+    in
+      {ins = ins, outs = outs, inouts = inouts}
+    end
 end

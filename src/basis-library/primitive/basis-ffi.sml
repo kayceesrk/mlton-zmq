@@ -192,6 +192,7 @@ val MAX_SOCKETS = _const "MLton_ZMQ_MAX_SOCKETS" : C_Int.t;
 val MAXMSGSIZE = _const "MLton_ZMQ_MAXMSGSIZE" : C_Int.t;
 val MULTICAST_HOPS = _const "MLton_ZMQ_MULTICAST_HOPS" : C_Int.t;
 val PAIR = _const "MLton_ZMQ_PAIR" : C_Int.t;
+val poll = _import "MLton_ZMQ_poll" private : (C_ZMQ_Socket.t) vector * (C_ZMQ_Socket.t) vector * (C_ZMQ_Socket.t) vector * (C_Int.t) array * (C_Int.t) array * (C_Int.t) array * C_Int.t -> (C_Int.t) C_Errno.t;
 val POLLERR = _const "MLton_ZMQ_POLLERR" : C_Int.t;
 val POLLIN = _const "MLton_ZMQ_POLLIN" : C_Int.t;
 val POLLOUT = _const "MLton_ZMQ_POLLOUT" : C_Int.t;

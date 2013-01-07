@@ -142,6 +142,7 @@ PRIVATE extern const C_Int_t MLton_ZMQ_MAX_SOCKETS;
 PRIVATE extern const C_Int_t MLton_ZMQ_MAXMSGSIZE;
 PRIVATE extern const C_Int_t MLton_ZMQ_MULTICAST_HOPS;
 PRIVATE extern const C_Int_t MLton_ZMQ_PAIR;
+PRIVATE C_Errno_t(C_Int_t) MLton_ZMQ_poll(Vector(C_ZMQ_Socket_t),Vector(C_ZMQ_Socket_t),Vector(C_ZMQ_Socket_t),Array(C_Int_t),Array(C_Int_t),Array(C_Int_t),C_Int_t);
 PRIVATE extern const C_Int_t MLton_ZMQ_POLLERR;
 PRIVATE extern const C_Int_t MLton_ZMQ_POLLIN;
 PRIVATE extern const C_Int_t MLton_ZMQ_POLLOUT;

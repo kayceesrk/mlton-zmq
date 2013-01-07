@@ -131,3 +131,55 @@ C_Errno_t(C_ZMQ_Message_t) MLton_ZMQ_recv (C_ZMQ_Socket_t sock, C_Int_t flags) {
   }
   return (C_ZMQ_Message_t)msg;
 }
+
+C_Errno_t(C_Int_t) MLton_ZMQ_Poll (Vector(C_ZMQ_Socket_t) in_vec,
+                                   Vector(C_ZMQ_Socket_t) out_vec,
+                                   Vector(C_ZMQ_Socket_t) inout_vec,
+                                   Array(C_Int) in_arr,
+                                   Array(C_Int) out_arr,
+                                   Array(C_Int) inout_arr,
+                                   C_Int_t timeout) {
+  int in_len, out_len, inout_len, total_len;
+
+  in_len = GC_getArrayLength ((pointer)in_vec);
+  out_len = GC_getArrayLength ((pointer)out_vec);
+  inout_len = GC_getArrayLength ((pointer)inout_vec);
+  total_len = in_len + out_len + inout_len;
+
+  zmq_pollitem_t* items = (zmq_pollitem_t*) malloc_safe (sizeof (zmq_pollitem_t) * total_len);
+
+  int iter = 0;
+  for (int i = 0; i < in_len; i++, iter++) {
+    items[iter].socket = (void*)((C_ZMQ_Socket_t*)in_vec)[i];
+    items[iter].events = ZMQ_POLLIN;
+  }
+  for (int i = 0; i < out_len; i++) {
+    items[iter].socket = (void*)((C_ZMQ_Socket_t*)out_vec)[i];
+    items[iter].events = ZMQ_POLLOUT;
+    iter++;
+  }
+  for (int i = 0; i < inout_len; i++, iter++) {
+    items[iter].socket = (void*)((C_ZMQ_Socket_t*)inout_vec)[i];
+    items[iter].events = ZMQ_POLLOUT | ZMQ_POLLIN;
+  }
+
+  int rc = zmq_poll (items, total_len, timeout);
+  if (rc >= 0) {
+    iter = 0;
+    for (int i = 0; i < in_len; i++, iter++) {
+      if (items[iter].revents & ZMQ_POLLIN)
+        ((int*)in_arr)[i] = 1;
+    }
+    for (int i = 0; i < out_len; i++, iter++) {
+      if (items[iter].revents & ZMQ_POLLOUT)
+        ((int*)out_arr)[i] = 1;
+    }
+    for (int i = 0; i < inout_len; i++, iter++) {
+      if (items[iter].revents & (ZMQ_POLLOUT | ZMQ_POLLIN))
+        ((int*)inout_arr)[i] = 1;
+    }
+  }
+
+  free (items);
+  return (C_Int_t)rc;
+}
