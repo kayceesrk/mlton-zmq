@@ -28,11 +28,11 @@ in
   loop ()
 end
 
-fun client context zip =
+fun client context =
 let
   val subscriber = ZMQ.sockCreate (context, ZMQ.Sub)
   val _ = ZMQ.sockConnect (subscriber, "tcp://localhost:5556")
-  val filter = MLton.serialize zip
+  val filter = Vector.tabulate (0, fn _ => 0wx0)
   val _ = ZMQ.sockSetSubscribe (subscriber, filter)
   fun loop n =
     if n = 0 then ()
@@ -50,8 +50,6 @@ in
 end
 
 
-val args::tl = CommandLine.arguments ()
+val args::_ = CommandLine.arguments ()
 val context = ZMQ.ctxNew ()
-val _ = if args = "server" then server context else ()
-val zip::_ = tl
-val _ = client context zip
+val _ = if args = "server" then server context else client context

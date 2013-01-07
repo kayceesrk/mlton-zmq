@@ -1,4 +1,6 @@
-APPS = serialize1.exe serialize2.exe serialize3.exe serialize4.exe serialize5.exe ping-pong.exe prefix-drop-test.exe weather.exe
+APPS = serialize1.exe serialize2.exe serialize3.exe serialize4.exe \
+			 serialize5.exe ping-pong.exe prefix-drop-test.exe weather.exe \
+			 weather-all-msgs.exe
 MORE =
 
 all: $(APPS)
