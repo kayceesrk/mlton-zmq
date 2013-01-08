@@ -171,6 +171,7 @@ MLton.ZMQ.recv = _import PRIVATE : C_ZMQ_Socket.t * C_Int.t -> C_ZMQ_Message.t C
 MLton.ZMQ.DONTWAIT = _const : C_Int.t
 MLton.ZMQ.SNDMORE = _const : C_Int.t
 MLton.ZMQ.poll = _import PRIVATE : C_ZMQ_Socket.t vector * C_ZMQ_Socket.t vector * C_ZMQ_Socket.t vector * C_Int.t array * C_Int.t array * C_Int.t array * C_Int.t -> C_Int.t C_Errno.t
+MLton.ZMQ.proxy = _import PRIVATE : C_ZMQ_Socket.t * C_ZMQ_Socket.t -> C_Int.t C_Errno.t
 MinGW.getTempPath = _import PRIVATE : C_Size.t * Char8.t array -> C_Size.t
 MinGW.setNonBlock = _import PRIVATE : C_Fd.t -> unit
 MinGW.clearNonBlock = _import PRIVATE : C_Fd.t -> unit

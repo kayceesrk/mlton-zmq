@@ -9,9 +9,6 @@
 
 signature MLTON_ZMQ =
 sig
-
-  exception ZMQError of string * Posix.Error.syserror option
-
   (* Context Management *)
   type context
   datatype context_option = IO_THREADS | MAX_SOCKETS
@@ -115,4 +112,6 @@ sig
               inouts : socket list, timeout: int} ->
              {ins : socket list, outs: socket list,
               inouts : socket list}
+
+  val proxy : {frontend: socket, backend: socket} -> unit
 end

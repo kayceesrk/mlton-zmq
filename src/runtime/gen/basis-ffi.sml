@@ -196,6 +196,7 @@ val poll = _import "MLton_ZMQ_poll" private : (C_ZMQ_Socket.t) vector * (C_ZMQ_S
 val POLLERR = _const "MLton_ZMQ_POLLERR" : C_Int.t;
 val POLLIN = _const "MLton_ZMQ_POLLIN" : C_Int.t;
 val POLLOUT = _const "MLton_ZMQ_POLLOUT" : C_Int.t;
+val proxy = _import "MLton_ZMQ_proxy" private : C_ZMQ_Socket.t * C_ZMQ_Socket.t -> (C_Int.t) C_Errno.t;
 val PUB = _const "MLton_ZMQ_PUB" : C_Int.t;
 val PULL = _const "MLton_ZMQ_PULL" : C_Int.t;
 val PUSH = _const "MLton_ZMQ_PUSH" : C_Int.t;

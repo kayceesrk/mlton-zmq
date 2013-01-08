@@ -1,0 +1,16 @@
+ann
+   "sequenceNonUnit warn"
+   "nonexhaustiveMatch warn" "redundantMatch warn"
+   "warnUnused true"
+in
+   local
+      $(SML_LIB)/basis/basis.mlb
+      $(SML_LIB)/basis/mlton.mlb
+      util/util.mlb
+			dml.sig
+			dml.sml
+	 in
+	    signature DML
+			structure Dml
+	 end
+end

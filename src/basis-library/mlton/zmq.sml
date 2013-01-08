@@ -12,9 +12,7 @@ struct
 
   structure SysCall = PosixError.SysCall
 
-  exception ZMQError of string * Posix.Error.syserror option
-
-  fun exnWrapper v = v handle PosixError.SysErr (str, errOpt) => raise ZMQError (str, errOpt)
+  fun exnWrapper f = f () (* handle PosixError.SysErr (str, errOpt) => raise ZMQError (str, errOpt) *)
 
   (* KC: For readability, primitive function names must be made to correspond
    * to the C function names they correspond to *)
@@ -43,20 +41,20 @@ struct
   *     expect signals *always* due to MultiMLton's user-level threading.
   *)
   fun ctxNew () =
-    exnWrapper (SysCall.simpleResultRestart' ({errVal = CUtil.C_Pointer.null}, Prim.ctx_new))
+    exnWrapper (fn () => SysCall.simpleResultRestart' ({errVal = CUtil.C_Pointer.null}, Prim.ctx_new))
 
   (* Using simpleRestart due to the following reasons
   * (1) errVal is default (~1).
   * (2) No result is expected.
   *)
   fun ctxDestroy context =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.ctx_destroy context))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.ctx_destroy context))
 
   fun ctxSetOpt (ctx, opt, v) =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.ctx_set (ctx, contextOptionToInt opt, v)))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.ctx_set (ctx, contextOptionToInt opt, v)))
 
   fun ctxGetOpt (ctx, opt) =
-    exnWrapper (SysCall.simpleResultRestart (fn () => Prim.ctx_get (ctx, contextOptionToInt opt)))
+    exnWrapper (fn () => SysCall.simpleResultRestart (fn () => Prim.ctx_get (ctx, contextOptionToInt opt)))
 
 
   (* Sockets *)
@@ -83,7 +81,7 @@ struct
 
   fun sockCreate (ctxt, kind) =
   let
-    val hndl = exnWrapper (SysCall.simpleResultRestart'
+    val hndl = exnWrapper (fn () => SysCall.simpleResultRestart'
                             ({errVal = CUtil.C_Pointer.null},
                               fn () => Prim.socket (ctxt, socketKindToInt kind)))
   in
@@ -91,19 +89,19 @@ struct
   end
 
   fun sockClose (SOCKET {hndl, ...}) =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.close hndl))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.close hndl))
 
   fun sockConnect (SOCKET {hndl, ...}, endPoint) =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.connect (hndl, NullString.nullTerm endPoint)))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.connect (hndl, NullString.nullTerm endPoint)))
 
   fun sockDisconnect (SOCKET {hndl, ...}, endPoint) =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.disconnect (hndl, NullString.nullTerm endPoint)))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.disconnect (hndl, NullString.nullTerm endPoint)))
 
   fun sockBind (SOCKET {hndl,...}, endPoint) =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.bind (hndl, NullString.nullTerm endPoint)))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.bind (hndl, NullString.nullTerm endPoint)))
 
   fun sockUnbind (SOCKET {hndl,...}, endPoint) =
-    exnWrapper (SysCall.simpleRestart (fn () => Prim.unbind (hndl, NullString.nullTerm endPoint)))
+    exnWrapper (fn () => SysCall.simpleRestart (fn () => Prim.unbind (hndl, NullString.nullTerm endPoint)))
 
   (* Socket Options *)
 
@@ -235,7 +233,7 @@ struct
           val optval = Array.array (optlen, 0wx0)
           val optlen' = ref (C_Size.fromInt optlen)
           val () =
-            exnWrapper (SysCall.simpleRestart
+            exnWrapper (fn () => SysCall.simpleRestart
             (fn () => Prim.getSockOpt (hndl, optname, optval, optlen')))
           val () =
             if C_Size.toInt (!optlen') <> optlen
@@ -250,7 +248,7 @@ struct
           val optval = marshal optval
           val optlen' = C_Size.fromInt optlen
           val () =
-            exnWrapper (SysCall.simpleRestart
+            exnWrapper (fn () => SysCall.simpleRestart
             (fn () => Prim.setSockOpt (hndl, optname, optval, optlen')))
         in
           ()
@@ -279,7 +277,7 @@ struct
     val optval = Array.array (optlen, 0wx0)
     val optlen' = ref (C_Size.fromInt optlen)
     val () =
-      exnWrapper (SysCall.simpleRestart
+      exnWrapper (fn () => SysCall.simpleRestart
       (fn () => Prim.getSockOpt (hndl, optname, optval, optlen')))
     val optlen = C_Size.toInt (!optlen')
   in
@@ -290,7 +288,7 @@ struct
   let
     val optlen = Vector.length optval
   in
-    exnWrapper (SysCall.simpleRestart
+    exnWrapper (fn () => SysCall.simpleRestart
     (fn () => Prim.setSockOpt (hndl, optname, optval, C_Size.fromInt optlen)))
   end
 
@@ -370,7 +368,7 @@ struct
 
   (* Send always works with references *)
   fun sendWithPrefixAndFlag (SOCKET {hndl, ...}, msg, prefix, flg) =
-      exnWrapper (SysCall.simpleRestart
+      exnWrapper (fn () => SysCall.simpleRestart
       (fn () => Prim.send (ref msg, prefix, hndl, sendFlgToInt flg)))
 
   fun sendWithPrefix (sock, msg, prefix) = sendWithPrefixAndFlag (sock, msg, prefix, S_NONE)
@@ -381,7 +379,7 @@ struct
   fun recvWithFlag (SOCKET {hndl, ...}, flg) =
     let
       val zmqMsg =
-        exnWrapper (SysCall.simpleResultRestart'
+        exnWrapper (fn () => SysCall.simpleResultRestart'
         ({errVal = CUtil.C_Pointer.null}, fn () => Prim.recv (hndl, recvFlgToInt flg)))
     in
       !(Prim.deserializeZMQMsg zmqMsg)
@@ -408,7 +406,7 @@ struct
         val (inout_vec, inout_arr) = mk inouts
       end
       val res =
-        exnWrapper (SysCall.simpleResult
+        exnWrapper (fn () => SysCall.simpleResultRestart
         (fn () =>
           Prim.poll (in_vec, out_vec, inout_vec,
                      in_arr, out_arr, inout_arr, timeout)))
@@ -431,4 +429,9 @@ struct
     in
       {ins = ins, outs = outs, inouts = inouts}
     end
+
+  fun proxy {frontend = SOCKET {hndl = frontend, ...},
+             backend = SOCKET {hndl = backend, ...}} =
+    exnWrapper (fn () => SysCall.simpleRestart
+    (fn () => Prim.proxy (frontend, backend)))
 end

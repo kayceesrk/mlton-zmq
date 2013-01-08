@@ -146,6 +146,7 @@ PRIVATE C_Errno_t(C_Int_t) MLton_ZMQ_poll(Vector(C_ZMQ_Socket_t),Vector(C_ZMQ_So
 PRIVATE extern const C_Int_t MLton_ZMQ_POLLERR;
 PRIVATE extern const C_Int_t MLton_ZMQ_POLLIN;
 PRIVATE extern const C_Int_t MLton_ZMQ_POLLOUT;
+PRIVATE C_Errno_t(C_Int_t) MLton_ZMQ_proxy(C_ZMQ_Socket_t,C_ZMQ_Socket_t);
 PRIVATE extern const C_Int_t MLton_ZMQ_PUB;
 PRIVATE extern const C_Int_t MLton_ZMQ_PULL;
 PRIVATE extern const C_Int_t MLton_ZMQ_PUSH;

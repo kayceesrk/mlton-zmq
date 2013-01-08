@@ -1,0 +1,16 @@
+ann
+   "sequenceNonUnit warn"
+   "nonexhaustiveMatch warn" "redundantMatch warn"
+   "warnUnused true" "forceUsed"
+in
+  local
+    $(SML_LIB)/basis/basis.mlb
+    $(SML_LIB)/basis/mlton.mlb
+		red-black.sml
+	in
+		signature TABLE
+		functor RedBlackTree
+		structure StringRedBlackTree
+		structure IntRedBlackTree
+	 end
+end

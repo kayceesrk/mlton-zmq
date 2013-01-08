@@ -183,3 +183,7 @@ C_Errno_t(C_Int_t) MLton_ZMQ_poll (Vector(C_ZMQ_Socket_t) in_vec,
   free (items);
   return (C_Int_t)rc;
 }
+
+C_Errno_t(C_Int_t) MLton_ZMQ_proxy (C_ZMQ_Socket_t frontend, C_ZMQ_Socket_t backend) {
+  return (C_Int_t) zmq_proxy ((void*)frontend, (void*)backend, NULL);
+}
