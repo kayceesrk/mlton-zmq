@@ -10,12 +10,12 @@
 signature DML =
 sig
   type proxy
-  (* type 'a chan *)
+  type 'a chan
 
   (* never returns *)
   val startProxy : {frontend: string, backend: string} -> unit
   val connect : {sink: string, source: string} -> proxy
-  (* val channel : proxy * Word8.word vector -> 'a chan
+  val channel : proxy * string -> 'a chan
   val send : 'a chan * 'a -> unit
-  val recv : 'a chan -> 'a *)
+  val recv : 'a chan -> 'a
 end
