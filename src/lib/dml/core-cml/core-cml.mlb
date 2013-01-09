@@ -1,0 +1,31 @@
+ann
+   "sequenceNonUnit warn"
+   "nonexhaustiveMatch warn" "redundantMatch warn"
+   "warnUnused true"
+in
+   local
+      $(SML_LIB)/basis/basis.mlb
+      $(SML_LIB)/basis/mlton.mlb
+      ../util/util.mlb
+      rep-types.sml
+      running.sml
+      thread-id.sig
+      thread-id.sml
+      scheduler-hooks.sig
+      scheduler-hooks.sml
+      scheduler.sig
+      scheduler.sml
+      thread.sig
+      thread.sml
+      cml.sig
+      cml.sml
+
+      run-cml.sig
+      run-cml.sml
+
+   in
+      signature CML
+      structure CML
+      structure RunCML
+   end
+end

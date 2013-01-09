@@ -146,6 +146,10 @@ libraries-no-check:
 	$(MAKE) -C "$(SRC)/lib/smlnj-lib"
 	$(CP) "$(SRC)/lib/cml/." "$(LIB)/sml/cml"
 	$(CP) "$(SRC)/lib/dml/." "$(LIB)/sml/dml"
+	rm -rf cmlib
+	git clone git://github.com/standardml/cmlib.git
+	rm -rf "$(LIB)/sml/dml/cmlib"
+	mv cmlib "$(LIB)/sml/dml/cmlib"
 	$(CP) "$(SRC)/lib/ckit-lib/ckit/." "$(LIB)/sml/ckit-lib"
 	$(CP) "$(SRC)/lib/mlnlffi-lib/." "$(LIB)/sml/mlnlffi-lib"
 	$(CP) "$(SRC)/lib/mlrisc-lib/MLRISC/." "$(LIB)/sml/mlrisc-lib"

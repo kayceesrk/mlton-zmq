@@ -6,6 +6,8 @@ in
    local
       $(SML_LIB)/basis/basis.mlb
       $(SML_LIB)/basis/mlton.mlb
+			cml/cml.mlb
+			cmlib/cmlib.mlb
       util/util.mlb
 			dml.sig
 			dml.sml
