@@ -159,6 +159,10 @@ libraries-no-check:
 	find "$(LIB)/sml" -type d -name .svn | xargs rm -rf
 	find "$(LIB)/sml" -type f -name .ignore | xargs rm -rf
 
+.PHONY: dml
+dml:
+	$(CP) "$(SRC)/lib/dml/." "$(LIB)/sml/dml"
+
 .PHONY: libraries
 libraries:
 	$(MAKE) libraries-no-check

@@ -7,9 +7,8 @@
  * See the file MLton-LICENSE for details.
  *)
 
-val args::_ = CommandLine.arguments ()
-val _ = if args = "proxy" then
-          Dml.startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
-        else
-          (Dml.connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", nodeId = 1};
-          print "Done\n")
+signature UNIVERSAL_TYPE =
+   sig
+      type t
+      val embed: unit -> ('a -> t) * (t -> 'a option)
+   end

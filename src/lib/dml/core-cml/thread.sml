@@ -12,7 +12,7 @@
 structure Thread : THREAD =
    struct
       structure Assert = LocalAssert(val assert = false)
-      structure Debug = LocalDebug(val debug = false)
+      structure Debug = LocalDebug(val debug = true)
 
       structure S = Scheduler
       fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
@@ -41,6 +41,10 @@ structure Thread : THREAD =
                 ()
              end)
          end
+
+      (* fun doHandler (TID {exnHandler, ...}, exn) =
+         (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
+          ; ((!exnHandler) exn) handle _ => ()) *)
 
       fun spawnc f x =
          let
@@ -71,7 +75,7 @@ structure Thread : THREAD =
       fun yield () =
          let
             val () = Assert.assertNonAtomic' "Thread.yield"
-            val () = debug' "yield" (* NonAtomic *)
+            (* val () = debug' "yield" (* NonAtomic *) *)
             val () = Assert.assertNonAtomic' "Thread.yield"
          in
             S.readyAndSwitchToNext (fn () => ())

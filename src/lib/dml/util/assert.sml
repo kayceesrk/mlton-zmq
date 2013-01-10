@@ -6,15 +6,15 @@
 structure Assert: ASSERT =
    struct
       structure C = Critical
-      val assertFlg = false
+      val assertFlg = true
 
       fun fail msg =
          (C.atomicBegin ();
           TextIO.print (concat ["ASSERT: ", msg, "\n"]);
           OS.Process.exit OS.Process.failure)
 
-      fun assert (msgs: (unit -> string) list, 
-                  msg: unit -> string, 
+      fun assert (msgs: (unit -> string) list,
+                  msg: unit -> string,
                   f: unit -> bool): unit =
          if assertFlg andalso not (f () handle _ => false)
             then let
