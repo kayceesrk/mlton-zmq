@@ -9,7 +9,7 @@
 
 signature DML =
 sig
-  type chan
+  type 'a chan
 
   (* ------------------------------------------------------*)
   (* Server *)
@@ -25,9 +25,9 @@ sig
   val connect : {sink: string, source: string, nodeId: int} -> unit
   val runDML : (unit -> unit) * Time.time option -> OS.Process.status
 
-  val channel : string -> chan
-  val send : chan * Word8.word vector -> unit
-  val recv : chan -> Word8.word vector
+  val channel : string -> 'a chan
+  val send : 'a chan * 'a -> unit
+  val recv : 'a chan -> 'a
 
   (* ------------------------------------------------------*)
 end

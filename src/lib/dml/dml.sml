@@ -68,7 +68,7 @@ struct
                              sink: ZMQ.socket option,
                              source: ZMQ.socket option}
 
-  datatype chan = CHANNEL of channel_id
+  datatype 'a chan = CHANNEL of channel_id
 
   datatype content = S_REQ of w8vec
                    | R_REQ
@@ -190,6 +190,7 @@ struct
 
   fun send (CHANNEL c, m) =
   let
+    val m = MLton.serialize (m)
     val _ = S.switchToNext (fn t : w8vec S.thread =>
               let
                 val tid = S.tidInt ()
@@ -205,16 +206,21 @@ struct
   end
 
   fun recv (CHANNEL c) =
-    S.switchToNext (fn t : w8vec S.thread =>
-      let
-        val tid = S.tidInt ()
-        val PROXY {sink, ...} = !proxy
-        val _ = ZMQ.send (valOf sink, {cid = c, nid = NodeId (!nodeId),
-                          tid = ThreadId tid, cnt = R_REQ})
-        val _ = blockedThreads := (R.insert (!blockedThreads) tid t)
-      in
-        ()
-      end)
+  let
+    val serM =
+      S.switchToNext (fn t : w8vec S.thread =>
+        let
+          val tid = S.tidInt ()
+          val PROXY {sink, ...} = !proxy
+          val _ = ZMQ.send (valOf sink, {cid = c, nid = NodeId (!nodeId),
+                            tid = ThreadId tid, cnt = R_REQ})
+          val _ = blockedThreads := (R.insert (!blockedThreads) tid t)
+        in
+          ()
+        end)
+  in
+    MLton.deserialize serM
+  end
   (* -------------------------------------------------------------------- *)
 end
 
