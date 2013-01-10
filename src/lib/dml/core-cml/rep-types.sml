@@ -15,7 +15,10 @@
 structure RepTypes =
    struct
       (** thread IDs --- see thread-id.sml and threads.sml **)
-      datatype thread_id = TID of int
+      datatype thread_id = TID of {
+            id : int,
+            exnHandler : (exn -> unit) ref
+            }
 
       (** threads --- see scheduler.sml and threads.sml **)
       and 'a thread = THRD of thread_id * 'a MLton.Thread.t

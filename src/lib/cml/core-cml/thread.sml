@@ -30,9 +30,9 @@ structure Thread : THREAD =
             (fn t =>
              let
                 val tid as TID {dead, props, ...} = S.getThreadId t
-                val () = Assert.assert ([], fn () => 
+                val () = Assert.assert ([], fn () =>
                                         concat ["Thread.generalExit ",
-                                                Option.getOpt (Option.map tidToString tid', "NONE"), 
+                                                Option.getOpt (Option.map tidToString tid', "NONE"),
                                                 " <> ",
                                                 tidToString tid], fn () =>
                                          case tid' of NONE => true
@@ -48,10 +48,10 @@ structure Thread : THREAD =
          (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
           ; ((!exnHandler) exn) handle _ => ())
 
-      fun spawnc f x = 
+      fun spawnc f x =
          let
             val () = S.atomicBegin ()
-            fun thread tid () = 
+            fun thread tid () =
                ((f x) handle ex => doHandler (tid, ex)
                 ; generalExit (SOME tid, false))
             val t = S.new thread
@@ -68,7 +68,7 @@ structure Thread : THREAD =
 
       val getTid = S.getCurThreadId
 
-      fun exit () = 
+      fun exit () =
          let
             val () = Assert.assertNonAtomic' "Thread.exit"
             val () = debug' "exit" (* NonAtomic *)
@@ -77,7 +77,7 @@ structure Thread : THREAD =
             generalExit (NONE, true)
          end
 
-      fun yield () = 
+      fun yield () =
          let
             val () = Assert.assertNonAtomic' "Thread.yield"
             val () = debug' "yield" (* NonAtomic *)
@@ -88,10 +88,10 @@ structure Thread : THREAD =
 
       (* thread-local data *)
       local
-         fun mkProp () = 
+         fun mkProp () =
             let
-               exception E of 'a 
-               fun cons (a, l) = E a :: l 
+               exception E of 'a
+               fun cons (a, l) = E a :: l
                fun peek [] = NONE
                  | peek (E a :: _) = SOME a
                  | peek (_ :: l) = peek l
@@ -99,17 +99,17 @@ structure Thread : THREAD =
                  | delete (E _ :: r) = r
                  | delete (x :: r) = x :: delete r
             in
-               {cons = cons, 
-                peek = peek, 
+               {cons = cons,
+                peek = peek,
                 delete = delete}
             end
-         fun mkFlag () = 
+         fun mkFlag () =
             let
                exception E
                fun peek [] = false
                  | peek (E :: _) = true
                  | peek (_ :: l) = peek l
-               fun set (l, flg) = 
+               fun set (l, flg) =
                   let
                      fun set ([], _) = if flg then E::l else l
                        | set (E::r, xs) = if flg then l else List.revAppend(xs, r)
@@ -118,52 +118,52 @@ structure Thread : THREAD =
                      set (l, [])
                   end
             in
-               {set = set, 
+               {set = set,
                 peek = peek}
             end
-         fun getProps () = 
-            let val TID {props, ...} = getTid () 
-            in props 
+         fun getProps () =
+            let val TID {props, ...} = getTid ()
+            in props
             end
       in
-         fun newThreadProp (init : unit -> 'b) = 
+         fun newThreadProp (init : unit -> 'b) =
             let
-               val {peek, cons, delete} = mkProp() 
+               val {peek, cons, delete} = mkProp()
                fun peekFn () = peek(!(getProps()))
-               fun getF () = 
+               fun getF () =
                   let val h = getProps()
                   in
-                     case peek(!h) of 
-                        NONE => let val b = init() 
-                                in h := cons(b, !h); b 
+                     case peek(!h) of
+                        NONE => let val b = init()
+                                in h := cons(b, !h); b
                                 end
                       | (SOME b) => b
                   end
-               fun clrF () = 
+               fun clrF () =
                   let val h = getProps()
                   in h := delete(!h)
                   end
-               fun setFn x = 
+               fun setFn x =
                   let val h = getProps()
                   in h := cons(x, delete(!h))
                   end
             in
-               {peekFn = peekFn, 
-                getFn = getF, 
-                clrFn = clrF, 
+               {peekFn = peekFn,
+                getFn = getF,
+                clrFn = clrF,
                 setFn = setFn}
             end
 
-         fun newThreadFlag () = 
+         fun newThreadFlag () =
             let
-               val {peek, set} = mkFlag() 
+               val {peek, set} = mkFlag()
                fun getF ()= peek(!(getProps()))
-               fun setF flg = 
+               fun setF flg =
                   let val h = getProps()
                   in h := set(!h, flg)
                   end
             in
-               {getFn = getF, 
+               {getFn = getF,
                 setFn = setF}
             end
       end

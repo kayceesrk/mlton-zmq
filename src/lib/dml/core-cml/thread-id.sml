@@ -19,19 +19,20 @@ structure ThreadID : THREAD_ID_EXTRA =
       datatype thread_id = datatype R.thread_id
       datatype thread_id' = datatype thread_id
 
-      fun sameTid (TID a, TID b) = a = b
-      fun compareTid (TID a, TID b) = Int.compare (a, b)
-      fun hashTid (TID id) = Word.fromInt id
+      fun sameTid (TID {id = a,...}, TID {id = b, ...}) = a = b
+      fun compareTid (TID {id = a, ...}, TID {id = b, ...}) = Int.compare (a, b)
+      fun hashTid (TID {id, ...}) = Word.fromInt id
 
-      fun tidToString (TID id) =
+      fun tidToString (TID {id, ...}) =
          concat["[", StringCvt.padLeft #"0" 6 (Int.toString id), "]"]
-      fun tidToInt (TID id) = id
+      fun tidToInt (TID {id, ...}) = id
 
       fun exnHandler (_ : exn) = ()
       val defaultExnHandler = ref exnHandler
 
       fun new' n =
-         TID n
+         TID {id = n,
+              exnHandler = ref (!defaultExnHandler)}
       local
          val tidCounter = ref 0
       in

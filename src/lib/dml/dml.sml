@@ -267,7 +267,14 @@ struct
         f ()
       end
     in
-      RunCML.doit (body, to)
+      RunCML.doit (body, to) handle C.Exit =>
+        let
+          val PROXY {source, sink, ...} = !proxy
+          val _ = ZMQ.sockClose (valOf source)
+          val _ = ZMQ.sockClose (valOf sink)
+        in
+          OS.Process.success
+        end
     end
 
   fun channel s = CHANNEL (ChannelId s)

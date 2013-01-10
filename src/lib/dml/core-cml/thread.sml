@@ -20,7 +20,7 @@ structure Thread : THREAD =
 
       open ThreadID
 
-      fun generalExit (tid', clr') =
+      fun generalExit (tid', _) =
          let
             val () = Assert.assertNonAtomic' "Thread.generalExit"
             val () = debug' "generalExit" (* NonAtomic *)
@@ -42,15 +42,20 @@ structure Thread : THREAD =
              end)
          end
 
-      (* fun doHandler (TID {exnHandler, ...}, exn) =
+      exception Exit
+
+      fun doHandler (TID {exnHandler, ...}, exn) =
          (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
-          ; ((!exnHandler) exn) handle _ => ()) *)
+          ; ((!exnHandler) exn) handle e => case e of
+                                                 Exit => raise Exit
+                                               | _ => ())
 
       fun spawnc f x =
          let
             val () = S.atomicBegin ()
             fun thread tid () =
-               (ignore (f x) ; generalExit (SOME tid, false))
+               (ignore (f x) handle ex => doHandler (tid, ex)
+               ; generalExit (SOME tid, false))
             val t = S.new thread
             val tid = S.getThreadId t
             val () = S.ready (S.prep t)
