@@ -9,8 +9,8 @@
 
 structure DmlCentralized : DML =
 struct
-  structure Assert = LocalAssert(val assert = true)
-  structure Debug = LocalDebug(val debug = true)
+  structure Assert = LocalAssert(val assert = false)
+  structure Debug = LocalDebug(val debug = false)
 
   structure ZMQ = MLton.ZMQ
   structure RI = IntRedBlackDict
@@ -317,7 +317,5 @@ struct
   end
   (* -------------------------------------------------------------------- *)
 end
-
-structure Dml = DmlCentralized
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)

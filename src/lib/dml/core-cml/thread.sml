@@ -12,7 +12,7 @@
 structure Thread : THREAD =
    struct
       structure Assert = LocalAssert(val assert = false)
-      structure Debug = LocalDebug(val debug = true)
+      structure Debug = LocalDebug(val debug = false)
 
       structure S = Scheduler
       fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)

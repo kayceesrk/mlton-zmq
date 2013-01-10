@@ -161,6 +161,7 @@ libraries-no-check:
 
 .PHONY: dml
 dml:
+	rm -rf "$(LIB)/sml/dml"
 	$(CP) "$(SRC)/lib/dml/." "$(LIB)/sml/dml"
 
 .PHONY: libraries

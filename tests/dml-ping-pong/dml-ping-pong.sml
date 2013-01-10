@@ -18,12 +18,12 @@ let
 
   fun loop n =
     if n = 0 then OS.Process.exit OS.Process.success
-    else (send (pingChan, n);
+    else (print (concat ["Iteration: ", Int.toString n, "\n"]);
+          send (pingChan, n);
           ignore (recv pongChan);
           loop (n-1))
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", nodeId = 1}
-  val _ = print "starting DML\n"
 in
   ignore (runDML (fn () => loop 100, NONE))
 end
@@ -35,7 +35,8 @@ let
 
   fun loop n =
     if n = 0 then OS.Process.exit OS.Process.success
-    else (ignore (recv pingChan);
+    else (print (concat ["Iteration: ", Int.toString n, "\n"]);
+          ignore (recv pingChan);
           send (pongChan, n);
           loop (n-1))
 

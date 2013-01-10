@@ -9,10 +9,10 @@ in
 			cml.mlb
 			cmlib/cmlib.mlb
       util/util.mlb
-			dml.sig
-			dml.sml
+			core-dml/dml.sig
+			core-dml/dml-centralized.sml
+			core-dml/dml.sml
 	 in
-	    signature DML
 			structure Dml
 	 end
 end

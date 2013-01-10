@@ -12,7 +12,7 @@
 structure RunCML : RUN_CML =
    struct
       structure Assert = LocalAssert(val assert = false)
-      structure Debug = LocalDebug(val debug = true)
+      structure Debug = LocalDebug(val debug = false)
 
       structure R = Running
       structure S = Scheduler
