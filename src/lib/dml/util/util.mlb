@@ -25,6 +25,8 @@ in
       fun-priority-queue.sig
       fun-priority-queue.fun
 			red-black.sml
+			universal-type.sig
+			universal-type.sml
    in
       signature CRITICAL
       structure Critical
@@ -51,5 +53,8 @@ in
 			functor RedBlackTree
 			structure StringRedBlackTree
 			structure IntRedBlackTree
+
+			signature UNIVERSAL_TYPE
+			structure UniversalType
    end
 end

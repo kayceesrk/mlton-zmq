@@ -18,6 +18,7 @@ signature THREAD_ID =
       val hashTid    : thread_id -> word
 
       val tidToString : thread_id -> string
+      val tidToInt : thread_id -> int
    end
 
 signature THREAD_ID_EXTRA =

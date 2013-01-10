@@ -25,6 +25,7 @@ structure ThreadID : THREAD_ID_EXTRA =
 
       fun tidToString (TID id) =
          concat["[", StringCvt.padLeft #"0" 6 (Int.toString id), "]"]
+      fun tidToInt (TID id) = id
 
       fun exnHandler (_ : exn) = ()
       val defaultExnHandler = ref exnHandler

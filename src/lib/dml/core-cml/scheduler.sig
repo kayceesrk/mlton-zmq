@@ -24,6 +24,7 @@ signature SCHEDULER =
       val getThreadId : 'a thread -> thread_id
       val getCurThreadId : unit -> thread_id
       val tidMsg : unit -> string
+      val tidInt : unit -> int
 
       val ready : rdy_thread -> unit
       val next : unit -> rdy_thread
@@ -40,7 +41,7 @@ signature SCHEDULER =
       val new : (thread_id -> ('a -> unit)) -> 'a thread
 
       val prepend : 'a thread * ('b -> 'a) -> 'b thread
-      val unwrap : (rdy_thread -> rdy_thread) -> 
+      val unwrap : (rdy_thread -> rdy_thread) ->
                    (MLton.Thread.Runnable.t -> MLton.Thread.Runnable.t)
 
       val reset : bool -> unit

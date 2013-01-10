@@ -102,10 +102,8 @@ sig
   val sendWithPrefix : socket * 'a * Word8.word vector -> unit
   val sendWithPrefixAndFlag : socket * 'a * Word8.word vector * send_flag -> unit
 
-  datatype recv_flag = R_DONT_WAIT | R_NONE
-
-  val recv : socket -> 'a
-  val recvWithFlag : socket * recv_flag -> 'a
+  val recv    : socket -> 'a
+  val recvNB  : socket -> 'a option
 
   (* Poll *)
   val poll : {ins : socket list, outs : socket list,

@@ -387,6 +387,11 @@ struct
 
   fun recv (sock) = recvWithFlag (sock, R_NONE)
 
+  fun recvNB sock =
+    SOME (recvWithFlag (sock, R_DONT_WAIT))
+      handle exec as PosixError.SysErr (_, SOME e) => if e = PosixError.again then NONE
+                                              else raise exec
+
 
   (* Poll *)
   fun poll {ins : socket list, outs : socket list,

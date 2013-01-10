@@ -9,13 +9,25 @@
 
 signature DML =
 sig
-  type proxy
-  type 'a chan
+  type chan
+
+  (* ------------------------------------------------------*)
+  (* Server *)
+  (* ------------------------------------------------------*)
 
   (* never returns *)
   val startProxy : {frontend: string, backend: string} -> unit
-  val connect : {sink: string, source: string} -> proxy
-  val channel : proxy * string -> 'a chan
-  val send : 'a chan * 'a -> unit
-  val recv : 'a chan -> 'a
+
+  (* ------------------------------------------------------*)
+  (* Clients *)
+  (* ------------------------------------------------------*)
+
+  val connect : {sink: string, source: string, nodeId: int} -> unit
+  val runDML : (unit -> unit) * Time.time option -> OS.Process.status
+
+  val channel : string -> chan
+  val send : chan * Word8.word vector -> unit
+  val recv : chan -> Word8.word vector
+
+  (* ------------------------------------------------------*)
 end

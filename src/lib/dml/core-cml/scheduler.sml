@@ -66,6 +66,7 @@ structure Scheduler : SCHEDULER =
             end
       end
       fun tidMsg () = TID.tidToString (getCurThreadId ())
+      fun tidInt () = TID.tidToInt (getCurThreadId ())
       fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg)
       fun debug' msg = debug (fn () => msg)
 
