@@ -58,6 +58,7 @@ struct
   val pendingActions = ref (RS.empty)
   val nodeId = ref ~1
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
+  val exitDaemon = ref false
 
   (* -------------------------------------------------------------------- *)
   (* Helper Functions *)
@@ -200,21 +201,23 @@ struct
   (* -------------------------------------------------------------------- *)
 
   fun clientDaemon source =
-    case ZMQ.recvNB source of
-         NONE => (C.yield (); clientDaemon source)
-       | SOME (m as MSG {tid = ThreadId tidInt, cnt, ...}) =>
-           let
-             val _ = debug'' (fn () => msgToString m)
-             val t = RI.lookup (!blockedThreads) tidInt
-             val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
-             val _ =
-                (case cnt of
-                     S_ACK => S.doAtomic (fn () => S.ready (S.prepVal (t, emptyW8Vec)))
-                   | R_ACK m => S.doAtomic (fn () => S.ready (S.prepVal (t, m)))
-                   | _ => ())
-           in
-             clientDaemon source
-           end
+    if (!exitDaemon) then ()
+    else
+      case ZMQ.recvNB source of
+          NONE => (C.yield (); clientDaemon source)
+        | SOME (m as MSG {tid = ThreadId tidInt, cnt, ...}) =>
+            let
+              val _ = debug'' (fn () => msgToString m)
+              val t = RI.lookup (!blockedThreads) tidInt
+              val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
+              val _ =
+                  (case cnt of
+                      S_ACK => S.doAtomic (fn () => S.ready (S.prepVal (t, emptyW8Vec)))
+                    | R_ACK m => S.doAtomic (fn () => S.ready (S.prepVal (t, m)))
+                    | _ => ())
+            in
+              clientDaemon source
+            end
 
   fun connect {sink = sink_str, source = source_str, nodeId = nid} =
   let
@@ -266,15 +269,12 @@ struct
       in
         f ()
       end
+      val _ = RunCML.doit (body, to)
+      val PROXY {source, sink, ...} = !proxy
+      val _ = ZMQ.sockClose (valOf source)
+      val _ = ZMQ.sockClose (valOf sink)
     in
-      RunCML.doit (body, to) handle C.Exit =>
-        let
-          val PROXY {source, sink, ...} = !proxy
-          val _ = ZMQ.sockClose (valOf source)
-          val _ = ZMQ.sockClose (valOf sink)
-        in
-          OS.Process.success
-        end
+      OS.Process.success
     end
 
   fun channel s = CHANNEL (ChannelId s)
@@ -315,6 +315,10 @@ struct
   in
     MLton.deserialize serM
   end
+
+  val exitDaemon = fn () => exitDaemon := true
+
+  fun spawn f = ignore (C.spawn f)
   (* -------------------------------------------------------------------- *)
 end
 

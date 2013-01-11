@@ -42,13 +42,9 @@ structure Thread : THREAD =
              end)
          end
 
-      exception Exit
-
       fun doHandler (TID {exnHandler, ...}, exn) =
          (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
-          ; ((!exnHandler) exn) handle e => case e of
-                                                 Exit => raise Exit
-                                               | _ => ())
+          ; ((!exnHandler) exn) handle _ => ())
 
       fun spawnc f x =
          let

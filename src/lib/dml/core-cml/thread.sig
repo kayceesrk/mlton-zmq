@@ -12,7 +12,6 @@
 signature THREAD =
   sig
      include THREAD_ID
-     exception Exit
      val getTid : unit -> thread_id
 
      val spawnc : ('a -> unit) -> 'a -> thread_id

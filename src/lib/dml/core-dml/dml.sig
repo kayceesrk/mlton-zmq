@@ -26,8 +26,11 @@ sig
   val runDML : (unit -> unit) * Time.time option -> OS.Process.status
 
   val channel : string -> 'a chan
+  val spawn : (unit -> unit) -> unit
   val send : 'a chan * 'a -> unit
   val recv : 'a chan -> 'a
+
+  val exitDaemon : unit -> unit
 
   (* ------------------------------------------------------*)
 end

@@ -17,7 +17,7 @@ let
   val pongChan : int chan = channel "ponger"
 
   fun loop n =
-    if n = 0 then OS.Process.exit OS.Process.success
+    if n = 0 then exitDaemon ()
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
           send (pingChan, n);
           ignore (recv pongChan);
@@ -34,7 +34,7 @@ let
   val pongChan : int chan = channel "ponger"
 
   fun loop n =
-    if n = 0 then OS.Process.exit OS.Process.success
+    if n = 0 then exitDaemon ()
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
           ignore (recv pingChan);
           send (pongChan, n);
