@@ -9,7 +9,7 @@ send and receive functions are polymorphic, and are simply:
 	val send : socket * 'a -> unit
 	val recv : socket -> 'a
 
-Checkout MLton.ZMQ module @ src/basis-library/mlton/zmq.sig for more information.
+Check out MLton.ZMQ module @ src/basis-library/mlton/zmq.sig for more information.
 
 ## Dependencies
 ===============
