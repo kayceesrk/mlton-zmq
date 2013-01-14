@@ -17,7 +17,8 @@ structure RepTypes =
       (** thread IDs --- see thread-id.sml and threads.sml **)
       datatype thread_id = TID of {
             id : int,
-            exnHandler : (exn -> unit) ref
+            exnHandler : (exn -> unit) ref,
+            props: exn list ref
             }
 
       (** threads --- see scheduler.sml and threads.sml **)

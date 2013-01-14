@@ -16,7 +16,7 @@ structure Scheduler : SCHEDULER =
    struct
       structure Assert = LocalAssert(val assert = false)
       structure GlobalDebug = Debug
-      structure Debug = LocalDebug(val debug = false)
+      structure Debug = LocalDebug(val debug = true)
 
       open Critical
 

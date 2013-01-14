@@ -32,7 +32,8 @@ structure ThreadID : THREAD_ID_EXTRA =
 
       fun new' n =
          TID {id = n,
-              exnHandler = ref (!defaultExnHandler)}
+              exnHandler = ref (!defaultExnHandler),
+              props = ref []}
       local
          val tidCounter = ref 0
       in

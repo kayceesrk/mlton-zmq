@@ -10,7 +10,7 @@
 structure DmlCentralized : DML =
 struct
   structure Assert = LocalAssert(val assert = false)
-  structure Debug = LocalDebug(val debug = false)
+  structure Debug = LocalDebug(val debug = true)
 
   structure ZMQ = MLton.ZMQ
   structure RI = IntRedBlackDict
@@ -219,6 +219,8 @@ struct
               clientDaemon source
             end
 
+  val yield = C.yield
+
   fun connect {sink = sink_str, source = source_str, nodeId = nid} =
   let
     val context = ZMQ.ctxNew ()
@@ -319,7 +321,34 @@ struct
   val exitDaemon = fn () => exitDaemon := true
 
   fun spawn f = ignore (C.spawn f)
+
   (* -------------------------------------------------------------------- *)
+  (* Extra *)
+  (* -------------------------------------------------------------------- *)
+
+  type world = w8vec
+
+  fun save () =
+  let
+    val result = ref NONE
+    val _ = S.switch (fn t =>
+      let
+        val rt = S.prepVal (t, ())
+        val _ = result := SOME (MLton.serialize rt)
+      in
+        rt
+      end)
+  in
+    !result
+  end
+
+  fun restore w =
+  let
+    val rt = MLton.deserialize w
+  in
+    S.switch (fn _ => rt)
+  end
+
 end
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)
