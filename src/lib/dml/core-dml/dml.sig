@@ -34,10 +34,4 @@ sig
 
   val exitDaemon : unit -> unit
 
-  (* ------------------------------------------------------*)
-  (* Extra *)
-  (* ------------------------------------------------------*)
-  type world
-  val save    : unit -> world option
-  val restore : world -> 'a
 end

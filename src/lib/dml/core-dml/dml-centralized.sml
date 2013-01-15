@@ -322,33 +322,6 @@ struct
 
   fun spawn f = ignore (C.spawn f)
 
-  (* -------------------------------------------------------------------- *)
-  (* Extra *)
-  (* -------------------------------------------------------------------- *)
-
-  type world = w8vec
-
-  fun save () =
-  let
-    val result = ref NONE
-    val _ = S.switch (fn t =>
-      let
-        val rt = S.prepVal (t, ())
-        val _ = result := SOME (MLton.serialize rt)
-      in
-        rt
-      end)
-  in
-    !result
-  end
-
-  fun restore w =
-  let
-    val rt = MLton.deserialize w
-  in
-    S.switch (fn _ => rt)
-  end
-
 end
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)
