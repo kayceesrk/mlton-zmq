@@ -22,7 +22,7 @@ sig
   (* Clients *)
   (* ------------------------------------------------------*)
 
-  val connect : {sink: string, source: string, nodeId: int} -> unit
+  val connect : {sink: string, source: string, processId: int} -> unit
   val runDML : (unit -> unit) * Time.time option -> OS.Process.status
 
   val channel : string -> 'a chan

@@ -23,7 +23,7 @@ let
           ignore (recv pongChan);
           loop (n-1))
 
-  val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", nodeId = 1}
+  val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", processId = 1}
 in
   ignore (runDML (fn () => loop 100, NONE))
 end
@@ -40,7 +40,7 @@ let
           send (pongChan, n);
           loop (n-1))
 
-  val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", nodeId = 2}
+  val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", processId = 2}
 in
   ignore (runDML (fn () => loop 100, NONE))
 end

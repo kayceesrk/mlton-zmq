@@ -11,5 +11,5 @@ val args::_ = CommandLine.arguments ()
 val _ = if args = "proxy" then
           Dml.startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
         else
-          (Dml.connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", nodeId = 1};
+          (Dml.connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", processId = 1};
           print "Done\n")

@@ -27,7 +27,7 @@ struct
   type w8vec = Word8.word vector
 
   datatype thread_id  = ThreadId of int
-  datatype node_id    = NodeId of int
+  datatype process_id    = NodeId of int
   datatype channel_id = ChannelId of string
 
 
@@ -46,7 +46,7 @@ struct
 
 
   datatype msg = MSG of {cid : channel_id,
-                         nid : node_id,
+                         pid : process_id,
                          tid : thread_id,
                          cnt : content}
 
@@ -56,7 +56,7 @@ struct
 
   val blockedThreads = ref (RI.empty)
   val pendingActions = ref (RS.empty)
-  val nodeId = ref ~1
+  val processId = ref ~1
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
   val exitDaemon = ref false
 
@@ -79,7 +79,7 @@ struct
 
   fun msgToString (MSG {cid = ChannelId cstr,
                    tid = ThreadId tint,
-                   nid = NodeId nint,
+                   pid = NodeId nint,
                    cnt}) =
     concat ["MSG -- Channel: ", cstr, " Thread: ", Int.toString tint,
             " Node: ", Int.toString nint, " Request: ", contentToStr cnt]
@@ -101,7 +101,7 @@ struct
     val _ = ZMQ.sockBind (backend, be_str)
     val _ = ZMQ.sockSetSubscribe (frontend, Vector.tabulate (0, fn _ => 0wx0))
 
-    fun processMsg (msg as MSG {cid as ChannelId c, nid as NodeId n, tid, cnt}) =
+    fun processMsg (msg as MSG {cid as ChannelId c, pid as NodeId n, tid, cnt}) =
     let
       (* Create queue in the pending action hash map if it doesn't exist *)
       fun createQueues () =
@@ -122,9 +122,9 @@ struct
       case cnt of
            J_REQ (* Node want to join *) => (* reply with J_ACK *)
              let
-               val prefix = MLton.serialize nid
+               val prefix = MLton.serialize pid
              in
-               ZMQ.sendWithPrefix (backend, MSG {cid = cid, nid = nid, tid = tid, cnt = J_ACK}, prefix)
+               ZMQ.sendWithPrefix (backend, MSG {cid = cid, pid = pid, tid = tid, cnt = J_ACK}, prefix)
              end
          | S_REQ data =>
              (case RS.find (!pendingActions) c of
@@ -138,12 +138,12 @@ struct
                          val _ = IQ.remove recvQ
 
                          (* recv acknowledgement *)
-                         val recvAck = MSG {cid = #cid m', tid = #tid m', nid = #nid m', cnt = R_ACK data}
-                         val prefix = MLton.serialize (#nid m')
+                         val recvAck = MSG {cid = #cid m', tid = #tid m', pid = #pid m', cnt = R_ACK data}
+                         val prefix = MLton.serialize (#pid m')
                          val _ = ZMQ.sendWithPrefix (backend, recvAck, prefix)
 
                          (* send acknowledgement *)
-                         val sendAck = MSG {cid = cid, nid = nid, tid = tid, cnt = S_ACK}
+                         val sendAck = MSG {cid = cid, pid = pid, tid = tid, cnt = S_ACK}
                          val prefix = MLton.serialize n
                          val _ = ZMQ.sendWithPrefix (backend, sendAck, prefix)
                        in
@@ -161,15 +161,15 @@ struct
                          val _ = IQ.remove sendQ
 
                          (* send acknowledgement *)
-                         val sendAck = MSG {cid = #cid m', tid = #tid m', nid = #nid m', cnt = S_ACK}
-                         val prefix = MLton.serialize (#nid m')
+                         val sendAck = MSG {cid = #cid m', tid = #tid m', pid = #pid m', cnt = S_ACK}
+                         val prefix = MLton.serialize (#pid m')
                          val _ = ZMQ.sendWithPrefix (backend, sendAck, prefix)
 
                          (* recv acknowledgement *)
                          val data = case #cnt m' of
                              S_REQ data => data
                            | _ => raise Fail "DmlCentralized.processMessage.R_REQ.SOME: unexpected"
-                         val recvAck = MSG {cid = cid, nid = nid, tid = tid, cnt = R_ACK data}
+                         val recvAck = MSG {cid = cid, pid = pid, tid = tid, cnt = R_ACK data}
                          val prefix = MLton.serialize n
                          val _ = ZMQ.sendWithPrefix (backend, recvAck, prefix)
                        in
@@ -221,24 +221,24 @@ struct
 
   val yield = C.yield
 
-  fun connect {sink = sink_str, source = source_str, nodeId = nid} =
+  fun connect {sink = sink_str, source = source_str, processId = pid} =
   let
     val context = ZMQ.ctxNew ()
     val source = ZMQ.sockCreate (context, ZMQ.Sub)
     val sink = ZMQ.sockCreate (context, ZMQ.Pub)
     val _ = ZMQ.sockConnect (source, source_str)
     val _ = ZMQ.sockConnect (sink, sink_str)
-    val _ = nodeId := nid
+    val _ = processId := pid
 
     (* Set filter to receive only those messages addresed to me *)
-    val filter = MLton.serialize nid
+    val filter = MLton.serialize pid
     val _ = ZMQ.sockSetSubscribe (source, filter)
 
     fun join n =
     let
       val _ = debug' ("DmlCentralized.connect.join(1)")
       val n = if n=1000 then
-                (ZMQ.send (sink, MSG {cid = ChannelId "bogus", nid = NodeId (!nodeId),
+                (ZMQ.send (sink, MSG {cid = ChannelId "bogus", pid = NodeId (!processId),
                           tid = ThreadId ~1, cnt = J_REQ}); 0)
               else n+1
       val m : msg = case ZMQ.recvNB source of
@@ -290,7 +290,7 @@ struct
                 val tid = S.tidInt ()
                 val PROXY {sink, ...} = !proxy
                 val _ = debug' ("DmlCentralized.send(2)")
-                val _ = ZMQ.send (valOf sink, MSG {cid = c, nid = NodeId (!nodeId),
+                val _ = ZMQ.send (valOf sink, MSG {cid = c, pid = NodeId (!processId),
                                   tid = ThreadId tid, cnt = S_REQ m})
                 val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
                 val _ = debug' ("DmlCentralized.send(3)")
@@ -308,7 +308,7 @@ struct
         let
           val tid = S.tidInt ()
           val PROXY {sink, ...} = !proxy
-          val _ = ZMQ.send (valOf sink, {cid = c, nid = NodeId (!nodeId),
+          val _ = ZMQ.send (valOf sink, {cid = c, pid = NodeId (!processId),
                             tid = ThreadId tid, cnt = R_REQ})
           val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
         in

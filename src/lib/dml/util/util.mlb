@@ -57,4 +57,9 @@ in
 			signature UNIVERSAL_TYPE
 			structure UniversalType
    end
+	 local
+			$(SML_LIB)/mlton-lib/sources.mlb
+	 in
+      structure DirectedGraph
+	 end
 end
