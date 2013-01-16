@@ -13,5 +13,6 @@ structure CML : CML =
    struct
       open RepTypes
       structure Scheduler = Scheduler
+      structure ThreadID = ThreadID
       open Thread
    end

@@ -14,8 +14,9 @@ signature THREAD =
      include THREAD_ID
      val getTid : unit -> thread_id
 
-     val spawnc : ('a -> unit) -> 'a -> thread_id
+     val spawnc : thread_id -> ('a -> unit) -> 'a -> thread_id
      val spawn  : (unit -> unit) -> thread_id
+     val spawnWithTid : (unit -> unit) * thread_id -> thread_id
      val exit   : unit -> 'a
      val yield  : unit -> unit  (* mostly for benchmarking *)
 

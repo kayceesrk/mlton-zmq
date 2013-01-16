@@ -13,6 +13,7 @@
 
 signature CML =
   sig
+     structure ThreadID : THREAD_ID
      structure Scheduler : SCHEDULER
      include THREAD
   end

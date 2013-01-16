@@ -20,7 +20,12 @@ structure RepTypes =
             id : int,
             exnHandler : (exn -> unit) ref,
             props: exn list ref,
-            node: unit DirectedGraph.Node.t option ref
+            (* state for rollback *)
+            currentNode: unit DirectedGraph.Node.t option ref,
+            rootNode: unit DirectedGraph.Node.t option ref,
+            cont: (unit -> unit) ref,
+            revisionId: int ref,
+            actionNum: int ref
             }
 
       (** threads --- see scheduler.sml and threads.sml **)

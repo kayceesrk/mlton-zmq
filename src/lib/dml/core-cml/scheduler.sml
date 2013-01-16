@@ -67,6 +67,8 @@ structure Scheduler : SCHEDULER =
       end
       fun tidMsg () = TID.tidToString (getCurThreadId ())
       fun tidInt () = TID.tidToInt (getCurThreadId ())
+      fun tidRev () = TID.tidToRev (getCurThreadId ())
+      fun tidNextActionNum () = TID.tidNextActionNum (getCurThreadId ())
       fun tidNode () = TID.tidToNode (getCurThreadId ())
       fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg)
       fun debug' msg = debug (fn () => msg)
@@ -151,10 +153,20 @@ structure Scheduler : SCHEDULER =
             (atomicBegin (); atomicReadyAndSwitchToNext f)
       end
 
+      val newTid = TID.new
+
       fun new (f : thread_id -> ('a -> unit)) : 'a thread =
          let
             val () = Assert.assertAtomic' ("Scheduler.new", NONE)
             val tid = TID.new ()
+            val t = T.new (f tid)
+         in
+            THRD (tid, t)
+         end
+
+      fun newWithTid (f: thread_id -> ('a -> unit), tid) : 'a thread =
+         let
+            val () = Assert.assertAtomic' ("Scheduler.newWithTid", NONE)
             val t = T.new (f tid)
          in
             THRD (tid, t)

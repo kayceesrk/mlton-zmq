@@ -19,7 +19,9 @@ signature THREAD_ID =
 
       val tidToString : thread_id -> string
       val tidToInt : thread_id -> int
+      val tidToRev : thread_id -> int
       val tidToNode : thread_id -> unit DirectedGraph.Node.t option ref
+      val tidNextActionNum : thread_id -> int
    end
 
 signature THREAD_ID_EXTRA =

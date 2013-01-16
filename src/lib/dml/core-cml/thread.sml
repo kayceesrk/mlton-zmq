@@ -46,21 +46,29 @@ structure Thread : THREAD =
          (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
           ; ((!exnHandler) exn) handle _ => ())
 
-      fun spawnc f x =
+      fun spawnc tid f x =
          let
             val () = S.atomicBegin ()
             fun thread tid () =
                (ignore (f x) handle ex => doHandler (tid, ex)
                ; generalExit (SOME tid, false))
-            val t = S.new thread
-            val tid = S.getThreadId t
+            val t = S.newWithTid (thread, tid)
             val () = S.ready (S.prep t)
             val () = S.atomicEnd ()
             val () = debug (fn () => concat ["spawnc ", tidToString tid])  (* NonAtomic *)
          in
             tid
          end
-      fun spawn f = spawnc f ()
+
+      fun spawn f =
+        let
+          val tid = S.newTid ()
+        in
+          spawnc tid f ()
+        end
+
+     fun spawnWithTid (f, tid) =
+       spawnc tid f ()
 
       val getTid = S.getCurThreadId
 
