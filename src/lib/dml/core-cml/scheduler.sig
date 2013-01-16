@@ -22,6 +22,7 @@ sig
     val prepFn : 'a thread * (unit -> 'a) -> rdy_thread
 
     val getThreadId : 'a thread -> thread_id
+    val getReadyThreadId : rdy_thread -> thread_id
     val getCurThreadId : unit -> thread_id
     val tidMsg : unit -> string
     val tidInt : unit -> int

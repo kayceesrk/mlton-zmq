@@ -52,6 +52,7 @@ structure Scheduler : SCHEDULER =
          val curTid : thread_id ref = ref dummyTid
       in
          fun getThreadId (THRD (tid, _)) = tid
+         fun getReadyThreadId (RTHRD (tid, _)) = tid
          fun getCurThreadId () =
             let
                val tid = !curTid
