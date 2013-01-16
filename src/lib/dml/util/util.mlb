@@ -60,6 +60,8 @@ in
 	 local
 			$(SML_LIB)/mlton-lib/sources.mlb
 	 in
+	 		structure Property
+			structure PropertyList
       structure DirectedGraph
 	 end
 end

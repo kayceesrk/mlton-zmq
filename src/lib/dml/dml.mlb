@@ -9,6 +9,9 @@ in
 			cml.mlb
 			cmlib/cmlib.mlb
       util/util.mlb
+			core-dml/rep-types.sml
+			core-dml/stable-graph.sig
+			core-dml/stable-graph.sml
 			core-dml/dml.sig
 			core-dml/dml-centralized.sml
 			core-dml/dml.sml

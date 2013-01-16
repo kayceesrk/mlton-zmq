@@ -19,7 +19,8 @@ structure RepTypes =
       datatype thread_id = TID of {
             id : int,
             exnHandler : (exn -> unit) ref,
-            props: exn list ref
+            props: exn list ref,
+            node: unit DirectedGraph.Node.t option ref
             }
 
       (** threads --- see scheduler.sml and threads.sml **)

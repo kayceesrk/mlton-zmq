@@ -18,24 +18,13 @@ struct
   structure S = CML.Scheduler
   structure C = CML
   structure IQ = IQueue
+  open RepTypes
 
 
   (* -------------------------------------------------------------------- *)
   (* Datatype definitions *)
   (* -------------------------------------------------------------------- *)
 
-  type w8vec = Word8.word vector
-
-  datatype thread_id  = ThreadId of int
-  datatype process_id    = NodeId of int
-  datatype channel_id = ChannelId of string
-
-
-  datatype proxy = PROXY of {context : ZMQ.context option,
-                             sink: ZMQ.socket option,
-                             source: ZMQ.socket option}
-
-  datatype 'a chan = CHANNEL of channel_id
 
   datatype content = S_REQ of w8vec
                    | R_REQ
@@ -56,7 +45,6 @@ struct
 
   val blockedThreads = ref (RI.empty)
   val pendingActions = ref (RS.empty)
-  val processId = ref ~1
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
   val exitDaemon = ref false
 
@@ -79,7 +67,7 @@ struct
 
   fun msgToString (MSG {cid = ChannelId cstr,
                    tid = ThreadId tint,
-                   pid = NodeId nint,
+                   pid = ProcessId nint,
                    cnt}) =
     concat ["MSG -- Channel: ", cstr, " Thread: ", Int.toString tint,
             " Node: ", Int.toString nint, " Request: ", contentToStr cnt]
@@ -101,7 +89,7 @@ struct
     val _ = ZMQ.sockBind (backend, be_str)
     val _ = ZMQ.sockSetSubscribe (frontend, Vector.tabulate (0, fn _ => 0wx0))
 
-    fun processMsg (msg as MSG {cid as ChannelId c, pid as NodeId n, tid, cnt}) =
+    fun processMsg (msg as MSG {cid as ChannelId c, pid as ProcessId n, tid, cnt}) =
     let
       (* Create queue in the pending action hash map if it doesn't exist *)
       fun createQueues () =
@@ -238,7 +226,7 @@ struct
     let
       val _ = debug' ("DmlCentralized.connect.join(1)")
       val n = if n=1000 then
-                (ZMQ.send (sink, MSG {cid = ChannelId "bogus", pid = NodeId (!processId),
+                (ZMQ.send (sink, MSG {cid = ChannelId "bogus", pid = ProcessId (!processId),
                           tid = ThreadId ~1, cnt = J_REQ}); 0)
               else n+1
       val m : msg = case ZMQ.recvNB source of
@@ -290,7 +278,7 @@ struct
                 val tid = S.tidInt ()
                 val PROXY {sink, ...} = !proxy
                 val _ = debug' ("DmlCentralized.send(2)")
-                val _ = ZMQ.send (valOf sink, MSG {cid = c, pid = NodeId (!processId),
+                val _ = ZMQ.send (valOf sink, MSG {cid = c, pid = ProcessId (!processId),
                                   tid = ThreadId tid, cnt = S_REQ m})
                 val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
                 val _ = debug' ("DmlCentralized.send(3)")
@@ -308,7 +296,7 @@ struct
         let
           val tid = S.tidInt ()
           val PROXY {sink, ...} = !proxy
-          val _ = ZMQ.send (valOf sink, {cid = c, pid = NodeId (!processId),
+          val _ = ZMQ.send (valOf sink, {cid = c, pid = ProcessId (!processId),
                             tid = ThreadId tid, cnt = R_REQ})
           val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
         in

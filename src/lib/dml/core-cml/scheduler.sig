@@ -25,6 +25,7 @@ signature SCHEDULER =
       val getCurThreadId : unit -> thread_id
       val tidMsg : unit -> string
       val tidInt : unit -> int
+      val tidNode : unit -> unit DirectedGraph.Node.t option ref
 
       val ready : rdy_thread -> unit
       val next : unit -> rdy_thread

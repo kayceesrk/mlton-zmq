@@ -26,6 +26,7 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun tidToString (TID {id, ...}) =
          concat["[", StringCvt.padLeft #"0" 6 (Int.toString id), "]"]
       fun tidToInt (TID {id, ...}) = id
+      fun tidToNode (TID {node, ...}) = node
 
       fun exnHandler (_ : exn) = ()
       val defaultExnHandler = ref exnHandler
@@ -33,7 +34,8 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun new' n =
          TID {id = n,
               exnHandler = ref (!defaultExnHandler),
-              props = ref []}
+              props = ref [],
+              node = ref NONE}
       local
          val tidCounter = ref 0
       in
