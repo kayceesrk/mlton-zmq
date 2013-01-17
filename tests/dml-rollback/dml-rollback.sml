@@ -7,6 +7,8 @@
  * See the file MLton-LICENSE for details.
  *)
 
+val () : unit = "Development test. Does not work. Not relevant anymore."
+
 open Dml
 
 fun proxy () = startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}

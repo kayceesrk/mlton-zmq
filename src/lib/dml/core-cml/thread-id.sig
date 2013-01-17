@@ -21,7 +21,6 @@ sig
   val tidToInt : thread_id -> int
   val tidToRev : thread_id -> int
   val tidToNode : thread_id -> unit DirectedGraph.Node.t option ref
-  val tidToRoot : thread_id -> unit DirectedGraph.Node.t option ref
   val tidNextActionNum : thread_id -> int
 
   val tidSaveCont    : thread_id * (unit -> unit) -> unit

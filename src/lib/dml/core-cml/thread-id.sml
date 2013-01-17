@@ -28,7 +28,6 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun tidToInt (TID {id, ...}) = id
       fun tidToRev (TID {revisionId,...}) = !revisionId
       fun tidToNode (TID {currentNode, ...}) = currentNode
-      fun tidToRoot (TID {rootNode, ...}) = rootNode (* Is always a SG.begin node *)
       fun tidNextActionNum (TID {actionNum,...}) =
       let
         val res = !actionNum + 1
@@ -50,11 +49,10 @@ structure ThreadID : THREAD_ID_EXTRA =
             ()
           end)
 
-      fun tidRestoreCont (TID {cont, revisionId, currentNode, rootNode, ...}) =
+      fun tidRestoreCont (TID {cont, revisionId, currentNode, ...}) =
       let
         val _ = revisionId := !revisionId + 1
         val _ = currentNode := NONE
-        val _ = rootNode := NONE
       in
         (!cont) ()
       end
@@ -67,7 +65,6 @@ structure ThreadID : THREAD_ID_EXTRA =
               exnHandler = ref (!defaultExnHandler),
               props = ref [],
               currentNode = ref NONE,
-              rootNode = ref NONE,
               cont = ref (fn _ => ()),
               revisionId =  ref 0,
               actionNum = ref 0}

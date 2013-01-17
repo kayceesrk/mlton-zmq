@@ -32,6 +32,8 @@ struct
   fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
     concat [Int.toString pid, ":", Int.toString tid, ":", Int.toString rid, ":", Int.toString aid]
 
+  val dummyAid = ACTION_ID {pid = ProcessId ~1, tid = ThreadId ~1, rid = ~1, aid = ~1}
+
   fun newAid () =
   let
     val pid = !processId
@@ -43,26 +45,26 @@ struct
   end
 
 
-  datatype action_type = SEND_ACT of {cid: channel_id, matchAct: action_id option}
-                       | SEND_WAIT of {cid: channel_id}
-                       | RECV_ACT of {cid: channel_id, matchAct: action_id option}
-                       | RECV_WAIT of {cid: channel_id}
-                       | SPAWN of {childAct: action_id}
-                       | BEGIN
+  datatype action_type = SEND_WAIT of {cid: channel_id, matchAid: action_id option}
+                       | SEND_ACT of {cid: channel_id}
+                       | RECV_WAIT of {cid: channel_id, matchAid: action_id option}
+                       | RECV_ACT of {cid: channel_id}
+                       | SPAWN
+                       | BEGIN of {parentAid: action_id}
 
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
 
   fun actTypeToString at =
     case at of
-         SEND_ACT {cid = ChannelId cstr, matchAct = NONE} => concat ["SA (",cstr,",*)"]
-       | SEND_ACT {cid = ChannelId cstr, matchAct = SOME act} => concat ["SA (",cstr,",",aidToString act,")"]
-       | SEND_WAIT {cid = ChannelId cstr} => concat ["SW (", cstr, ")"]
-       | RECV_ACT {cid = ChannelId cstr, matchAct = NONE} => concat ["RA (",cstr,",*)"]
-       | RECV_ACT {cid = ChannelId cstr, matchAct = SOME act} => concat ["RA (",cstr,",",aidToString act,")"]
-       | RECV_WAIT {cid = ChannelId cstr} => concat ["RW (", cstr, ")"]
-       | SPAWN {childAct} => concat ["F (", aidToString childAct, ")"]
-       | BEGIN => "B"
+         SEND_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["SW (",cstr,",*)"]
+       | SEND_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["SW (",cstr,",",aidToString act,")"]
+       | SEND_ACT {cid = ChannelId cstr} => concat ["SA (", cstr, ")"]
+       | RECV_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["RW (",cstr,",*)"]
+       | RECV_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["RW (",cstr,",",aidToString act,")"]
+       | RECV_ACT {cid = ChannelId cstr} => concat ["RA (", cstr, ")"]
+       | BEGIN {parentAid} => concat ["B (", aidToString parentAid, ")"]
+       | SPAWN => "F"
 
   datatype action = ACTION of {aid: action_id, act: action_type}
 
@@ -100,23 +102,22 @@ struct
   fun addProgramOrderEdge newNode =
   let
     val currentNode = getCurrentNode ()
-    val _ = G.addEdge (depGraph, {from = currentNode, to = newNode})
+    val _ = G.addEdge (depGraph, {from = newNode, to = currentNode})
   in
     setCurrentNode (SOME newNode)
   end
 
-  (* Called by the first thread spawned by runDML *)
-  fun handleInit () : unit =
+  fun handleInit {parentAid : action_id} : unit =
   let
     val nodeRef = S.tidNode ()
     val _ = case !nodeRef of
                  SOME _ => raise Fail "StableGraph.handleInit: tid already has a node"
                | NONE => ()
     val beginNode = G.newNode (depGraph)
-    val act = ACTION {aid = newAid (), act = BEGIN}
+    val act = ACTION {aid = newAid (), act = BEGIN {parentAid = parentAid}}
     val _ = setNodeEnv (beginNode, act)
     val _ = nodeRef := (SOME beginNode)
-    val _ = (S.tidRoot ()) := (SOME beginNode)
+    val _ = S.saveCont (fn () => handleInit {parentAid = parentAid})
   in
     ()
   end
@@ -124,20 +125,14 @@ struct
   (* Must be called by spawning thread. Adds \po edge.
    * Returns: a new begin node.
    * *)
-  fun handleSpawn {newTid : CML.thread_id} : unit =
+  fun handleSpawn () =
   let
     val spawnNode = G.newNode (depGraph)
-    val tidInt = CML.tidToInt newTid
-    val childAct = ACTION_ID {aid = 0, tid = ThreadId tidInt, rid = 0, pid = ProcessId (!processId)}
-    val _ = setNodeEnv (spawnNode, ACTION {aid = newAid (), act = SPAWN {childAct = childAct}})
+    val spawnAid = newAid ()
+    val _ = setNodeEnv (spawnNode, ACTION {aid = spawnAid, act = SPAWN})
     val _ = addProgramOrderEdge (spawnNode)
-
-    val beginNode = G.newNode (depGraph)
-    val _ = setNodeEnv (beginNode, ACTION {aid = childAct, act = BEGIN})
-    val _ = (CML.tidToNode newTid) := (SOME beginNode)
-    val _ = (CML.tidToRoot newTid) := (SOME beginNode)
   in
-    ()
+    spawnAid
   end
 
   fun handleSend {cid: channel_id} =
@@ -145,17 +140,17 @@ struct
     (* act *)
     val actNode = G.newNode (depGraph)
     val actAid = newAid ()
-    val actAct = ACTION {aid = actAid, act = SEND_ACT {cid = cid, matchAct = NONE}}
+    val actAct = ACTION {aid = actAid, act = SEND_ACT {cid = cid}}
     val _ = setNodeEnv (actNode, actAct)
     val _ = addProgramOrderEdge actNode
     (* wait *)
     val waitNode = G.newNode (depGraph)
     val waitAid = newAid ()
-    val waitAct = ACTION {aid = waitAid, act = SEND_WAIT {cid = cid}}
+    val waitAct = ACTION {aid = waitAid, act = SEND_WAIT {cid = cid, matchAid = NONE}}
     val _ = setNodeEnv (waitNode, waitAct)
     val _ = addProgramOrderEdge waitNode
   in
-    {waitAid = waitAid, actNode = actNode}
+    {waitNode = waitNode, actAid = actAid}
   end
 
   fun handleRecv {cid: channel_id} =
@@ -163,25 +158,25 @@ struct
     (* act *)
     val actNode = G.newNode (depGraph)
     val actAid = newAid ()
-    val actAct = ACTION {aid = actAid, act = RECV_ACT {cid = cid, matchAct = NONE}}
+    val actAct = ACTION {aid = actAid, act = RECV_ACT {cid = cid}}
     val _ = setNodeEnv (actNode, actAct)
     val _ = addProgramOrderEdge actNode
     (* wait *)
     val waitNode = G.newNode (depGraph)
     val waitAid = newAid ()
-    val waitAct = ACTION {aid = waitAid, act = RECV_WAIT {cid = cid}}
+    val waitAct = ACTION {aid = waitAid, act = RECV_WAIT {cid = cid, matchAid = NONE}}
     val _ = setNodeEnv (waitNode, waitAct)
     val _ = addProgramOrderEdge waitNode
   in
-    {waitAid = waitAid, actNode = actNode}
+    {waitNode = waitNode, actAid = actAid}
   end
 
-  fun setMatchAct (node: unit N.t) (matchAct: action_id) =
+  fun setMatchAct (node: unit N.t) (matchAid: action_id) =
   let
     val ACTION {aid, act} = getNodeEnv node
     val newAct = case act of
-                      SEND_ACT {cid, matchAct = NONE} => SEND_ACT {cid = cid, matchAct = SOME matchAct}
-                    | RECV_ACT {cid, matchAct = NONE} => RECV_ACT {cid = cid, matchAct = SOME matchAct}
+                      SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
+                    | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
                     | _ => raise Fail "StableGraph.setMatchAct(2)"
   in
     setNodeEnv (node, ACTION {aid = aid, act = newAct})

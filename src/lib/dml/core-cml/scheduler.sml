@@ -71,7 +71,6 @@ structure Scheduler : SCHEDULER =
       fun tidRev () = TID.tidToRev (getCurThreadId ())
       fun tidNextActionNum () = TID.tidNextActionNum (getCurThreadId ())
       fun tidNode () = TID.tidToNode (getCurThreadId ())
-      fun tidRoot () = TID.tidToRoot (getCurThreadId ())
       fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg)
       fun debug' msg = debug (fn () => msg)
 
