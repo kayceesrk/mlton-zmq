@@ -40,5 +40,4 @@ sig
    * For testing purposes only. Should be removed in the release.
    * *)
   (* ------------------------------------------------------*)
-
 end

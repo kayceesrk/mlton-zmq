@@ -44,11 +44,16 @@ struct
   (* state *)
   (* -------------------------------------------------------------------- *)
 
-  val blockedThreads = ref (RI.empty)
-  val pendingActions = ref (RS.empty)
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
+
+  (* Client Only *)
+  val blockedThreads = ref (RI.empty)
+  val allThreads = ref (RI.empty)
   val exitDaemon = ref false
   val rollbackFlag = ref false
+
+  (* Broker Only *)
+  val pendingActions = ref (RS.empty)
 
   (* -------------------------------------------------------------------- *)
   (* Helper Functions *)
@@ -85,6 +90,20 @@ struct
     val rt = S.prep (S.prepend (t, prolog))
   in
     S.ready rt
+  end
+
+  fun addToAllThreads () =
+  let
+    val newAllThreads = RI.insert (!allThreads) (S.tidInt ()) (S.getCurThreadId ())
+  in
+    allThreads := newAllThreads
+  end
+
+  fun removeFromAllThreads () =
+  let
+    val newAllThreads = RI.remove (!allThreads) (S.tidInt ())
+  in
+    allThreads := newAllThreads
   end
 
   (* -------------------------------------------------------------------- *)
@@ -296,9 +315,12 @@ struct
         val PROXY {source, ...} = !proxy
         (* start the daemon *)
         val _ = C.spawn (fn () => clientDaemon (valOf source))
+        val _ = addToAllThreads ()
         val _ = handleInit {parentAid = dummyAid}
+        val _ = f ()
+        val _ = removeFromAllThreads ()
       in
-        f ()
+        ()
       end
       val _ = RunCML.doit (body, to)
       val PROXY {source, sink, ...} = !proxy
@@ -355,10 +377,18 @@ struct
 
   fun spawn f =
     let
-      val aid = handleSpawn ()
-      val prolog = fn () => handleInit {parentAid = aid}
+      val tid = S.newTid ()
+      val tidInt = C.tidToInt tid
+      val aid = handleSpawn {childTid = ThreadId tidInt}
+      fun prolog () =
+        let
+          val _ = addToAllThreads ()
+        in
+          handleInit {parentAid = aid}
+        end
+     val epilog = removeFromAllThreads
     in
-      ignore (C.spawn (f o prolog))
+      ignore (C.spawnWithTid (epilog o f o prolog, tid))
     end
 
 end

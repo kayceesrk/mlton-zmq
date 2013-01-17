@@ -20,7 +20,7 @@ sig
   val aidToString : action_id -> string
 
   val handleInit  : {parentAid: action_id} -> unit
-  val handleSpawn : unit -> action_id
+  val handleSpawn : {childTid : RepTypes.thread_id} -> action_id
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val setMatchAct : node -> action_id -> unit

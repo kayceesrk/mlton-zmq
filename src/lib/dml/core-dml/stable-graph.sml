@@ -49,7 +49,7 @@ struct
                        | SEND_ACT of {cid: channel_id}
                        | RECV_WAIT of {cid: channel_id, matchAid: action_id option}
                        | RECV_ACT of {cid: channel_id}
-                       | SPAWN
+                       | SPAWN of {childTid: thread_id}
                        | BEGIN of {parentAid: action_id}
 
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
@@ -64,7 +64,7 @@ struct
        | RECV_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["RW (",cstr,",",aidToString act,")"]
        | RECV_ACT {cid = ChannelId cstr} => concat ["RA (", cstr, ")"]
        | BEGIN {parentAid} => concat ["B (", aidToString parentAid, ")"]
-       | SPAWN => "F"
+       | SPAWN {childTid = ThreadId tid} => concat ["F(", Int.toString tid, ")"]
 
   datatype action = ACTION of {aid: action_id, act: action_type}
 
@@ -125,11 +125,11 @@ struct
   (* Must be called by spawning thread. Adds \po edge.
    * Returns: a new begin node.
    * *)
-  fun handleSpawn () =
+  fun handleSpawn {childTid} =
   let
     val spawnNode = G.newNode (depGraph)
     val spawnAid = newAid ()
-    val _ = setNodeEnv (spawnNode, ACTION {aid = spawnAid, act = SPAWN})
+    val _ = setNodeEnv (spawnNode, ACTION {aid = spawnAid, act = SPAWN {childTid = childTid}})
     val _ = addProgramOrderEdge (spawnNode)
   in
     spawnAid
