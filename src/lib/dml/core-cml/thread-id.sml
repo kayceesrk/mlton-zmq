@@ -28,12 +28,35 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun tidToInt (TID {id, ...}) = id
       fun tidToRev (TID {revisionId,...}) = !revisionId
       fun tidToNode (TID {currentNode, ...}) = currentNode
+      fun tidToRoot (TID {rootNode, ...}) = rootNode (* Is always a SG.begin node *)
       fun tidNextActionNum (TID {actionNum,...}) =
       let
         val res = !actionNum + 1
         val _ = actionNum := res
       in
         res
+      end
+
+      fun tidSaveCont (TID {cont, ...}, doBeforeRestore) =
+        MLton.Cont.callcc (fn k =>
+          let
+            val _ = cont := (fn () =>
+              let
+                val _ = doBeforeRestore ()
+              in
+                MLton.Cont.throw (k, ())
+              end)
+          in
+            ()
+          end)
+
+      fun tidRestoreCont (TID {cont, revisionId, currentNode, rootNode, ...}) =
+      let
+        val _ = revisionId := !revisionId + 1
+        val _ = currentNode := NONE
+        val _ = rootNode := NONE
+      in
+        (!cont) ()
       end
 
       fun exnHandler (_ : exn) = ()

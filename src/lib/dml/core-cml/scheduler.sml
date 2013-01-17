@@ -71,8 +71,12 @@ structure Scheduler : SCHEDULER =
       fun tidRev () = TID.tidToRev (getCurThreadId ())
       fun tidNextActionNum () = TID.tidNextActionNum (getCurThreadId ())
       fun tidNode () = TID.tidToNode (getCurThreadId ())
+      fun tidRoot () = TID.tidToRoot (getCurThreadId ())
       fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg)
       fun debug' msg = debug (fn () => msg)
+
+      fun saveCont f = TID.tidSaveCont (getCurThreadId (), f)
+      fun restoreCont () = TID.tidRestoreCont (getCurThreadId ())
 
       (* The thread ready queues:
        * rdyQ1 is the primary queue and rdyQ2 is the secondary queue.

@@ -194,26 +194,19 @@ struct
             let
               val tidInt = aidToTidInt aid
               val _ = debug'' (fn () => msgToString m)
-              val t = RI.lookup (!blockedThreads) tidInt
+              val {blockedThread = t, actNode} = RI.lookup (!blockedThreads) tidInt
               val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
-              fun setMatch matchAid =
-              let
-                val tid = S.getThreadId t
-                val node = valOf (!(C.tidToNode tid))
-              in
-                setMatchAct (node, matchAid)
-              end
               val _ =
                   (case cnt of
                       S_ACK {matchAid} =>
                         let
-                          val _ = setMatch matchAid
+                          val _ = setMatchAct actNode matchAid
                         in
                           S.doAtomic (fn () => S.ready (S.prepVal (t, emptyW8Vec)))
                         end
                     | R_ACK {matchAid, value = m} =>
                         let
-                          val _ = setMatch matchAid
+                          val _ = setMatchAct actNode matchAid
                         in
                           S.doAtomic (fn () => S.ready (S.prepVal (t, m)))
                         end
@@ -274,6 +267,10 @@ struct
         val PROXY {source, ...} = !proxy
         (* start the daemon *)
         val _ = C.spawn (fn () => clientDaemon (valOf source))
+
+        (* Saving the continuation at this point, with reinitialization
+         * (handleInit) performed just before restore *)
+        val _ = S.saveCont (handleInit)
       in
         f ()
       end
@@ -290,15 +287,15 @@ struct
   fun send (CHANNEL c, m) =
   let
     val _ = debug' ("DmlCentralized.send(1)")
-    val aid = handleSend {cid = c}
+    val {actNode, waitAid} = handleSend {cid = c}
     val m = MLton.serialize (m)
     val _ = S.switchToNext (fn t : w8vec S.thread =>
               let
                 val tid = S.tidInt ()
                 val PROXY {sink, ...} = !proxy
                 val _ = debug' ("DmlCentralized.send(2)")
-                val _ = ZMQ.send (valOf sink, MSG {cid = c, aid = aid, cnt = S_REQ m})
-                val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
+                val _ = ZMQ.send (valOf sink, MSG {cid = c, aid = waitAid, cnt = S_REQ m})
+                val _ = blockedThreads := (RI.insert (!blockedThreads) tid {blockedThread = t, actNode = actNode})
                 val _ = debug' ("DmlCentralized.send(3)")
               in
                 ()
@@ -309,14 +306,14 @@ struct
 
   fun recv (CHANNEL c) =
   let
-    val aid = handleRecv {cid = c}
+    val {actNode, waitAid} = handleRecv {cid = c}
     val serM =
       S.switchToNext (fn t : w8vec S.thread =>
         let
           val tid = S.tidInt ()
           val PROXY {sink, ...} = !proxy
-          val _ = ZMQ.send (valOf sink, {cid = c, aid = aid, cnt = R_REQ})
-          val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
+          val _ = ZMQ.send (valOf sink, {cid = c, aid = waitAid, cnt = R_REQ})
+          val _ = blockedThreads := (RI.insert (!blockedThreads) tid {blockedThread = t, actNode = actNode})
         in
           ()
         end)
@@ -330,8 +327,9 @@ struct
     let
       val tid = S.newTid ()
       val _ = handleSpawn {newTid = tid}
+      val prolog = fn () => S.saveCont (handleInit)
     in
-      ignore (C.spawnWithTid (f, tid))
+      ignore (C.spawnWithTid (prolog o f, tid))
     end
 
 end

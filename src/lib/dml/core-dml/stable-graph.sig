@@ -20,7 +20,7 @@ sig
 
   val handleInit  : unit -> unit
   val handleSpawn : {newTid : CML.thread_id} -> unit
-  val handleSend  : {cid : RepTypes.channel_id} -> action_id
-  val handleRecv  : {cid : RepTypes.channel_id} -> action_id
-  val setMatchAct : node * action_id -> unit
+  val handleSend  : {cid : RepTypes.channel_id} -> {waitAid: action_id, actNode: node}
+  val handleRecv  : {cid : RepTypes.channel_id} -> {waitAid: action_id, actNode: node}
+  val setMatchAct : node -> action_id -> unit
 end
