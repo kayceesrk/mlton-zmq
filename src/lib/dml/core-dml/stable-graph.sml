@@ -70,7 +70,12 @@ struct
 
   fun actionToString (ACTION {aid, act}) = concat ["[",aidToString aid,",",actTypeToString act,"]"]
 
-
+  fun getSuccActForDFS act =
+    case act of
+         SEND_WAIT {matchAid = SOME aid, ...} => SOME aid
+       | RECV_WAIT {matchAid = SOME aid, ...} => SOME aid
+       | BEGIN {parentAid} => SOME parentAid
+       | _ => NONE
 
   (********************************************************************
    * Node management
@@ -181,4 +186,78 @@ struct
   in
     setNodeEnv (node, ACTION {aid = aid, act = newAct})
   end
+
+
+  (********************************************************************
+   * DFS
+   *******************************************************************)
+
+  fun aidToNode (aid as ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, ...},
+                 tid2tid) =
+    if not (pid = !processId) then NONE
+    else
+      let
+        val tid = tid2tid tid
+        val nodeRef = CML.tidToNode tid
+        fun loop node =
+        let
+          val ACTION {aid = nodeAid, ...} = getNodeEnv node
+        in
+          if nodeAid = aid then SOME node
+          else (case N.successors node of
+                    [] => NONE
+                  | e::_ => loop (E.to e))
+        end
+      in
+        loop (valOf (!nodeRef))
+      end
+
+  fun dfs {startNode, foo, acc, tid2tid} =
+  let
+    val {get = nodeInfo: unit N.t -> bool ref, destroy, ...} =
+          Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
+      fun dfs'(n, acc) =
+        let
+          val hasBeenVisited = nodeInfo n
+        in
+          if !hasBeenVisited then acc
+          else
+            let
+              val _ = hasBeenVisited := true
+              val newAcc = foo (n, acc)
+              val adjs = N.successors n
+              val succs = map E.to adjs
+              val ACTION {act, ...} = getNodeEnv n
+              val succs = case getSuccActForDFS act of
+                              NONE => succs
+                            | SOME aid =>
+                                (case aidToNode (aid, tid2tid) of
+                                     NONE => succs
+                                   | SOME n' => n'::succs)
+              val newAcc = foldl dfs' succs newAcc
+            in
+              newAcc
+            end
+        end
+      val ret = dfs' (startNode, acc)
+      val _ = destroy ()
+  in
+    ret
+  end
+
+  (********************************************************************
+   * Rollback Helper + Stuff
+   *******************************************************************)
+
+  fun rhNodeToThreads {startNode: unit N.t,
+                       tid2tid : thread_id -> CML.thread_id option} :
+                      {localRestore : CML.thread_id list,
+                       localKill    : CML.thread_id list,
+                       remoteRollbacks: action_id list} =
+  let
+    val res = {localRestore = [], localKill = [], remoteRollbacks = []}
+  in
+    res
+  end
+
 end

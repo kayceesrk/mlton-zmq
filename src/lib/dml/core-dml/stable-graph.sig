@@ -24,4 +24,11 @@ sig
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val setMatchAct : node -> action_id -> unit
+
+
+  val rhNodeToThreads : {startNode  : node,
+                         tid2tid    : RepTypes.thread_id -> CML.thread_id option} ->
+                        {localRestore     : CML.thread_id list,
+                         localKill        : CML.thread_id list,
+                         remoteRollbacks  : action_id list}
 end
