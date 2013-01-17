@@ -48,6 +48,7 @@ struct
   val pendingActions = ref (RS.empty)
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
   val exitDaemon = ref false
+  val rollbackFlag = ref false
 
   (* -------------------------------------------------------------------- *)
   (* Helper Functions *)
@@ -61,8 +62,8 @@ struct
     case cnt of
          S_REQ _  => "S_REQ"
        | R_REQ    => "R_REQ"
-       | S_ACK _  => "S_ACK"
-       | R_ACK _  => "R_ACK"
+       | S_ACK {matchAid, ...}  => concat ["S_ACK[", aidToString matchAid,"]"]
+       | R_ACK {matchAid, ...}  => concat ["R_ACK[", aidToString matchAid,"]"]
        | J_REQ    => "J_REQ"
        | J_ACK    => "J_ACK"
 
@@ -71,6 +72,22 @@ struct
 
   val emptyW8Vec = Vector.tabulate (0, fn _ => 0wx0)
 
+  val rollback = fn () => rollbackFlag := true
+
+  val saveCont = fn () => S.saveCont (handleInit)
+
+  fun prepAndReadyForRollback (_,{blockedThread = t, ...}) =
+  let
+    fun prolog () =
+    let
+      val _ = S.restoreCont ()
+    in
+      emptyW8Vec
+    end
+    val rt = S.prep (S.prepend (t, prolog))
+  in
+    S.ready rt
+  end
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -189,7 +206,21 @@ struct
     if (!exitDaemon) then ()
     else
       case ZMQ.recvNB source of
-          NONE => (C.yield (); clientDaemon source)
+          NONE =>
+            let
+              val _ =
+                if !rollbackFlag then
+                  (let
+                     val _ = RI.app prepAndReadyForRollback (!blockedThreads)
+                     val _ = blockedThreads := RI.empty
+                   in
+                     rollbackFlag := false
+                   end)
+                else ()
+              val _ = C.yield ()
+            in
+              clientDaemon source
+            end
         | SOME (m as MSG {aid, cnt, ...}) =>
             let
               val tidInt = aidToTidInt aid
@@ -289,31 +320,35 @@ struct
     val _ = debug' ("DmlCentralized.send(1)")
     val {actNode, waitAid} = handleSend {cid = c}
     val m = MLton.serialize (m)
-    val _ = S.switchToNext (fn t : w8vec S.thread =>
-              let
-                val tid = S.tidInt ()
-                val PROXY {sink, ...} = !proxy
-                val _ = debug' ("DmlCentralized.send(2)")
-                val _ = ZMQ.send (valOf sink, MSG {cid = c, aid = waitAid, cnt = S_REQ m})
-                val _ = blockedThreads := (RI.insert (!blockedThreads) tid {blockedThread = t, actNode = actNode})
-                val _ = debug' ("DmlCentralized.send(3)")
-              in
-                ()
-              end)
+    val _ =
+      S.switchToNext (fn t : w8vec S.thread =>
+        let
+          val tid = S.tidInt ()
+          val PROXY {sink, ...} = !proxy
+          val _ = debug' ("DmlCentralized.send(2)")
+          val _ = ZMQ.send (valOf sink, MSG {cid = c, aid = waitAid, cnt = S_REQ m})
+          val _ = blockedThreads := (RI.insert (!blockedThreads) tid {blockedThread = t, actNode = actNode})
+          val _ = debug' ("DmlCentralized.send(3)")
+        in
+          ()
+        end)
   in
     ()
   end
 
   fun recv (CHANNEL c) =
   let
+    val _ = debug' ("DmlCentralized.recv(1)")
     val {actNode, waitAid} = handleRecv {cid = c}
     val serM =
       S.switchToNext (fn t : w8vec S.thread =>
         let
           val tid = S.tidInt ()
           val PROXY {sink, ...} = !proxy
+          val _ = debug' ("DmlCentralized.recv(2)")
           val _ = ZMQ.send (valOf sink, {cid = c, aid = waitAid, cnt = R_REQ})
           val _ = blockedThreads := (RI.insert (!blockedThreads) tid {blockedThread = t, actNode = actNode})
+          val _ = debug' ("DmlCentralized.recv(3)")
         in
           ()
         end)

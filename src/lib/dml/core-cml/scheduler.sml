@@ -208,7 +208,7 @@ structure Scheduler : SCHEDULER =
       fun preempt (thrd as RTHRD (_, _)) =
          let
             val () = Assert.assertAtomic' ("Scheduler.preempt", NONE)
-            val () = debug' "Scheduler.preempt" (* Atomic 1 *)
+            (* val () = debug' "Scheduler.preempt" (* Atomic 1 *) *)
             val () = Assert.assertAtomic' ("Scheduler.preempt", SOME 1)
             val () = (promote () ; enque1 thrd)
          in

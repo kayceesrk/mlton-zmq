@@ -34,4 +34,14 @@ sig
 
   val exitDaemon : unit -> unit
 
+  (* ------------------------------------------------------*)
+  (* Extra *)
+  (* -----
+   * For testing purposes only. Should be removed in the release.
+   * *)
+  (* ------------------------------------------------------*)
+
+  (* turns rollback flag on. Actual rollback when clientDaemon gets to run. *)
+  val rollback : unit -> unit
+  val saveCont : unit -> unit
 end

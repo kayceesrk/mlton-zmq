@@ -61,7 +61,7 @@ structure RunCML : RUN_CML =
       fun alrmHandler thrd =
          let
             val () = Assert.assertAtomic' ("RunCML.alrmHandler", NONE)
-            val () = debug' "alrmHandler" (* Atomic 1 *)
+            (* val () = debug' "alrmHandler" (* Atomic 1 *) *)
             val () = Assert.assertAtomic' ("RunCML.alrmHandler", SOME 1)
             val () = S.preempt thrd
          in
