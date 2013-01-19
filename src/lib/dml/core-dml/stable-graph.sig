@@ -25,10 +25,13 @@ sig
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val setMatchAct : node -> action_id -> unit
 
+  structure AISS : SET where type elem = action_id
 
-  val rhNodeToThreads : {startNode  : node,
-                         tid2tid    : RepTypes.thread_id -> CML.thread_id option} ->
-                        {localRestore     : CML.thread_id list,
-                         localKill        : CML.thread_id list,
-                         remoteRollbacks  : action_id list}
+  val rhNodeToThreads: {startNode  : node,
+                        tid2tid    : RepTypes.thread_id -> CML.thread_id option,
+                        visitedSet : AISS.set} ->
+                       {localRestore    : action_id list,
+                        localKill       : CML.thread_id list,
+                        remoteRollbacks : action_id list,
+                        visitedSet      : AISS.set}
 end

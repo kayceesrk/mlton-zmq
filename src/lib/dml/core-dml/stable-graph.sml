@@ -77,6 +77,63 @@ struct
        | BEGIN {parentAid} => SOME parentAid
        | _ => NONE
 
+  structure ActionIdOrdered
+    :> ORDERED where type t = action_id
+  = struct
+    type t = action_id
+
+    fun eq (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
+            ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
+            pid1 = pid2 andalso tid1 = tid2 andalso rid1 = rid2 andalso aid1 = aid2
+
+    fun compare (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
+                 ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
+      (case Int.compare (pid1, pid2) of
+           EQUAL => (case Int.compare (tid1, tid2) of
+                          EQUAL => (case Int.compare (rid1, rid2) of
+                                         EQUAL => Int.compare (aid2, aid2)
+                                       | lg => lg)
+                        | lg => lg)
+         | lg => lg)
+  end
+
+  structure ActionIdSplaySet = SplaySet (structure Elem = ActionIdOrdered)
+  structure AISS = ActionIdSplaySet
+
+  structure ActionIdSplayDict = SplayDict (structure Key = ActionIdOrdered)
+  structure AISD = ActionIdSplayDict
+
+  (********************************************************************
+   * Global tid
+   *******************************************************************)
+
+   datatype global_tid = GLOBAL_TID of {pid: process_id, tid: thread_id}
+
+   fun aidToGID (ACTION_ID {pid, tid, ...}) = GLOBAL_TID {pid = pid, tid = tid}
+   fun tidToGID tid = GLOBAL_TID {pid = ProcessId (!processId), tid = tid}
+
+   structure GIDOrdered
+     :> ORDERED where type t = global_tid
+   = struct
+     type t = global_tid
+
+     fun eq (GLOBAL_TID {pid = ProcessId pid1, tid = ThreadId tid1},
+             GLOBAL_TID {pid = ProcessId pid2, tid = ThreadId tid2}) =
+       pid1 = pid2 andalso tid1 = tid2
+
+     fun compare (GLOBAL_TID {pid = ProcessId pid1, tid = ThreadId tid1},
+                  GLOBAL_TID {pid = ProcessId pid2, tid = ThreadId tid2}) =
+       (case Int.compare (pid1, pid2) of
+             EQUAL => Int.compare (tid1, tid2)
+           | lq => lq)
+   end
+
+   structure GIDSplaySet = SplaySet (structure Elem = GIDOrdered)
+   structure GISS = GIDSplaySet
+
+  structure GlobalIdSplayDict = SplayDict (structure Key = GIDOrdered)
+  structure GISD = GlobalIdSplayDict
+
   (********************************************************************
    * Node management
    *******************************************************************)
@@ -192,55 +249,57 @@ struct
    * DFS
    *******************************************************************)
 
-  fun aidToNode (aid as ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, ...},
+  fun aidToNode (aid as ACTION_ID {pid = ProcessId pid, tid, ...},
                  tid2tid) =
     if not (pid = !processId) then NONE
     else
-      let
-        val tid = tid2tid tid
-        val nodeRef = CML.tidToNode tid
-        fun loop node =
-        let
-          val ACTION {aid = nodeAid, ...} = getNodeEnv node
-        in
-          if nodeAid = aid then SOME node
-          else (case N.successors node of
-                    [] => NONE
-                  | e::_ => loop (E.to e))
-        end
-      in
-        loop (valOf (!nodeRef))
-      end
+      case tid2tid tid of
+           NONE => NONE
+         | SOME tid =>
+              let
+                val nodeRef = CML.tidToNode tid
+                fun loop node =
+                let
+                  val ACTION {aid = nodeAid, ...} = getNodeEnv node
+                in
+                  if nodeAid = aid then SOME node
+                  else (case N.successors node of
+                            [] => NONE
+                          | e::_ => loop (E.to e))
+                end
+              in
+                loop (valOf (!nodeRef))
+              end
 
-  fun dfs {startNode, foo, acc, tid2tid} =
+  (* tid2tid : Converts from Dml's RepTypes.thread_id to CML.thread_id
+   * hasBeenVisited : returns true if the node has been seen before, else
+   * returns false and sets the node to be visited such that subsequent
+   * queries with the same node return true. *)
+  fun dfs {startNode : unit N.t,
+           foo : unit N.t * 'a -> 'a,
+           acc : 'a,
+           tid2tid,
+           hasBeenVisited : unit N.t -> bool} =
   let
-    val {get = nodeInfo: unit N.t -> bool ref, destroy, ...} =
-          Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
       fun dfs'(n, acc) =
-        let
-          val hasBeenVisited = nodeInfo n
-        in
-          if !hasBeenVisited then acc
-          else
-            let
-              val _ = hasBeenVisited := true
-              val newAcc = foo (n, acc)
-              val adjs = N.successors n
-              val succs = map E.to adjs
-              val ACTION {act, ...} = getNodeEnv n
-              val succs = case getSuccActForDFS act of
-                              NONE => succs
-                            | SOME aid =>
-                                (case aidToNode (aid, tid2tid) of
-                                     NONE => succs
-                                   | SOME n' => n'::succs)
-              val newAcc = foldl dfs' succs newAcc
-            in
-              newAcc
-            end
-        end
+        if (hasBeenVisited n) then acc
+        else
+          let
+            val newAcc = foo (n, acc)
+            val adjs = N.successors n
+            val succs = map E.to adjs
+            val ACTION {act, ...} = getNodeEnv n
+            val succs = case getSuccActForDFS act of
+                            NONE => succs
+                          | SOME aid =>
+                              (case aidToNode (aid, tid2tid) of
+                                    NONE => succs
+                                  | SOME n' => n'::succs)
+            val newAcc = ListMLton.fold (succs, newAcc, dfs')
+          in
+            newAcc
+          end
       val ret = dfs' (startNode, acc)
-      val _ = destroy ()
   in
     ret
   end
@@ -249,15 +308,78 @@ struct
    * Rollback Helper + Stuff
    *******************************************************************)
 
-  fun rhNodeToThreads {startNode: unit N.t,
-                       tid2tid : thread_id -> CML.thread_id option} :
-                      {localRestore : CML.thread_id list,
-                       localKill    : CML.thread_id list,
-                       remoteRollbacks: action_id list} =
+  structure ISS = IntSplaySet
+
+  fun rhNodeToThreads {startNode  : unit N.t,
+                       tid2tid    : thread_id -> CML.thread_id option,
+                       visitedSet : AISS.set} :
+                      {localRestore    : action_id list,
+                       localKill       : CML.thread_id list,
+                       remoteRollbacks : action_id list,
+                       visitedSet      : AISS.set} =
   let
-    val res = {localRestore = [], localKill = [], remoteRollbacks = []}
+    val visitedSet = ref visitedSet
+    val rbDict  = GISD.empty
+    val killSet = ISS.empty
+    val myPID = !processId
+
+    fun hasBeenVisited node =
+    let
+      val ACTION {aid, ...} = getNodeEnv node
+    in
+      if AISS.member (!visitedSet) aid then true
+      else
+        (visitedSet := AISS.insert (!visitedSet) aid;
+         false)
+    end
+
+    fun foo (node, {rbDict, killSet}) =
+    let
+      val ACTION {act, ...} = getNodeEnv node
+
+      fun rbDictHandler newAid =
+      let
+        val gid = aidToGID newAid
+      in
+        (case GISD.find rbDict gid of
+             NONE => GISD.insert rbDict gid newAid
+           | SOME oldAid => (case ActionIdOrdered.compare (oldAid, newAid) of
+                                 LESS => GISD.insert rbDict gid newAid
+                               | _ => rbDict))
+      end
+    in
+      case act of
+           SEND_WAIT {matchAid = SOME newAid, ...} => {rbDict = rbDictHandler newAid, killSet = killSet}
+         | RECV_WAIT {matchAid = SOME newAid, ...} => {rbDict = rbDictHandler newAid, killSet = killSet}
+         | SPAWN {childTid = ThreadId tid} => {rbDict = rbDict, killSet = ISS.insert killSet tid}
+         | _ => {rbDict = rbDict, killSet = killSet}
+    end
+
+    val {rbDict = rbDict, killSet = killSet} =
+      dfs {startNode = startNode, foo = foo, acc = {rbDict = rbDict, killSet = killSet},
+           tid2tid = tid2tid, hasBeenVisited = hasBeenVisited}
+
+    val rbDict = ISS.foldl (fn (tid, newRBDict) =>
+                              if GISD.member newRBDict (tidToGID (ThreadId tid)) then
+                                GISD.remove newRBDict (tidToGID (ThreadId tid))
+                              else newRBDict) rbDict killSet
+
+    (* At this point, rbDict will contain both local as well as remote action
+    * ids. Next step is to split it into local and remote values. Note that
+    * killSet will only contain local thread ids since we do not have a remote
+    * spawn primitive *)
+
+    val localKill = ListMLton.fold (ISS.toList killSet, [], fn (e, acc) => ((valOf o tid2tid o ThreadId) e)::acc)
+    val (_,rbList) = ListMLton.unzip (GISD.toList rbDict)
+    val (localRestore, remoteRollbacks) =
+      ListMLton.fold (rbList, ([], []), fn (aid as ACTION_ID {pid = ProcessId pid, ...}, (l,r)) =>
+                                          if pid = myPID then (aid::l, r)
+                                          else (l, aid::r))
   in
-    res
+    {localRestore = localRestore,
+     remoteRollbacks = remoteRollbacks,
+     localKill = localKill,
+     visitedSet = !visitedSet}
   end
 
 end
