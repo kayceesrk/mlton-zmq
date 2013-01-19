@@ -13,11 +13,13 @@ struct
   structure Debug = LocalDebug(val debug = true)
 
   structure ZMQ = MLton.ZMQ
-  structure RI = IntRedBlackDict
-  structure RS = StringRedBlackDict
-  structure S = CML.Scheduler
-  structure C = CML
-  structure IQ = IQueue
+  structure RI  = IntRedBlackDict
+  structure RS  = StringRedBlackDict
+  structure ISD = IntSplayDict
+  structure S   = CML.Scheduler
+  structure C   = CML
+  structure IQ  = IQueue
+  structure CR  = Critical
 
   open RepTypes
   open StableGraph
@@ -34,6 +36,7 @@ struct
                    | R_ACK of {matchAid: action_id, value: w8vec} (* Acknowledgement includes the matching action id *)
                    | J_REQ
                    | J_ACK
+                   | RB_REQ of {visitedSet: AISS.set, aidList: action_id list}
 
 
   datatype msg = MSG of {cid : channel_id,
@@ -71,6 +74,7 @@ struct
        | R_ACK {matchAid, ...}  => concat ["R_ACK[", aidToString matchAid,"]"]
        | J_REQ    => "J_REQ"
        | J_ACK    => "J_ACK"
+       | RB_REQ {visitedSet, actList} => concat ["RB_REQ(", Int.toString (AISS.size visitedSet), ",", Int.toString (length actList), ")"]
 
   fun msgToString (MSG {cid = ChannelId cstr, aid, cnt}) =
     concat ["MSG -- ", aidToString aid, " Channel: ", cstr," Request: ", contentToStr cnt]
@@ -105,6 +109,18 @@ struct
   in
     allThreads := newAllThreads
   end
+
+  fun tid2tid (ThreadId tid) = RI.find (!allThreads) tid
+
+  fun partitionRollbackList l =
+    ListMLton.fold (l, ISD.empty,
+      fn (aid as ACTION_ID {pid as ProcessId pidInt, tid, rid, aid}, dict) =>
+        case ISD.find dict pidInt of
+             NONE => ISD.insert dict pidInt [aid]
+           | SOME l' => ISD.insert dict pidInt (aid::l'))
+
+  fun dummyAid () = ACTION_ID {pid = ProcessId (!processId), tid = ThreadId ~1,
+                               aid = ~1, rid = ~1}
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -284,8 +300,7 @@ struct
       val _ = debug' ("DmlCentralized.connect.join(1)")
       val n = if n=1000 then
                 (ZMQ.send (sink, MSG {cid = ChannelId "bogus", cnt = J_REQ,
-                                      aid = ACTION_ID {pid = ProcessId (!processId), tid = ThreadId ~1,
-                                                       aid = ~1, rid = ~1}});
+                                      aid = dummyAid ()});
                  0)
               else n+1
       val m : msg = case ZMQ.recvNB source of
@@ -316,7 +331,7 @@ struct
         (* start the daemon *)
         val _ = C.spawn (fn () => clientDaemon (valOf source))
         val _ = addToAllThreads ()
-        val _ = handleInit {parentAid = dummyAid}
+        val _ = handleInit {parentAid = dummyAid ()}
         val _ = f ()
         val _ = removeFromAllThreads ()
       in
@@ -390,6 +405,22 @@ struct
     in
       ignore (C.spawnWithTid (epilog o f o prolog, tid))
     end
+
+  fun rollback () =
+  let
+    val _ = CR.atomicBegin ()
+    val startNode = valOf (!S.tidNode ())
+    val {localRestore, localKill, remoteRollbacks, visitedSet} =
+      rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = AISS.empty}
+    val remoteRBList = ISD.toList (partitionRollbackList remoteRollbacks)
+    val _ = ListMLton.map (remoteRBList, fn (pidInt, aidList) =>
+                ZMQ.sendWithPrefix
+                (valOf sink, MSG {cid = ChannelId "bogus", aid = dummyAid (),
+                                  cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
+                 MLton.serialize pidInt))
+  in
+    CR.atomicEnd ()
+  end
 
 end
 

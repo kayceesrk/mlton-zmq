@@ -8,13 +8,16 @@
 
 signature STABLE_GRAPH =
 sig
+
+  datatype global_id = GLOBAL_ID of {pid: RepTypes.process_id,
+                                     tid: RepTypes.thread_id}
   datatype action_id = ACTION_ID of {pid: RepTypes.process_id,
                                      tid: RepTypes.thread_id,
                                      rid: int,
                                      aid: int}
   type node = unit DirectedGraph.Node.t
 
-  val dummyAid    : action_id
+  val dummyAid    : unit -> action_id
   val aidToPidInt : action_id -> int
   val aidToTidInt : action_id -> int
   val aidToString : action_id -> string
@@ -26,6 +29,7 @@ sig
   val setMatchAct : node -> action_id -> unit
 
   structure AISS : SET where type elem = action_id
+  structure GISD : DICT where type elem = global_id
 
   val rhNodeToThreads: {startNode  : node,
                         tid2tid    : RepTypes.thread_id -> CML.thread_id option,
