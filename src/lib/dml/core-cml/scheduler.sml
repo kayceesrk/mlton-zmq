@@ -214,5 +214,24 @@ structure Scheduler : SCHEDULER =
             ()
          end
 
+      fun modify f =
+      let
+        fun processQ q =
+        let
+          fun phase1 acc =
+            case Q.deque q of
+                 NONE => acc
+               | SOME rt => phase1 ((f rt)::acc)
+          val phase1Res = rev (phase1 [])
+          val _ = app (fn rt => Q.enque (q, rt)) phase1Res
+        in
+          ()
+        end
+        val _ = processQ rdyQ1
+        val _ = processQ rdyQ2
+      in
+        ()
+      end
+
       val _ = reset false
    end

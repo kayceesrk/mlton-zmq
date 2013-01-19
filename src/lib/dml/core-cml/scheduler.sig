@@ -55,4 +55,6 @@ sig
 
   val reset : bool -> unit
   val preempt : rdy_thread -> unit
+
+  val modify: (rdy_thread -> rdy_thread) -> unit
 end

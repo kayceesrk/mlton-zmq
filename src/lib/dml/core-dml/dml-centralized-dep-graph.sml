@@ -43,6 +43,8 @@ struct
                          aid : action_id,
                          cnt : content}
 
+  exception Kill
+
   (* -------------------------------------------------------------------- *)
   (* state *)
   (* -------------------------------------------------------------------- *)
@@ -74,7 +76,7 @@ struct
        | R_ACK {matchAid, ...}  => concat ["R_ACK[", aidToString matchAid,"]"]
        | J_REQ    => "J_REQ"
        | J_ACK    => "J_ACK"
-       | RB_REQ {visitedSet, actList} => concat ["RB_REQ(", Int.toString (AISS.size visitedSet), ",", Int.toString (length actList), ")"]
+       | RB_REQ {visitedSet, aidList} => concat ["RB_REQ(", Int.toString (AISS.size visitedSet), ",", Int.toString (length aidList), ")"]
 
   fun msgToString (MSG {cid = ChannelId cstr, aid, cnt}) =
     concat ["MSG -- ", aidToString aid, " Channel: ", cstr," Request: ", contentToStr cnt]
@@ -114,13 +116,10 @@ struct
 
   fun partitionRollbackList l =
     ListMLton.fold (l, ISD.empty,
-      fn (aid as ACTION_ID {pid as ProcessId pidInt, tid, rid, aid}, dict) =>
+      fn (aid as ACTION_ID {pid = ProcessId pidInt, ...}, dict) =>
         case ISD.find dict pidInt of
              NONE => ISD.insert dict pidInt [aid]
            | SOME l' => ISD.insert dict pidInt (aid::l'))
-
-  fun dummyAid () = ACTION_ID {pid = ProcessId (!processId), tid = ThreadId ~1,
-                               aid = ~1, rid = ~1}
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -332,8 +331,11 @@ struct
         val _ = C.spawn (fn () => clientDaemon (valOf source))
         val _ = addToAllThreads ()
         val _ = handleInit {parentAid = dummyAid ()}
-        val _ = f ()
-        val _ = removeFromAllThreads ()
+        fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();
+                                                               case e of
+                                                                    Kill => ()
+                                                                  | _ => raise e)
+        val _ = safeBody ()
       in
         ()
       end
@@ -401,23 +403,33 @@ struct
         in
           handleInit {parentAid = aid}
         end
-     val epilog = removeFromAllThreads
+      fun safeBody () = (removeFromAllThreads(f(prolog()))) handle e => (removeFromAllThreads ();
+                                                                     case e of
+                                                                          Kill => ()
+                                                                        | _ => raise e)
     in
-      ignore (C.spawnWithTid (epilog o f o prolog, tid))
+      ignore (C.spawnWithTid (safeBody, tid))
     end
 
   fun rollback () =
   let
     val _ = CR.atomicBegin ()
-    val startNode = valOf (!S.tidNode ())
+    val startNode = valOf (!(S.tidNode ()))
+    val PROXY {sink, ...} = !proxy
+
+    (* dfs *)
     val {localRestore, localKill, remoteRollbacks, visitedSet} =
       rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = AISS.empty}
+
+    (* Process remote rollbacks first *)
     val remoteRBList = ISD.toList (partitionRollbackList remoteRollbacks)
     val _ = ListMLton.map (remoteRBList, fn (pidInt, aidList) =>
                 ZMQ.sendWithPrefix
                 (valOf sink, MSG {cid = ChannelId "bogus", aid = dummyAid (),
                                   cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
                  MLton.serialize pidInt))
+
+    (* process local rollbacks *)
   in
     CR.atomicEnd ()
   end

@@ -310,11 +310,23 @@ struct
 
   structure ISS = IntSplaySet
 
-  fun rhNodeToThreads {startNode  : unit N.t,
-                       tid2tid    : thread_id -> CML.thread_id option,
-                       visitedSet : AISS.set} :
-                      {localRestore    : action_id list,
-                       localKill       : CML.thread_id list,
+  structure CMLTIDOrdered
+    :> ORDERED where type t = CML.thread_id
+  = struct
+      type t = CML.thread_id
+
+      val eq = CML.sameTid
+      val compare = CML.compareTid
+    end
+
+  structure CMLTIDSplaySet = SplaySet (structure Elem = CMLTIDOrdered)
+  structure CTSS = CMLTIDSplaySet
+
+  fun rhNodeToThreads {startNode       : unit N.t,
+                       tid2tid         : thread_id -> CML.thread_id option,
+                       visitedSet      : AISS.set} :
+                      {localRestore    : AISS.set,
+                       localKill       : CTSS.set,
                        remoteRollbacks : action_id list,
                        visitedSet      : AISS.set} =
   let
@@ -369,12 +381,14 @@ struct
     * killSet will only contain local thread ids since we do not have a remote
     * spawn primitive *)
 
-    val localKill = ListMLton.fold (ISS.toList killSet, [], fn (e, acc) => ((valOf o tid2tid o ThreadId) e)::acc)
+    val localKill = ISS.foldl (fn (e, acc) => CTSS.insert acc ((valOf o tid2tid o ThreadId) e)) CTSS.empty killSet
+
     val (_,rbList) = ListMLton.unzip (GISD.toList rbDict)
     val (localRestore, remoteRollbacks) =
       ListMLton.fold (rbList, ([], []), fn (aid as ACTION_ID {pid = ProcessId pid, ...}, (l,r)) =>
                                           if pid = myPID then (aid::l, r)
                                           else (l, aid::r))
+    val localRestore = ListMLton.fold (localRestore, AISS.empty, fn (aid, set) => AISS.insert set aid)
   in
     {localRestore = localRestore,
      remoteRollbacks = remoteRollbacks,

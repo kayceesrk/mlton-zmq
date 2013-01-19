@@ -9,8 +9,6 @@
 signature STABLE_GRAPH =
 sig
 
-  datatype global_id = GLOBAL_ID of {pid: RepTypes.process_id,
-                                     tid: RepTypes.thread_id}
   datatype action_id = ACTION_ID of {pid: RepTypes.process_id,
                                      tid: RepTypes.thread_id,
                                      rid: int,
@@ -28,14 +26,14 @@ sig
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val setMatchAct : node -> action_id -> unit
 
-  structure AISS : SET where type elem = action_id
-  structure GISD : DICT where type elem = global_id
+  structure AISS : SET  where type elem = action_id
+  structure CTSS : SET  where type elem = CML.thread_id
 
   val rhNodeToThreads: {startNode  : node,
                         tid2tid    : RepTypes.thread_id -> CML.thread_id option,
                         visitedSet : AISS.set} ->
-                       {localRestore    : action_id list,
-                        localKill       : CML.thread_id list,
+                       {localRestore    : AISS.set,
+                        localKill       : CTSS.set,
                         remoteRollbacks : action_id list,
                         visitedSet      : AISS.set}
 end
