@@ -14,8 +14,8 @@ sig
   include CRITICAL
 
   type thread_id = ThreadID.thread_id
-  type 'a thread = 'a RepTypes.thread
-  type rdy_thread = RepTypes.rdy_thread
+  datatype thread = datatype RepTypes.thread
+  datatype rdy_thread = datatype RepTypes.rdy_thread
 
   val prep : unit thread -> rdy_thread
   val prepVal : 'a thread * 'a -> rdy_thread

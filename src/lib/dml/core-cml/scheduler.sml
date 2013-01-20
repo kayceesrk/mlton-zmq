@@ -216,6 +216,7 @@ structure Scheduler : SCHEDULER =
 
       fun modify f =
       let
+        val _ = Assert.assertAtomic' ("Scheduler.modify", NONE)
         fun processQ q =
         let
           fun phase1 acc =

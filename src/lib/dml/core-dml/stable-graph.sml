@@ -154,6 +154,12 @@ struct
          NONE => raise Fail "StableGraph.getCurrentAct"
        | SOME n => n
 
+  fun getAidFromTid tid =
+    case !(CML.tidToNode tid) of
+         NONE => raise Fail "StableGraph.getAidFromTid"
+       | SOME n => (case getNodeEnv n of ACTION {aid, ...} => aid)
+
+
   fun setCurrentNode node =
   let
     val nodeRef = S.tidNode ()

@@ -19,6 +19,7 @@ sig
   val aidToPidInt : action_id -> int
   val aidToTidInt : action_id -> int
   val aidToString : action_id -> string
+  val getAidFromTid : CML.thread_id -> action_id
 
   val handleInit  : {parentAid: action_id} -> unit
   val handleSpawn : {childTid : RepTypes.thread_id} -> action_id

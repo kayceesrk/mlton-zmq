@@ -45,6 +45,21 @@ struct
 
   exception Kill
 
+  structure PTROrdered :> ORDERED
+    where type t = action_id =
+  struct
+    type t = action_id
+    fun eq (i1, i2) = MLton.equal (i1, i2)
+    fun compare (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, ...},
+                  ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, ...}) =
+      (case Int.compare (pid1, pid2) of
+            EQUAL => (case Int.compare (tid1, tid2) of
+                          EQUAL => Int.compare (rid1, rid2)
+                        | lg => lg)
+          | lg => lg)
+  end
+  structure PTRSet = SplaySet (structure Elem = PTROrdered)
+
   (* -------------------------------------------------------------------- *)
   (* state *)
   (* -------------------------------------------------------------------- *)
@@ -85,18 +100,6 @@ struct
 
   val rollback = fn () => rollbackFlag := true
 
-  fun prepAndReadyForRollback (_,t) =
-  let
-    fun prolog () =
-    let
-      val _ = S.restoreCont ()
-    in
-      emptyW8Vec
-    end
-    val rt = S.prep (S.prepend (t, prolog))
-  in
-    S.ready rt
-  end
 
   fun addToAllThreads () =
   let
@@ -240,15 +243,6 @@ struct
       case ZMQ.recvNB source of
           NONE =>
             let
-              val _ =
-                if !rollbackFlag then
-                  (let
-                     val _ = RI.app prepAndReadyForRollback (!blockedThreads)
-                     val _ = blockedThreads := RI.empty
-                   in
-                     rollbackFlag := false
-                   end)
-                else ()
               val _ = C.yield ()
             in
               clientDaemon source
@@ -429,7 +423,56 @@ struct
                                   cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
                  MLton.serialize pidInt))
 
-    (* process local rollbacks *)
+    (* process local kills on scheduler *)
+    fun killSCore (S.RTHRD (tid, t)) =
+      if not (CTSS.member localKill tid) then
+        S.RTHRD (tid, t)
+      else
+        (* XXX KC: why not remove the thread from the scheduler instead of raising Kill? *)
+        S.RTHRD (tid, MLton.Thread.prepare (MLton.Thread.new (fn () => raise Kill), ()))
+    val () = S.modify killSCore
+
+    (* process local kills on blocked threads *)
+    fun killBTCore (k, t as S.THRD (tid,_),acc) =
+     if not (CTSS.member localKill tid) then (RI.insert acc k t)
+      else
+        let
+          (* XXX KC: why not remove the thread from the scheduler instead of raising Kill? *)
+          val prolog = fn () => (ignore (raise Kill); emptyW8Vec)
+          val rt = S.prep (S.prepend (t, prolog))
+          val _ = S.ready rt
+        in
+          acc
+        end
+    val newBT = RI.foldl killBTCore RI.empty (!blockedThreads)
+    val _ = blockedThreads := newBT
+
+    (* Convert localRestores from AISS.set to PTRSet.set *)
+    val localRestore : PTRSet.set = AISS.foldl (fn (e, acc) => PTRSet.insert acc e) PTRSet.empty localRestore
+
+    (* Process local restores on Scheduler *)
+    fun restoreSCore (S.RTHRD (tid, t)) =
+      if not (PTRSet.member localRestore (getAidFromTid tid)) then
+        S.RTHRD (tid, t)
+      else
+        S.RTHRD (tid, MLton.Thread.prepare (MLton.Thread.new (S.restoreCont), ()))
+    val () = S.modify restoreSCore
+
+    (* process local restores on blocked threads *)
+    fun restoreBTCore (k, t as S.THRD (tid,_),acc) =
+     if not (PTRSet.member localRestore (getAidFromTid tid)) then (RI.insert acc k t)
+      else
+        let
+          (* XXX KC: why not remove the thread from the scheduler instead of raising Kill? *)
+          val prolog = fn () => (S.restoreCont (); emptyW8Vec)
+          val rt = S.prep (S.prepend (t, prolog))
+          val _ = S.ready rt
+        in
+          acc
+        end
+    val newBT = RI.foldl restoreBTCore RI.empty (!blockedThreads)
+    val _ = blockedThreads := newBT
+
   in
     CR.atomicEnd ()
   end
