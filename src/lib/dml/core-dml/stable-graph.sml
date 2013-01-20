@@ -51,6 +51,7 @@ struct
                        | RECV_ACT of {cid: channel_id}
                        | SPAWN of {childTid: thread_id}
                        | BEGIN of {parentAid: action_id}
+                       | COM_RB (* This indicates the node that is inserted after commit or rollback *)
 
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
@@ -65,6 +66,7 @@ struct
        | RECV_ACT {cid = ChannelId cstr} => concat ["RA (", cstr, ")"]
        | BEGIN {parentAid} => concat ["B (", aidToString parentAid, ")"]
        | SPAWN {childTid = ThreadId tid} => concat ["F(", Int.toString tid, ")"]
+       | COM_RB => "CR"
 
   datatype action = ACTION of {aid: action_id, act: action_type}
 
@@ -185,7 +187,6 @@ struct
     val act = ACTION {aid = newAid (), act = BEGIN {parentAid = parentAid}}
     val _ = setNodeEnv (beginNode, act)
     val _ = nodeRef := (SOME beginNode)
-    val _ = S.saveCont (fn () => handleInit {parentAid = parentAid})
   in
     ()
   end
@@ -202,6 +203,21 @@ struct
   in
     spawnAid
   end
+
+  fun insertCommitRollbackNode () =
+  let
+    val nodeRef = S.tidNode ()
+    val _ = case !nodeRef of
+                 SOME _ => raise Fail "StableGraph.insertCommitRollbackNode : tid already has a node"
+               | NONE => ()
+    val crNode = G.newNode (depGraph)
+    val act = ACTION {aid = newAid (), act = COM_RB}
+    val _ = setNodeEnv (crNode, act)
+    val _ = nodeRef := (SOME crNode)
+  in
+    ()
+  end
+
 
   fun handleSend {cid: channel_id} =
   let
@@ -332,13 +348,11 @@ struct
                        tid2tid         : thread_id -> CML.thread_id option,
                        visitedSet      : AISS.set} :
                       {localRestore    : AISS.set,
-                       localKill       : CTSS.set,
                        remoteRollbacks : action_id list,
                        visitedSet      : AISS.set} =
   let
     val visitedSet = ref visitedSet
     val rbDict  = GISD.empty
-    val killSet = ISS.empty
     val myPID = !processId
 
     fun hasBeenVisited node =
@@ -351,7 +365,7 @@ struct
          false)
     end
 
-    fun foo (node, {rbDict, killSet}) =
+    fun foo (node, rbDict) =
     let
       val ACTION {act, ...} = getNodeEnv node
 
@@ -367,27 +381,15 @@ struct
       end
     in
       case act of
-           SEND_WAIT {matchAid = SOME newAid, ...} => {rbDict = rbDictHandler newAid, killSet = killSet}
-         | RECV_WAIT {matchAid = SOME newAid, ...} => {rbDict = rbDictHandler newAid, killSet = killSet}
-         | SPAWN {childTid = ThreadId tid} => {rbDict = rbDict, killSet = ISS.insert killSet tid}
-         | _ => {rbDict = rbDict, killSet = killSet}
+           SEND_WAIT {matchAid = SOME newAid, ...} => rbDictHandler newAid
+         | RECV_WAIT {matchAid = SOME newAid, ...} => rbDictHandler newAid
+         | SPAWN {childTid = ThreadId tid} => rbDictHandler (ACTION_ID {pid = ProcessId (!processId), tid = ThreadId tid, rid = 0, aid = 0})
+         | _ => rbDict
     end
 
-    val {rbDict = rbDict, killSet = killSet} =
-      dfs {startNode = startNode, foo = foo, acc = {rbDict = rbDict, killSet = killSet},
+    val rbDict =
+      dfs {startNode = startNode, foo = foo, acc = rbDict,
            tid2tid = tid2tid, hasBeenVisited = hasBeenVisited}
-
-    val rbDict = ISS.foldl (fn (tid, newRBDict) =>
-                              if GISD.member newRBDict (tidToGID (ThreadId tid)) then
-                                GISD.remove newRBDict (tidToGID (ThreadId tid))
-                              else newRBDict) rbDict killSet
-
-    (* At this point, rbDict will contain both local as well as remote action
-    * ids. Next step is to split it into local and remote values. Note that
-    * killSet will only contain local thread ids since we do not have a remote
-    * spawn primitive *)
-
-    val localKill = ISS.foldl (fn (e, acc) => CTSS.insert acc ((valOf o tid2tid o ThreadId) e)) CTSS.empty killSet
 
     val (_,rbList) = ListMLton.unzip (GISD.toList rbDict)
     val (localRestore, remoteRollbacks) =
@@ -398,8 +400,10 @@ struct
   in
     {localRestore = localRestore,
      remoteRollbacks = remoteRollbacks,
-     localKill = localKill,
      visitedSet = !visitedSet}
   end
 
+  fun saveCont () = S.saveCont (insertCommitRollbackNode)
+
+  val restoreCont = S.restoreCont
 end

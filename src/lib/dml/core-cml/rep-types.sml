@@ -15,6 +15,7 @@
 
 structure RepTypes =
    struct
+
       (** thread IDs --- see thread-id.sml and threads.sml **)
       datatype thread_id = TID of {
             id : int,

@@ -15,6 +15,7 @@ structure ThreadID : THREAD_ID_EXTRA =
 
       structure R = RepTypes
 
+      exception Kill
 
       datatype thread_id = datatype R.thread_id
       datatype thread_id' = datatype thread_id
@@ -39,6 +40,7 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun tidSaveCont (TID {cont, ...}, doBeforeRestore) =
         MLton.Cont.callcc (fn k =>
           let
+        (* XXX racy *)
             val _ = cont := (fn () =>
               let
                 val _ = doBeforeRestore ()
@@ -51,6 +53,7 @@ structure ThreadID : THREAD_ID_EXTRA =
 
       fun tidRestoreCont (TID {cont, revisionId, currentNode, ...}) =
       let
+        (* XXX racy *)
         val _ = revisionId := !revisionId + 1
         val _ = currentNode := NONE
       in
@@ -65,7 +68,7 @@ structure ThreadID : THREAD_ID_EXTRA =
               exnHandler = ref (!defaultExnHandler),
               props = ref [],
               currentNode = ref NONE,
-              cont = ref (fn _ => ()),
+              cont = ref (fn _ => raise Kill),
               revisionId =  ref 0,
               actionNum = ref 0}
       local

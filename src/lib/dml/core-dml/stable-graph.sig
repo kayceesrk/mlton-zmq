@@ -21,6 +21,7 @@ sig
   val aidToString : action_id -> string
   val getAidFromTid : CML.thread_id -> action_id
 
+  val insertCommitRollbackNode : unit -> unit
   val handleInit  : {parentAid: action_id} -> unit
   val handleSpawn : {childTid : RepTypes.thread_id} -> action_id
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
@@ -34,7 +35,9 @@ sig
                         tid2tid    : RepTypes.thread_id -> CML.thread_id option,
                         visitedSet : AISS.set} ->
                        {localRestore    : AISS.set,
-                        localKill       : CTSS.set,
                         remoteRollbacks : action_id list,
                         visitedSet      : AISS.set}
+
+  val saveCont    : unit -> unit
+  val restoreCont : unit -> unit
 end

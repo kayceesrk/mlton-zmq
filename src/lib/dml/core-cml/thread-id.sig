@@ -11,6 +11,7 @@
 
 signature THREAD_ID =
 sig
+  exception Kill
   type thread_id
 
   val sameTid    : (thread_id * thread_id) -> bool
