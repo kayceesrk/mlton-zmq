@@ -93,7 +93,7 @@ struct
       (case Int.compare (pid1, pid2) of
            EQUAL => (case Int.compare (tid1, tid2) of
                           EQUAL => (case Int.compare (rid1, rid2) of
-                                         EQUAL => Int.compare (aid2, aid2)
+                                         EQUAL => Int.compare (aid1, aid2)
                                        | lg => lg)
                         | lg => lg)
          | lg => lg)
@@ -329,20 +329,6 @@ struct
   (********************************************************************
    * Rollback Helper + Stuff
    *******************************************************************)
-
-  structure ISS = IntSplaySet
-
-  structure CMLTIDOrdered
-    :> ORDERED where type t = CML.thread_id
-  = struct
-      type t = CML.thread_id
-
-      val eq = CML.sameTid
-      val compare = CML.compareTid
-    end
-
-  structure CMLTIDSplaySet = SplaySet (structure Elem = CMLTIDOrdered)
-  structure CTSS = CMLTIDSplaySet
 
   fun rhNodeToThreads {startNode       : unit N.t,
                        tid2tid         : thread_id -> CML.thread_id option,

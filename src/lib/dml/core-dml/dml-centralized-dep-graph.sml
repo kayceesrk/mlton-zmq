@@ -123,6 +123,94 @@ struct
              NONE => ISD.insert dict pidInt [aid]
            | SOME l' => ISD.insert dict pidInt (aid::l'))
 
+  fun performLocalRollbackRemoteMsgs {localRestore, remoteRollbacks, visitedSet} =
+  let
+    val _ = Assert.assertAtomic' ("performLocalRollbackRemoteMsgs", NONE)
+    val PROXY {sink, ...} = !proxy
+
+    (* Process remote rollbacks first *)
+    val remoteRBList = ISD.toList (partitionRollbackList remoteRollbacks)
+    val _ = ListMLton.map (remoteRBList, fn (pidInt, aidList) =>
+                ZMQ.sendWithPrefix
+                (valOf sink, MSG {cid = ChannelId "bogus", aid = dummyAid (),
+                                  cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
+                 MLton.serialize pidInt))
+
+    (* Convert localRestores from AISS.set to PTRSet.set *)
+    (* Each thread has exactly one saved continuation, associated with a
+    * corresponding revision number. This step is needed because we might have
+    * the target thread already rollback beyond the point to which we want the
+    * threads to rollback. Such threads will have a revision id which is
+    * greater than the revision id of the thread we are looking to rollback to.
+    * Hence, we convert action_id to {pid, tid, rid}, look for a matching
+    * candidate. If the target thread is still in the revision we want, then we
+    * rollback this thread, otherwise, we leave it untouched. *)
+    val localRestore : PTRSet.set = AISS.foldl (fn (e, acc) => PTRSet.insert acc e) PTRSet.empty localRestore
+
+    (* Process local restores on Scheduler *)
+    fun restoreSCore (S.RTHRD (tid, t)) =
+      if not (PTRSet.member localRestore (getAidFromTid tid)) then
+        S.RTHRD (tid, t)
+      else
+        S.RTHRD (tid, MLton.Thread.prepare (MLton.Thread.new (restoreCont), ()))
+    val () = S.modify restoreSCore
+
+    (* process local restores on blocked threads *)
+    fun restoreBTCore (k, t as S.THRD (tid,_),acc) =
+     if not (PTRSet.member localRestore (getAidFromTid tid)) then (RI.insert acc k t)
+      else
+        let
+          (* XXX KC: why not remove the thread from the scheduler instead of raising Kill? *)
+          val prolog = fn () => (restoreCont (); emptyW8Vec)
+          val rt = S.prep (S.prepend (t, prolog))
+          val _ = S.ready rt
+        in
+          acc
+        end
+    val newBT = RI.foldl restoreBTCore RI.empty (!blockedThreads)
+    val _ = blockedThreads := newBT
+  in
+    ()
+  end
+
+  fun rollback () =
+  let
+    val _ = CR.atomicBegin ()
+    val startNode = valOf (!(S.tidNode ()))
+
+    (* dfs *)
+    val {localRestore, remoteRollbacks, visitedSet} =
+      rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = AISS.empty}
+
+    val _ = performLocalRollbackRemoteMsgs
+              {localRestore = localRestore,
+               remoteRollbacks = remoteRollbacks,
+               visitedSet = visitedSet}
+  in
+    CR.atomicEnd ()
+  end
+
+  fun processRollbackMsg {visitedSet, aidList} =
+  let
+    val _ = CR.atomicBegin ()
+    val nodeList = ListMLton.fold (aidList, [],
+                    fn (aid, acc) => case aidToNode (aid, tid2tid) of
+                                          NONE => acc
+                                        | SOME n => n::acc)
+    val (lr, rrb, vs) = ListMLton.fold (nodeList, (AISS.empty, [], visitedSet),
+        fn (startNode, (lr, rrb, vs)) =>
+        let
+          val {localRestore, remoteRollbacks, visitedSet} =
+            rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = vs}
+        in
+          (AISS.union localRestore lr, rrb @ remoteRollbacks, visitedSet)
+        end)
+    val _ = performLocalRollbackRemoteMsgs
+              {localRestore = lr, remoteRollbacks = rrb, visitedSet = vs}
+  in
+    CR.atomicEnd ()
+  end
+
   (* -------------------------------------------------------------------- *)
   (* Server *)
   (* -------------------------------------------------------------------- *)
@@ -211,6 +299,8 @@ struct
                        in
                          cleanupQueue (sendQ, recvQ)
                        end)
+         | RB_REQ {visitedSet, aidList} =>
+             processRollbackMsg {visitedSet = visitedSet, aidList = aidList}
          | _ => ()
     end
 
@@ -405,61 +495,7 @@ struct
       ignore (C.spawnWithTid (safeBody, tid))
     end
 
-  fun rollback () =
-  let
-    val _ = CR.atomicBegin ()
-    val startNode = valOf (!(S.tidNode ()))
-    val PROXY {sink, ...} = !proxy
 
-    (* dfs *)
-    val {localRestore, remoteRollbacks, visitedSet} =
-      rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = AISS.empty}
-
-    (* Process remote rollbacks first *)
-    val remoteRBList = ISD.toList (partitionRollbackList remoteRollbacks)
-    val _ = ListMLton.map (remoteRBList, fn (pidInt, aidList) =>
-                ZMQ.sendWithPrefix
-                (valOf sink, MSG {cid = ChannelId "bogus", aid = dummyAid (),
-                                  cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
-                 MLton.serialize pidInt))
-
-    (* Convert localRestores from AISS.set to PTRSet.set *)
-    (* Each thread has exactly one saved continuation, associated with a
-    * corresponding revision number. This step is needed because we might have
-    * the target thread already rollback beyond the point to which we want the
-    * threads to rollback. Such threads will have a revision id which is
-    * greater than the revision id of the thread we are looking to rollback to.
-    * Hence, we convert action_id to {pid, tid, rid}, look for a matching
-    * candidate. If the target thread is still in the revision we want, then we
-    * rollback this thread, otherwise, we leave it untouched. *)
-    val localRestore : PTRSet.set = AISS.foldl (fn (e, acc) => PTRSet.insert acc e) PTRSet.empty localRestore
-
-    (* Process local restores on Scheduler *)
-    fun restoreSCore (S.RTHRD (tid, t)) =
-      if not (PTRSet.member localRestore (getAidFromTid tid)) then
-        S.RTHRD (tid, t)
-      else
-        S.RTHRD (tid, MLton.Thread.prepare (MLton.Thread.new (restoreCont), ()))
-    val () = S.modify restoreSCore
-
-    (* process local restores on blocked threads *)
-    fun restoreBTCore (k, t as S.THRD (tid,_),acc) =
-     if not (PTRSet.member localRestore (getAidFromTid tid)) then (RI.insert acc k t)
-      else
-        let
-          (* XXX KC: why not remove the thread from the scheduler instead of raising Kill? *)
-          val prolog = fn () => (restoreCont (); emptyW8Vec)
-          val rt = S.prep (S.prepend (t, prolog))
-          val _ = S.ready rt
-        in
-          acc
-        end
-    val newBT = RI.foldl restoreBTCore RI.empty (!blockedThreads)
-    val _ = blockedThreads := newBT
-
-  in
-    CR.atomicEnd ()
-  end
 
 end
 

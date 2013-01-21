@@ -19,6 +19,7 @@ sig
   val aidToPidInt : action_id -> int
   val aidToTidInt : action_id -> int
   val aidToString : action_id -> string
+  val aidToNode   : action_id * (RepTypes.thread_id -> CML.thread_id option) -> node option
   val getAidFromTid : CML.thread_id -> action_id
 
   val insertCommitRollbackNode : unit -> unit
@@ -29,7 +30,6 @@ sig
   val setMatchAct : node -> action_id -> unit
 
   structure AISS : SET  where type elem = action_id
-  structure CTSS : SET  where type elem = CML.thread_id
 
   val rhNodeToThreads: {startNode  : node,
                         tid2tid    : RepTypes.thread_id -> CML.thread_id option,
