@@ -40,4 +40,5 @@ sig
    * For testing purposes only. Should be removed in the release.
    * *)
   (* ------------------------------------------------------*)
+  val rollback : unit -> unit
 end

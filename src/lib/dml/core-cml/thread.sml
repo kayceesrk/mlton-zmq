@@ -42,8 +42,16 @@ structure Thread : THREAD =
              end)
          end
 
+     fun stringHistory exn () =
+      let
+        val strList = MLton.Exn.history exn
+      in
+        foldr (fn (s, acc) => concat ["\n",s, acc]) "" strList
+      end
+
       fun doHandler (TID {exnHandler, ...}, exn) =
          (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
+          ; debug (stringHistory exn)
           ; ((!exnHandler) exn) handle _ => ())
 
       fun spawnc tid f x =

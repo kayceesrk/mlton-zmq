@@ -7,34 +7,19 @@
  * See the file MLton-LICENSE for details.
  *)
 
-val () : unit = "Development test. Does not work. Not relevant anymore."
-
 open Dml
 
 fun proxy () = startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
 
 fun pinger () =
 let
-  val pingChan : int chan = channel "pinger"
-  val pongChan : int chan = channel "ponger"
-
-  fun loop n =
-  let
-    val _ = if n = 1 then saveCont () else ()
-  in
-    if n = 0 then ()
-    else (print (concat ["Iteration: ", Int.toString n, "\n"]);
-          send (pingChan, n);
-          ignore (recv pongChan);
-          loop (n-1))
-  end
-
+  val rolledBack = ref false
   fun core () =
   let
-    val _ = spawn (fn () => loop 1)
-    val _ = spawn (fn () => (print "Setting rollBack flag\n"; rollback ()))
+    val c1 : int chan = channel "chan1"
+    val _ = send (c1, 0)
   in
-    loop 1
+    if !rolledBack then exitDaemon () else (rolledBack := true; rollback ())
   end
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", processId = 1}
@@ -44,24 +29,26 @@ end
 
 fun ponger () =
 let
-  val pingChan : int chan = channel "pinger"
-  val pongChan : int chan = channel "ponger"
+  val rolledBack = ref false
 
-  fun loop n =
-    if n = 0 then exitDaemon ()
-    else (print (concat ["Iteration: ", Int.toString n, "\n"]);
-          ignore (recv pingChan);
-          send (pongChan, n);
-          loop (n-1))
+  fun core () =
+  let
+    val c1 : int chan = channel "chan1"
+    val c2 : unit chan = channel "chan2"
+    val _ = recv c1
+    val _ = if !rolledBack then exitDaemon () else (rolledBack := true; recv c2)
+  in
+    ()
+  end
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557", processId = 2}
 in
-  ignore (runDML (fn () => loop 2, NONE))
+  ignore (runDML (core, NONE))
 end
 
 
 val args::_ = CommandLine.arguments ()
 val _ = if args = "proxy" then proxy ()
         else if args = "pinger" then pinger ()
-        (* else if args = "ponger" then ponger () *) (* Untested distributed rollback *)
+        else if args = "ponger" then ponger ()
         else raise Fail "Unknown argument: Valid arguments are proxy | pinger | ponger"

@@ -69,7 +69,6 @@ struct
   val blockedThreads = ref (RI.empty)
   val allThreads = ref (RI.empty)
   val exitDaemon = ref false
-  val rollbackFlag = ref false
 
   (* Broker Only *)
   val pendingActions = ref (RS.empty)
@@ -80,7 +79,6 @@ struct
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
   fun debug' msg = debug (fn () => msg)
-  fun debug'' fmsg = debug (fmsg)
 
   fun contentToStr cnt =
     case cnt of
@@ -93,12 +91,9 @@ struct
        | RB_REQ {visitedSet, aidList} => concat ["RB_REQ(", Int.toString (AISS.size visitedSet), ",", Int.toString (length aidList), ")"]
 
   fun msgToString (MSG {cid = ChannelId cstr, aid, cnt}) =
-    concat ["MSG -- ", aidToString aid, " Channel: ", cstr," Request: ", contentToStr cnt]
+    concat ["Aid: ", aidToString aid, " Channel: ", cstr," Request: ", contentToStr cnt]
 
   val emptyW8Vec = Vector.tabulate (0, fn _ => 0wx0)
-
-  val rollback = fn () => rollbackFlag := true
-
 
   fun addToAllThreads () =
   let
@@ -131,10 +126,16 @@ struct
     (* Process remote rollbacks first *)
     val remoteRBList = ISD.toList (partitionRollbackList remoteRollbacks)
     val _ = ListMLton.map (remoteRBList, fn (pidInt, aidList) =>
-                ZMQ.sendWithPrefix
-                (valOf sink, MSG {cid = ChannelId "bogus", aid = dummyAid (),
-                                  cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
-                 MLton.serialize pidInt))
+              let
+                val prefix = MLton.serialize pidInt
+                val _ = debug (fn () => "Rollback: sending rollback message to process " ^(Int.toString pidInt))
+                val _ = debug (fn () => ListMLton.fold (aidList, "", fn (aid, str) => (aidToString aid)^" "^str))
+              in
+                ZMQ.sendWithPrefix (valOf sink,
+                                    MSG {cid = ChannelId "bogus", aid = dummyAid (),
+                                         cnt = RB_REQ {visitedSet = visitedSet, aidList = aidList}},
+                                    prefix)
+              end)
 
     (* Convert localRestores from AISS.set to PTRSet.set *)
     (* Each thread has exactly one saved continuation, associated with a
@@ -186,17 +187,23 @@ struct
               {localRestore = localRestore,
                remoteRollbacks = remoteRollbacks,
                visitedSet = visitedSet}
+    val _ = CR.atomicEnd ()
+
+    (* Finally rollback *)
+    val _ = restoreCont ()
   in
-    CR.atomicEnd ()
+    ()
   end
 
   fun processRollbackMsg {visitedSet, aidList} =
   let
     val _ = CR.atomicBegin ()
+    val _ = debug' ("processRollbackMsg(1)")
     val nodeList = ListMLton.fold (aidList, [],
                     fn (aid, acc) => case aidToNode (aid, tid2tid) of
                                           NONE => acc
                                         | SOME n => n::acc)
+    val _ = debug' ("processRollbackMsg(2)")
     val (lr, rrb, vs) = ListMLton.fold (nodeList, (AISS.empty, [], visitedSet),
         fn (startNode, (lr, rrb, vs)) =>
         let
@@ -205,8 +212,10 @@ struct
         in
           (AISS.union localRestore lr, rrb @ remoteRollbacks, visitedSet)
         end)
+    val _ = debug' ("processRollbackMsg(3)")
     val _ = performLocalRollbackRemoteMsgs
               {localRestore = lr, remoteRollbacks = rrb, visitedSet = vs}
+    val _ = debug' ("processRollbackMsg(4)")
   in
     CR.atomicEnd ()
   end
@@ -300,7 +309,13 @@ struct
                          cleanupQueue (sendQ, recvQ)
                        end)
          | RB_REQ {visitedSet, aidList} =>
-             processRollbackMsg {visitedSet = visitedSet, aidList = aidList}
+             (* Forward the request to the intended recipient *)
+             let
+               val recipientPidInt = aidToPidInt (hd aidList) (* aidList is always non-empty *)
+               val prefix = MLton.serialize recipientPidInt
+             in
+               ZMQ.sendWithPrefix (backend, msg, prefix)
+             end
          | _ => ()
     end
 
@@ -310,7 +325,7 @@ struct
     let
       val _ = debug' ("DmlCentralized.startProxy.processLoop(1)")
       val m : msg = ZMQ.recv frontend
-      val _ = debug'' (fn () => (msgToString m))
+      val _ = debug (fn () => (msgToString m))
       val _ = processMsg m
     in
       processLoop ()
@@ -339,24 +354,29 @@ struct
         | SOME (m as MSG {aid, cnt, ...}) =>
             let
               val tidInt = aidToTidInt aid
-              val _ = debug'' (fn () => msgToString m)
-              val t = RI.lookup (!blockedThreads) tidInt
-              val waitNode = valOf (!(C.tidToNode (S.getThreadId t)))
-              val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
+              val _ = debug (fn () => "DAEMON: " ^ (msgToString m))
               val _ =
                   (case cnt of
                       S_ACK {matchAid} =>
                         let
+                          val t = RI.lookup (!blockedThreads) tidInt
+                          val waitNode = valOf (!(C.tidToNode (S.getThreadId t)))
+                          val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
                           val _ = setMatchAct waitNode matchAid
                         in
                           S.doAtomic (fn () => S.ready (S.prepVal (t, emptyW8Vec)))
                         end
                     | R_ACK {matchAid, value = m} =>
                         let
+                          val t = RI.lookup (!blockedThreads) tidInt
+                          val waitNode = valOf (!(C.tidToNode (S.getThreadId t)))
+                          val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
                           val _ = setMatchAct waitNode matchAid
                         in
                           S.doAtomic (fn () => S.ready (S.prepVal (t, m)))
                         end
+                    | RB_REQ {visitedSet, aidList} =>
+                       processRollbackMsg {visitedSet = visitedSet, aidList = aidList}
                     | _ => ())
             in
               clientDaemon source
@@ -410,8 +430,14 @@ struct
       fun body () =
       let
         val PROXY {source, ...} = !proxy
-        (* start the daemon *)
-        val _ = C.spawn (fn () => clientDaemon (valOf source))
+        (* start the daemon. Insert a CR_RB node just so that functions which
+         * expect a node at every tid will not throw exceptions. *)
+        val _ = C.spawn (fn () =>
+                  let
+                    val _ = insertCommitRollbackNode ()
+                  in
+                    clientDaemon (valOf source)
+                  end)
         val _ = addToAllThreads ()
         val _ = insertCommitRollbackNode ()
         val _ = saveCont ()

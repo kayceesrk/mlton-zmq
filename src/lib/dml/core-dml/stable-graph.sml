@@ -15,6 +15,18 @@ struct
   structure S = CML.Scheduler
   open RepTypes
 
+
+  (********************************************************************
+   * Debug
+   *******************************************************************)
+
+  structure Assert = LocalAssert(val assert = false)
+  structure Debug = LocalDebug(val debug = true)
+
+
+  fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
+  fun debug' msg = debug (fn () => msg)
+
   (********************************************************************
    * Graph
    *******************************************************************)
@@ -102,17 +114,13 @@ struct
   structure ActionIdSplaySet = SplaySet (structure Elem = ActionIdOrdered)
   structure AISS = ActionIdSplaySet
 
-  structure ActionIdSplayDict = SplayDict (structure Key = ActionIdOrdered)
-  structure AISD = ActionIdSplayDict
-
   (********************************************************************
    * Global tid
    *******************************************************************)
 
    datatype global_tid = GLOBAL_TID of {pid: process_id, tid: thread_id}
 
-   fun aidToGID (ACTION_ID {pid, tid, ...}) = GLOBAL_TID {pid = pid, tid = tid}
-   fun tidToGID tid = GLOBAL_TID {pid = ProcessId (!processId), tid = tid}
+   fun aidToGid (ACTION_ID {pid, tid, ...}) = GLOBAL_TID {pid = pid, tid = tid}
 
    structure GIDOrdered
      :> ORDERED where type t = global_tid
@@ -129,9 +137,6 @@ struct
              EQUAL => Int.compare (tid1, tid2)
            | lq => lq)
    end
-
-   structure GIDSplaySet = SplaySet (structure Elem = GIDOrdered)
-   structure GISS = GIDSplaySet
 
   structure GlobalIdSplayDict = SplayDict (structure Key = GIDOrdered)
   structure GISD = GlobalIdSplayDict
@@ -307,6 +312,7 @@ struct
         if (hasBeenVisited n) then acc
         else
           let
+            val _ = debug (fn () => "StableGraph.dfs: "^(nodeToString n))
             val newAcc = foo (n, acc)
             val adjs = N.successors n
             val succs = map E.to adjs
@@ -338,8 +344,15 @@ struct
                        visitedSet      : AISS.set} =
   let
     val visitedSet = ref visitedSet
-    val rbDict  = GISD.empty
     val myPID = !processId
+    (* rollback dictionary: key: global_id, value: action_id *)
+    val rbDict =
+      let
+        val ACTION {aid = startAid, ...} = getNodeEnv startNode
+        val startGid = aidToGid startAid
+      in
+        GISD.singleton startGid startAid
+      end
 
     fun hasBeenVisited node =
     let
@@ -357,7 +370,7 @@ struct
 
       fun rbDictHandler newAid =
       let
-        val gid = aidToGID newAid
+        val gid = aidToGid newAid
       in
         (case GISD.find rbDict gid of
              NONE => GISD.insert rbDict gid newAid
@@ -389,7 +402,17 @@ struct
      visitedSet = !visitedSet}
   end
 
-  fun saveCont () = S.saveCont (insertCommitRollbackNode)
+  fun saveCont () =
+  let
+    val _ = debug (fn () => "StableGraph.saveCont")
+  in
+    S.saveCont (insertCommitRollbackNode)
+  end
 
-  val restoreCont = S.restoreCont
+  fun restoreCont () =
+  let
+    val _ = debug (fn () => "StableGraph.restoreCont")
+  in
+    S.restoreCont ()
+  end
 end
