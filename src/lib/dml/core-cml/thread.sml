@@ -95,7 +95,7 @@ structure Thread : THREAD =
             (* val () = debug' "yield" (* NonAtomic *) *)
             val () = Assert.assertNonAtomic' "Thread.yield"
          in
-            S.readyAndSwitchToNext (fn () => ())
+            S.switchToNext (fn t => S.preempt (S.prep (t)))
          end
 
       (* thread-local data *)

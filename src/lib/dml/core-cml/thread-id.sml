@@ -70,7 +70,8 @@ structure ThreadID : THREAD_ID_EXTRA =
               currentNode = ref NONE,
               cont = ref (fn _ => raise Kill),
               revisionId =  ref 0,
-              actionNum = ref 0}
+              actionNum = ref 0,
+              done_comm = ref false}
       local
          val tidCounter = ref 0
       in
@@ -90,4 +91,12 @@ structure ThreadID : THREAD_ID_EXTRA =
          let val n = CharVector.foldr (fn (c, n) => 2 * n - Char.ord c) 0 s
          in new' n
          end
+
+      fun mark (TID{done_comm, ...}) =
+         (Assert.assertAtomic' ("ThreadID.mark", NONE)
+          ; done_comm := true)
+      fun unmark (TID{done_comm, ...}) =
+         (Assert.assertAtomic' ("ThreadID.unmark", NONE)
+          ; done_comm := false)
+      fun isMarked (TID{done_comm, ...}) = !done_comm
    end

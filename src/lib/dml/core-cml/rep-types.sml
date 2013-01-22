@@ -18,14 +18,22 @@ structure RepTypes =
 
       (** thread IDs --- see thread-id.sml and threads.sml **)
       datatype thread_id = TID of {
+            (* a unique ID *)
             id : int,
+            (* root-level exception handler hook *)
             exnHandler : (exn -> unit) ref,
+            (* hold thread-local properties *)
             props: exn list ref,
             (* state for rollback *)
             currentNode: unit DirectedGraph.Node.t option ref,
+            (* saved continuation *)
             cont: (unit -> unit) ref,
+            (* revision number of the thread; incremented on rollback. *)
             revisionId: int ref,
-            actionNum: int ref
+            (* thread local action identifier generator *)
+            actionNum: int ref,
+            (* set this whenever this thread does some concurrency operation *)
+            done_comm : bool ref
             }
 
       (** threads --- see scheduler.sml and threads.sml **)

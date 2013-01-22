@@ -26,6 +26,10 @@ sig
 
   val tidSaveCont    : thread_id * (unit -> unit) -> unit
   val tidRestoreCont : thread_id -> unit
+
+  val mark     : thread_id -> unit
+  val unmark   : thread_id -> unit
+  val isMarked : thread_id -> bool
 end
 
 signature THREAD_ID_EXTRA =

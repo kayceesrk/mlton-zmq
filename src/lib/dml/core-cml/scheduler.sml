@@ -88,9 +88,9 @@ structure Scheduler : SCHEDULER =
          (Assert.assertAtomic' ("Scheduler.enque1", NONE)
           ; Q.enque (rdyQ1, thrd))
       (* enqueue a thread in the secondary queue *)
-      (* fun enque2 thrd =
+      fun enque2 thrd =
          (Assert.assertAtomic' ("Scheduler.enque2", NONE)
-          ; Q.enque (rdyQ2, thrd)) *)
+          ; Q.enque (rdyQ2, thrd))
       (* dequeue a thread from the primary queue *)
       fun deque1 () =
          (Assert.assertAtomic' ("Scheduler.deque1", NONE)
@@ -133,6 +133,7 @@ structure Scheduler : SCHEDULER =
              ; T.atomicSwitch (fn t =>
                                let
                                   val tid = getCurThreadId ()
+                                  val () = TID.mark tid
                                   val RTHRD (tid',t') = f (THRD (tid, t))
                                   val () = setCurThreadId tid'
                                in
@@ -204,12 +205,17 @@ structure Scheduler : SCHEDULER =
           ; if not running then ready (prep (errorThrd ())) else ()
           ; atomicEnd ())
       (* what to do at a preemption (with the current thread) *)
-      fun preempt (thrd as RTHRD (_, _)) =
+      fun preempt (thrd as RTHRD (tid, _)) =
          let
             val () = Assert.assertAtomic' ("Scheduler.preempt", NONE)
             (* val () = debug' "Scheduler.preempt" (* Atomic 1 *) *)
             val () = Assert.assertAtomic' ("Scheduler.preempt", SOME 1)
-            val () = (promote () ; enque1 thrd)
+            val () =
+               if TID.isMarked tid
+                  then (TID.unmark tid
+                        ; promote ()
+                        ; enque1 thrd)
+                  else enque2 thrd
          in
             ()
          end
