@@ -22,7 +22,8 @@ sig
   (* Clients *)
   (* ------------------------------------------------------*)
 
-  val connect : {sink: string, source: string, processId: int} -> unit
+  val connect : {sink: string, source: string,
+                 processId: int, numPeers: int} -> unit
   val runDML : (unit -> unit) * Time.time option -> OS.Process.status
 
   val channel : string -> 'a chan
@@ -40,5 +41,4 @@ sig
    * For testing purposes only. Should be removed in the release.
    * *)
   (* ------------------------------------------------------*)
-  val rollback : unit -> unit
 end

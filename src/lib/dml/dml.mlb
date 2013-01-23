@@ -14,7 +14,8 @@ in
 			core-dml/stable-graph.sml
 			core-dml/dml.sig
 			(* core-dml/dml-centralized.sml *)
-			core-dml/dml-centralized-dep-graph.sml
+			(* core-dml/dml-centralized-dep-graph.sml *)
+			core-dml/dml-decentralized.sml
 			core-dml/dml.sml
 	 in
 			structure Dml
