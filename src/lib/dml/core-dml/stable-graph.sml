@@ -113,6 +113,8 @@ struct
 
   structure ActionIdSplaySet = SplaySet (structure Elem = ActionIdOrdered)
   structure AISS = ActionIdSplaySet
+  structure ActionIdSplayDict = SplayDict (structure Key = ActionIdOrdered)
+  structure AISD = ActionIdSplayDict
 
   (********************************************************************
    * Global tid
@@ -260,16 +262,40 @@ struct
     {waitNode = waitNode, actAid = actAid}
   end
 
-  fun setMatchAct (node: unit N.t) (matchAid: action_id) =
+  fun setMatchAid (node: unit N.t) (matchAid: action_id) =
   let
     val ACTION {aid, act} = getNodeEnv node
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
-                    | _ => raise Fail "StableGraph.setMatchAct(2)"
+                    | _ => raise Fail "StableGraph.setMatchAid"
   in
     setNodeEnv (node, ACTION {aid = aid, act = newAct})
   end
+
+  fun removeMatchAid (node: unit N.t) =
+  let
+    val ACTION {aid, act} = getNodeEnv node
+    val newAct = case act of
+                      SEND_WAIT {cid, ...} => SEND_WAIT {cid = cid, matchAid = NONE}
+                    | RECV_WAIT {cid, ...} => RECV_WAIT {cid = cid, matchAid = NONE}
+                    | _ => raise Fail "StableGraph.removeMatchAid"
+  in
+    setNodeEnv (node, ACTION {aid = aid, act = newAct})
+  end
+
+  fun getMatchAid (node: unit N.t) =
+  let
+    val ACTION {aid, act} = getNodeEnv node
+    val matchAid = case act of
+                      SEND_WAIT {cid, matchAid = SOME mAid} => mAid
+                    | RECV_WAIT {cid, matchAid = SOME mAid} => mAid
+                    | _ => raise Fail "StableGraph.getMatchAid"
+  in
+    matchAid
+  end
+
+
 
 
   (********************************************************************

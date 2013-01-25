@@ -22,7 +22,5 @@ struct
                              sink: ZMQ.socket option,
                              source: ZMQ.socket option}
 
-  datatype 'a chan = CHANNEL of channel_id
-
   val processId = ref ~1
 end

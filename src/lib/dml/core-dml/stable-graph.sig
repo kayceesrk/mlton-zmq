@@ -27,9 +27,13 @@ sig
   val handleSpawn : {childTid : RepTypes.thread_id} -> action_id
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
-  val setMatchAct : node -> action_id -> unit
+
+  val setMatchAid : node -> action_id -> unit
+  val getMatchAid : node -> action_id
+  val removeMatchAid : node -> unit
 
   structure AISS : SET  where type elem = action_id
+  structure AISD : DICT where type key = action_id
 
   val rhNodeToThreads: {startNode  : node,
                         tid2tid    : RepTypes.thread_id -> CML.thread_id option,

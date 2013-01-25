@@ -13,23 +13,26 @@ struct
   structure Debug = LocalDebug(val debug = true)
 
   structure ZMQ = MLton.ZMQ
-  structure RI = IntRedBlackDict
-  structure RS = StringRedBlackDict
+  structure IntDict = IntSplayDict
+  structure StrDict = StringSplayDict
   structure S = CML.Scheduler
   structure C = CML
   structure IQ = IQueue
-  open RepTypes
+  structure ISS = IntSplaySet
+  structure Weak = MLton.Weak
 
+  open RepTypes
+  open StableGraph
 
   (* -------------------------------------------------------------------- *)
   (* Datatype definitions *)
   (* -------------------------------------------------------------------- *)
 
 
-  datatype content = S_ACT of w8vec
-                   | R_ACT
-                   | S_JOIN
-                   | R_JOIN of w8vec
+  datatype content = S_ACT  of {aid: action_id, value: w8vec}
+                   | R_ACT  of {aid: action_id}
+                   | S_JOIN of {aid: action_id}
+                   | R_JOIN of {aid: action_id}
                    | J_REQ
                    | J_ACK
 
@@ -39,13 +42,24 @@ struct
                          tid : thread_id,
                          cnt : content}
 
+  datatype 'a chan = CHANNEL of channel_id
+
   (* -------------------------------------------------------------------- *)
   (* state *)
   (* -------------------------------------------------------------------- *)
 
-  val blockedThreads = ref (RI.empty)
-  val pendingActions = ref (RS.empty)
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
+
+  val blockedThreads = ref (IntDict.empty)
+  (* Key: string (Channel), Value: {sendQ: {aid: action_id, value: w8vec} , recvQ: {aid: action_id}} *)
+  val unmatchedActs = ref (StrDict.empty)
+  (* Key: action_id (matched), Value: node (waitNode) *)
+  val matchedActs = ref (AISD.empty)
+  val localMsgQ : msg IQ.iqueue = IQ.iqueue ()
+
+  (* State for join and exit*)
+  val numPeers = ref ~1
+  val peers = ref (ISS.empty)
   val exitDaemon = ref false
 
   (* -------------------------------------------------------------------- *)
@@ -58,12 +72,12 @@ struct
 
   fun contentToStr cnt =
     case cnt of
-         S_ACT _  => "S_ACT"
-       | R_ACT    => "R_ACT"
-       | S_JOIN    => "S_JOIN"
-       | R_JOIN _  => "R_JOIN"
-       | J_REQ    => "J_REQ"
-       | J_ACK    => "J_ACK"
+         S_ACT {aid, value} => concat ["S_ACT[", aidToString aid, "]"]
+       | R_ACT {aid} => concat ["R_ACT[", aidToString aid, "]"]
+       | S_JOIN {aid} => concat ["S_JOIN[", aidToString aid, "]"]
+       | R_JOIN {aid} => concat ["R_JOIN[", aidToString aid, "]"]
+       | J_REQ => "J_REQ"
+       | J_ACK => "J_ACK"
 
   fun msgToString (MSG {cid = ChannelId cstr,
                    tid = ThreadId tint,
@@ -73,6 +87,120 @@ struct
             " Node: ", Int.toString nint, " Request: ", contentToStr cnt]
 
   val emptyW8Vec = Vector.tabulate (0, fn _ => 0wx0)
+
+
+  (* -------------------------------------------------------------------- *)
+  (* Thread Helper *)
+  (* -------------------------------------------------------------------- *)
+
+  fun blockCurrentThread f =
+    S.atomicSwitchToNext (fn t =>
+      let
+        val tid = S.tidInt ()
+        val _ = f ()
+      in
+        blockedThreads := (IntDict.insert (!blockedThreads) tid t)
+      end)
+
+  (* -------------------------------------------------------------------- *)
+  (* Channel Helper *)
+  (* -------------------------------------------------------------------- *)
+
+  fun cleanChannel c {sendQ, recvQ} =
+    if IQ.empty sendQ andalso IQ.empty recvQ then
+      unmatchedActs := StrDict.remove (!unmatchedActs) c
+    else ()
+
+  fun getRecvAct c =
+    case StrDict.find (!unmatchedActs) c of
+         NONE => NONE
+       | SOME {recvQ, sendQ} =>
+           if IQ.isEmpty recvQ then NONE
+           else
+             let
+               val result = SOME (IQ.remove recvQ)
+               val () = cleanChannel c {sendQ, recvQ}
+             in
+               result
+             end
+
+  fun getSendAct c =
+    case StrDict.find (!unmatchedActs) c of
+         NONE => NONE
+       | SOME {sendQ, recvQ} =>
+           if IQ.isEmpty sendQ then NONE
+           else
+             let
+               val result = SOME (IQ.remove sendQ)
+               val () = cleanChannel c {sendQ, recvQ}
+             in
+               result
+             end
+
+  fun getQsMaybeCreate c =
+    case StrDict.find (!unmatchedActs) c of
+         NONE =>
+            let
+              val v = {sendQ = IQ.iqueue (), recvQ = IQ.iqueue ()}
+              val () = unmatchedActs := StrDict.insert (!unmatchedActs) c v
+            in
+              v
+            end
+       | SOME v => v
+
+  fun insertSendAct c v =
+  let
+    val {sendQ, ...} = getQsMaybeCreate c
+  in
+    IQ.insert sendQ v
+  end
+
+  fun insertRecvAct c v =
+  let
+    val {recvQ, ...} = getQsMaybeCreate c
+  in
+    IQ.insert recvQ v
+  end
+
+  fun insertMatchedAct {waitNode, matchAid} =
+    (setMatchedAct waitNode matchAid;
+     matchedActs := AISD.insert (!matchedActs) matchAid waitNode)
+
+  fun removeMatchedAct {waitNode} =
+  let
+    val matchAid = getMatchAid waitNode
+    removeMatchedAid waitNode
+    matchedActs := AISD.remove (!matchedActs) match
+
+  (* -------------------------------------------------------------------- *)
+  (* Message Helper Functions *)
+  (* -------------------------------------------------------------------- *)
+
+  (* Send to both local and remote *)
+  fun msgSend msg =
+  let
+    val _ = IQ.insert localMsgQ msg
+    val PROXY {sink, ...} = !proxy
+    val _ = ZMQ.send (valOf sink, msg)
+  in
+    ()
+  end
+
+  (* Recv from both local and remote *)
+  fun msgRecv msg =
+    if not (IQ.isEmpty localMsgQ) then
+      let
+        val result = IQ.front localMsgQ
+        val _ = IQ.remove localMsgQ
+      in
+        SOME (result)
+      end
+    else
+      let
+        val PROXY {source, ...} = !proxy
+      in
+        ZMQ.recvNB (valOf source)
+      end
 
 
   (* -------------------------------------------------------------------- *)
@@ -87,155 +215,88 @@ struct
     val backend = ZMQ.sockCreate (context, ZMQ.Pub)
     val _ = ZMQ.sockBind (frontend, fe_str)
     val _ = ZMQ.sockBind (backend, be_str)
-    val _ = ZMQ.sockSetSubscribe (frontend, Vector.tabulate (0, fn _ => 0wx0))
-
-    fun processMsg (msg as MSG {cid as ChannelId c, pid as ProcessId n, tid, cnt}) =
-    let
-      (* Create queue in the pending action hash map if it doesn't exist *)
-      fun createQueues () =
-      let
-        val v = {sendQ = IQ.iqueue (), recvQ = IQ.iqueue ()}
-      in
-        pendingActions := RS.insert (!pendingActions) c v
-      end
-
-      (* Remove the channel entry from the pending action hash map if both the
-       * queues become empty *)
-      fun cleanupQueue (sendq, recvq) =
-        if IQ.isEmpty sendq andalso IQ.isEmpty recvq then
-          pendingActions := RS.remove (!pendingActions) c
-        else ()
-
-    in
-      case cnt of
-           J_REQ (* Node want to join *) => (* reply with J_ACK *)
-             let
-               val prefix = MLton.serialize pid
-             in
-               ZMQ.sendWithPrefix (backend, MSG {cid = cid, pid = pid, tid = tid, cnt = J_ACK}, prefix)
-             end
-         | S_ACT data =>
-             (case RS.find (!pendingActions) c of
-                   NONE => (createQueues (); processMsg msg)
-                 | SOME {sendQ,recvQ} =>
-                     if IQ.isEmpty recvQ then (* No matching receives *)
-                       IQ.insert sendQ msg
-                     else
-                       let
-                         val MSG m' = IQ.front recvQ
-                         val _ = IQ.remove recvQ
-
-                         (* recv acknowledgement *)
-                         val recvAck = MSG {cid = #cid m', tid = #tid m', pid = #pid m', cnt = R_JOIN data}
-                         val prefix = MLton.serialize (#pid m')
-                         val _ = ZMQ.sendWithPrefix (backend, recvAck, prefix)
-
-                         (* send acknowledgement *)
-                         val sendAck = MSG {cid = cid, pid = pid, tid = tid, cnt = S_JOIN}
-                         val prefix = MLton.serialize n
-                         val _ = ZMQ.sendWithPrefix (backend, sendAck, prefix)
-                       in
-                         cleanupQueue (sendQ, recvQ)
-                       end)
-         | R_ACT =>
-             (case RS.find (!pendingActions) c of
-                   NONE => (createQueues (); processMsg msg)
-                 | SOME {sendQ, recvQ} =>
-                     if IQ.isEmpty sendQ then
-                       IQ.insert recvQ msg
-                     else
-                       let
-                         val MSG m' = IQ.front sendQ
-                         val _ = IQ.remove sendQ
-
-                         (* send acknowledgement *)
-                         val sendAck = MSG {cid = #cid m', tid = #tid m', pid = #pid m', cnt = S_JOIN}
-                         val prefix = MLton.serialize (#pid m')
-                         val _ = ZMQ.sendWithPrefix (backend, sendAck, prefix)
-
-                         (* recv acknowledgement *)
-                         val data = case #cnt m' of
-                             S_ACT data => data
-                           | _ => raise Fail "DmlCentralized.processMessage.R_ACT.SOME: unexpected"
-                         val recvAck = MSG {cid = cid, pid = pid, tid = tid, cnt = R_JOIN data}
-                         val prefix = MLton.serialize n
-                         val _ = ZMQ.sendWithPrefix (backend, recvAck, prefix)
-                       in
-                         cleanupQueue (sendQ, recvQ)
-                       end)
-         | _ => ()
-    end
-
-
-    (* main loop *)
-    fun processLoop () =
-    let
-      val _ = debug' ("DmlCentralized.startProxy.processLoop(1)")
-      val m : msg = ZMQ.recv frontend
-      val _ = debug'' (fn () => (msgToString m))
-      val _ = processMsg m
-    in
-      processLoop ()
-    end
-
-    val _ = debug' "DmlCentralized.startProxy: starting processLoop"
-    val _ = processLoop ()
   in
-    ()
+    ZMQ.proxy {frontend = frontend, backend = backend}
   end
 
   (* -------------------------------------------------------------------- *)
-  (* Clients *)
+  (* Client Daemon *)
   (* -------------------------------------------------------------------- *)
+
+  fun processMsg (msg as MSG {cid as ChannelId c, pid as ProcessId n, tid, cnt}) =
+  let
+    (* Create queue in the pending action hash map if it doesn't exist *)
+    fun createQueues () =
+    let
+      val v = {sendQ = IQ.iqueue (), recvQ = IQ.iqueue ()}
+    in
+      pendingActions := StrDict.insert (!pendingActions) c v
+    end
+
+    (* Remove the channel entry from the pending action hash map if both the
+      * queues become empty *)
+    fun cleanupQueue (sendq, recvq) =
+      if IQ.isEmpty sendq andalso IQ.isEmpty recvq then
+        pendingActions := StrDict.remove (!pendingActions) c
+      else ()
+
+  in
+    case cnt of
+        _ => ()
+  end
 
   fun clientDaemon source =
     if (!exitDaemon) then ()
     else
       case ZMQ.recvNB source of
           NONE => (C.yield (); clientDaemon source)
-        | SOME (m as MSG {tid = ThreadId tidInt, cnt, ...}) =>
+        | SOME m =>
             let
               val _ = debug'' (fn () => msgToString m)
-              val t = RI.lookup (!blockedThreads) tidInt
-              val _ = blockedThreads := RI.remove (!blockedThreads) tidInt
-              val _ =
-                  (case cnt of
-                      S_JOIN => S.doAtomic (fn () => S.ready (S.prepVal (t, emptyW8Vec)))
-                    | R_JOIN m => S.doAtomic (fn () => S.ready (S.prepVal (t, m)))
-                    | _ => ())
+              val _ = processMsg m
             in
               clientDaemon source
             end
 
+  (* -------------------------------------------------------------------- *)
+  (* Client *)
+  (* -------------------------------------------------------------------- *)
+
   val yield = C.yield
 
-  fun connect {sink = sink_str, source = source_str, processId = pid, numPeers} =
+  fun connect {sink = sink_str, source = source_str, processId = pid, numPeers = np} =
   let
     val context = ZMQ.ctxNew ()
     val source = ZMQ.sockCreate (context, ZMQ.Sub)
     val sink = ZMQ.sockCreate (context, ZMQ.Pub)
     val _ = ZMQ.sockConnect (source, source_str)
     val _ = ZMQ.sockConnect (sink, sink_str)
-    val _ = processId := pid
+    val _ = ZMQ.sockSetSubscribe (source, Vector.tabulate (0, fn _ => 0wx0))
 
-    (* Set filter to receive only those messages addresed to me *)
-    val filter = MLton.serialize pid
-    val _ = ZMQ.sockSetSubscribe (source, filter)
+    val _ = processId := pid
+    val _ = numPeers := np
 
     fun join n =
     let
-      val _ = debug' ("DmlCentralized.connect.join(1)")
-      val n = if n=1000 then
+      val _ = debug' ("DmlDecentralized.connect.join(1)")
+      val n = if n=10000 then
                 (ZMQ.send (sink, MSG {cid = ChannelId "bogus", pid = ProcessId (!processId),
                           tid = ThreadId ~1, cnt = J_REQ}); 0)
               else n+1
-      val m : msg = case ZMQ.recvNB source of
-                            NONE => join n
-                          | SOME m => m
+      val () = case ZMQ.recvNB source of
+                    NONE => join n
+                  | SOME (MSG {pid = ProcessId pidInt, cnt = J_ACK, ...}) =>
+                      let
+                        val _ = peers := ISS.insert (!peers) pidInt
+                      in
+                        if ISS.size (!peers) = (!numPeers) then ()
+                        else join n
+                      end
+                  | _ => raise Fail "DmlDecentralized.connect: unexpected message during connect"
     in
-      m
+      ()
     end
-    val _ = join 1000
+    val _ = join 10000
 
     (* If we get here, then it means that we have joined *)
     val _ = proxy := PROXY {context = SOME context,
@@ -269,36 +330,46 @@ struct
 
   fun channel s = CHANNEL (ChannelId s)
 
+
   fun send (CHANNEL c, m) =
   let
-    val _ = debug' ("DmlCentralized.send(1)")
+    val _ = S.atomicBegin ()
+    val _ = debug' ("DmlDecentralized.send(1)")
+    val {actAid, waitNode} = handleSend {cid = c}
     val m = MLton.serialize (m)
-    val _ = S.switchToNext (fn t : w8vec S.thread =>
-              let
-                val tid = S.tidInt ()
-                val PROXY {sink, ...} = !proxy
-                val _ = debug' ("DmlCentralized.send(2)")
-                val _ = ZMQ.send (valOf sink, MSG {cid = c, pid = ProcessId (!processId),
-                                  tid = ThreadId tid, cnt = S_ACT m})
-                val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
-                val _ = debug' ("DmlCentralized.send(3)")
-              in
-                ()
-              end)
   in
-    ()
-  end
+    case getRecvAct c of
+         NONE => blockCurrentThread (fn () =>
+           let
+             val _ = debug' ("DmlDecentralized.send(2.1)")
+             val _ = msgSend (MSG {cid = c, aid = actAid, cnt = S_ACT m})
+             val _ = debug' ("DmlDecentralized.send(2.2)")
+           in
+             ()
+           end) (* Implicit atomic end *)
+       | SOME {aid = recvAid} =>
+           blockCurrentThread (fn () =>
+            let
+              val _ = debug' ("DmlDecentralized.send(3.1)")
+              val _ = setMatchAct waitNode recvAid
+              val _ = msgSend (MSG {cid = c, aid = actAid, cnt = S_JOIN recvAid})
+              val _ = debug' ("DmlDecentralized.send(3.2)")
+            in
+              ()
+            end
+
+
 
   fun recv (CHANNEL c) =
   let
+    val _ = debug' ("DmlDecentralized.recv(1)")
+    val {actAid, ...} = handleRecv {cid = c}
     val serM =
       S.switchToNext (fn t : w8vec S.thread =>
         let
           val tid = S.tidInt ()
-          val PROXY {sink, ...} = !proxy
-          val _ = ZMQ.send (valOf sink, {cid = c, pid = ProcessId (!processId),
-                            tid = ThreadId tid, cnt = R_ACT})
-          val _ = blockedThreads := (RI.insert (!blockedThreads) tid t)
+          val _ = debug' ("DmlDecentralized.send(2)")
+          val _ = debug' ("DmlDecentralized.send(3)")
         in
           ()
         end)
