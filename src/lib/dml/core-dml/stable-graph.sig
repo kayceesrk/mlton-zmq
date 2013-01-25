@@ -32,6 +32,8 @@ sig
   val getMatchAid : node -> action_id
   val removeMatchAid : node -> unit
 
+  val isAidLocal : action_id -> bool
+
   structure AISS : SET  where type elem = action_id
   structure AISD : DICT where type key = action_id
 

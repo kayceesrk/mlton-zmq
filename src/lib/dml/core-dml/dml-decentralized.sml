@@ -7,6 +7,31 @@
  * See the file MLton-LICENSE for details.
  *)
 
+signature PENDING_COMM =
+sig
+  type 'a t
+  val empty     : unit -> 'a t
+  val addAid    : 'a t -> string -> StableGraph.action_id -> 'a -> unit
+  val removeAid : 'a t -> string -> StableGraph.action_id -> unit
+  val deque     : 'a t -> string -> (StableGraph.action_id * 'a) option
+end
+
+signature MATCHED_COMM =
+sig
+  type 'a t
+  datatype 'a join_result =
+    SUCCESS
+  | FAILURE of (unit DirectedGraph.Node.t * 'a)
+  | NOOP
+
+  val empty   : unit -> 'a t
+  val add     : 'a t -> {actAid: StableGraph.action_id,
+                         remoteMatchAid: StableGraph.action_id,
+                         waitNode: unit DirectedGraph.Node.t} -> 'a -> unit
+  val processJoin : 'a t -> {remoteAid: StableGraph.action_id,
+                             withAid: StableGraph.action_id} -> 'a join_result
+end
+
 structure DmlDecentralized : DML =
 struct
   structure Assert = LocalAssert(val assert = false)
@@ -44,14 +69,105 @@ struct
 
   datatype 'a chan = CHANNEL of channel_id
 
+
+  structure PendingComm : PENDING_COMM =
+  struct
+    open StrDict
+
+    type 'a t = 'a AISD.dict StrDict.dict ref
+
+    fun empty () = ref (StrDict.empty)
+
+    fun addAid strDictRef channel aid value =
+    let
+      fun merge oldAidDict = AISD.insert oldAidDict aid value
+    in
+      strDictRef := StrDict.insertMerge (!strDictRef) channel (AISD.singleton aid value) merge
+    end
+
+    fun removeAid strDictRef channel aid =
+    let
+      val aidDict = StrDict.lookup (!strDictRef) channel
+      val aidDict = AISD.remove aidDict aid
+    in
+      strDictRef := StrDict.insert (!strDictRef) channel aidDict
+    end handle Absent => ()
+
+    exception FIRST of action_id
+
+    fun deque strDictRef channel =
+    let
+      val aidDict = StrDict.lookup (!strDictRef) channel
+      fun getOne () =
+      let
+        val _ = AISD.app (fn (k, _) => raise FIRST k) aidDict
+      in
+        raise Absent
+      end handle FIRST k => k
+      val aid = getOne ()
+      val return = SOME (aid, AISD.lookup aidDict aid)
+      val _ = removeAid strDictRef channel aid
+    in
+      return
+    end handle Absent => NONE
+  end
+
+  structure MatchedComm : MATCHED_COMM =
+  struct
+    type 'a t = {actAid : action_id, waitNode : node, value : 'a} AISD.dict ref
+
+    datatype 'a join_result =
+      SUCCESS
+    | FAILURE of (unit DirectedGraph.Node.t * 'a)
+    | NOOP
+
+    fun empty () = ref (AISD.empty)
+
+    fun add aidDictRef {actAid, remoteMatchAid, waitNode} value =
+    let
+      val _ = if isAidLocal remoteMatchAid then raise Fail "MatchedComm.add(1)"
+              else if not (isAidLocal actAid) then raise Fail "MatchedComm.add(2)"
+              else ()
+    in
+      aidDictRef := AISD.insert (!aidDictRef) remoteMatchAid
+                    {actAid = actAid, waitNode = waitNode, value = value}
+    end
+
+    fun processJoin aidDictRef {remoteAid, withAid} =
+    let
+      val _ = if isAidLocal remoteAid then raise Fail "MatchedComm.processJoin"
+              else ()
+    in
+      if not (isAidLocal withAid) then NOOP
+      else
+        let
+          val {actAid, waitNode, value} = AISD.lookup (!aidDictRef) remoteAid
+          val result =
+            if MLton.equal (actAid, withAid) then SUCCESS
+            else FAILURE (waitNode, value)
+          val _ = aidDictRef := AISD.remove (!aidDictRef) remoteAid
+        in
+          result
+        end
+    end handle Absent => NOOP
+
+  end
+
   (* -------------------------------------------------------------------- *)
   (* state *)
   (* -------------------------------------------------------------------- *)
 
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
 
-  val blockedThreads = ref (IntDict.empty)
+  val pendingLocalSends : {sendWaitNode : node, value : w8vec} PendingComm.t = PendingComm.empty ()
+  val pendingLocalRecvs : {recvWaitNode : node} PendingComm.t = PendingComm.empty ()
+  val pendingRemoteSends : w8vec PendingComm.t = PendingComm.empty ()
+  val pendingRemoteRecvs : unit PendingComm.t = PendingComm.empty ()
 
+  val matchedSends : w8vec MatchedComm.t = MatchedComm.empty ()
+  val matchedRecvs : unit MatchedComm.t = MatchedComm.empty ()
+
+  val blockedThreads = ref (IntDict.empty)
   val localMsgQ : msg IQ.iqueue = IQ.iqueue ()
 
   (* State for join and exit*)

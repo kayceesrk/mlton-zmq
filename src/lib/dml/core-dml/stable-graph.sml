@@ -295,8 +295,8 @@ struct
     matchAid
   end
 
-
-
+  fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =
+    pidInt = (!processId)
 
   (********************************************************************
    * DFS
