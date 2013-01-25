@@ -51,10 +51,7 @@ struct
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
 
   val blockedThreads = ref (IntDict.empty)
-  (* Key: string (Channel), Value: {sendQ: {aid: action_id, value: w8vec} , recvQ: {aid: action_id}} *)
-  val unmatchedActs = ref (StrDict.empty)
-  (* Key: action_id (matched), Value: node (waitNode) *)
-  val matchedActs = ref (AISD.empty)
+
   val localMsgQ : msg IQ.iqueue = IQ.iqueue ()
 
   (* State for join and exit*)
@@ -88,89 +85,6 @@ struct
 
   val emptyW8Vec = Vector.tabulate (0, fn _ => 0wx0)
 
-
-  (* -------------------------------------------------------------------- *)
-  (* Thread Helper *)
-  (* -------------------------------------------------------------------- *)
-
-  fun blockCurrentThread f =
-    S.atomicSwitchToNext (fn t =>
-      let
-        val tid = S.tidInt ()
-        val _ = f ()
-      in
-        blockedThreads := (IntDict.insert (!blockedThreads) tid t)
-      end)
-
-  (* -------------------------------------------------------------------- *)
-  (* Channel Helper *)
-  (* -------------------------------------------------------------------- *)
-
-  fun cleanChannel c {sendQ, recvQ} =
-    if IQ.empty sendQ andalso IQ.empty recvQ then
-      unmatchedActs := StrDict.remove (!unmatchedActs) c
-    else ()
-
-  fun getRecvAct c =
-    case StrDict.find (!unmatchedActs) c of
-         NONE => NONE
-       | SOME {recvQ, sendQ} =>
-           if IQ.isEmpty recvQ then NONE
-           else
-             let
-               val result = SOME (IQ.remove recvQ)
-               val () = cleanChannel c {sendQ, recvQ}
-             in
-               result
-             end
-
-  fun getSendAct c =
-    case StrDict.find (!unmatchedActs) c of
-         NONE => NONE
-       | SOME {sendQ, recvQ} =>
-           if IQ.isEmpty sendQ then NONE
-           else
-             let
-               val result = SOME (IQ.remove sendQ)
-               val () = cleanChannel c {sendQ, recvQ}
-             in
-               result
-             end
-
-  fun getQsMaybeCreate c =
-    case StrDict.find (!unmatchedActs) c of
-         NONE =>
-            let
-              val v = {sendQ = IQ.iqueue (), recvQ = IQ.iqueue ()}
-              val () = unmatchedActs := StrDict.insert (!unmatchedActs) c v
-            in
-              v
-            end
-       | SOME v => v
-
-  fun insertSendAct c v =
-  let
-    val {sendQ, ...} = getQsMaybeCreate c
-  in
-    IQ.insert sendQ v
-  end
-
-  fun insertRecvAct c v =
-  let
-    val {recvQ, ...} = getQsMaybeCreate c
-  in
-    IQ.insert recvQ v
-  end
-
-  fun insertMatchedAct {waitNode, matchAid} =
-    (setMatchedAct waitNode matchAid;
-     matchedActs := AISD.insert (!matchedActs) matchAid waitNode)
-
-  fun removeMatchedAct {waitNode} =
-  let
-    val matchAid = getMatchAid waitNode
-    removeMatchedAid waitNode
-    matchedActs := AISD.remove (!matchedActs) match
 
   (* -------------------------------------------------------------------- *)
   (* Message Helper Functions *)
@@ -225,21 +139,7 @@ struct
 
   fun processMsg (msg as MSG {cid as ChannelId c, pid as ProcessId n, tid, cnt}) =
   let
-    (* Create queue in the pending action hash map if it doesn't exist *)
-    fun createQueues () =
-    let
-      val v = {sendQ = IQ.iqueue (), recvQ = IQ.iqueue ()}
-    in
-      pendingActions := StrDict.insert (!pendingActions) c v
-    end
-
-    (* Remove the channel entry from the pending action hash map if both the
-      * queues become empty *)
-    fun cleanupQueue (sendq, recvq) =
-      if IQ.isEmpty sendq andalso IQ.isEmpty recvq then
-        pendingActions := StrDict.remove (!pendingActions) c
-      else ()
-
+    val () = ()
   in
     case cnt of
         _ => ()
@@ -338,43 +238,16 @@ struct
     val {actAid, waitNode} = handleSend {cid = c}
     val m = MLton.serialize (m)
   in
-    case getRecvAct c of
-         NONE => blockCurrentThread (fn () =>
-           let
-             val _ = debug' ("DmlDecentralized.send(2.1)")
-             val _ = msgSend (MSG {cid = c, aid = actAid, cnt = S_ACT m})
-             val _ = debug' ("DmlDecentralized.send(2.2)")
-           in
-             ()
-           end) (* Implicit atomic end *)
-       | SOME {aid = recvAid} =>
-           blockCurrentThread (fn () =>
-            let
-              val _ = debug' ("DmlDecentralized.send(3.1)")
-              val _ = setMatchAct waitNode recvAid
-              val _ = msgSend (MSG {cid = c, aid = actAid, cnt = S_JOIN recvAid})
-              val _ = debug' ("DmlDecentralized.send(3.2)")
-            in
-              ()
-            end
-
+    ()
+  end
 
 
   fun recv (CHANNEL c) =
   let
     val _ = debug' ("DmlDecentralized.recv(1)")
-    val {actAid, ...} = handleRecv {cid = c}
-    val serM =
-      S.switchToNext (fn t : w8vec S.thread =>
-        let
-          val tid = S.tidInt ()
-          val _ = debug' ("DmlDecentralized.send(2)")
-          val _ = debug' ("DmlDecentralized.send(3)")
-        in
-          ()
-        end)
+    val {actAid, waitNode} = handleRecv {cid = c}
   in
-    MLton.deserialize serM
+    raise Fail "DmlDecentralized.recv: not implemented"
   end
 
   val exitDaemon = fn () => exitDaemon := true
