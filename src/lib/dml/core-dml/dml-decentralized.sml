@@ -21,13 +21,15 @@ sig
   type 'a t
   datatype 'a join_result =
     SUCCESS
-  | FAILURE of (unit DirectedGraph.Node.t * 'a)
+  | FAILURE of {actAid : StableGraph.action_id,
+                waitNode : StableGraph.node,
+                value : 'a}
   | NOOP
 
   val empty   : unit -> 'a t
   val add     : 'a t -> {actAid: StableGraph.action_id,
                          remoteMatchAid: StableGraph.action_id,
-                         waitNode: unit DirectedGraph.Node.t} -> 'a -> unit
+                         waitNode: StableGraph.node} -> 'a -> unit
   val processJoin : 'a t -> {remoteAid: StableGraph.action_id,
                              withAid: StableGraph.action_id} -> 'a join_result
 end
@@ -118,7 +120,9 @@ struct
 
     datatype 'a join_result =
       SUCCESS
-    | FAILURE of (unit DirectedGraph.Node.t * 'a)
+    | FAILURE of {actAid : StableGraph.action_id,
+                  waitNode : StableGraph.node,
+                  value : 'a}
     | NOOP
 
     fun empty () = ref (AISD.empty)
@@ -144,7 +148,7 @@ struct
           val {actAid, waitNode, value} = AISD.lookup (!aidDictRef) remoteAid
           val result =
             if MLton.equal (actAid, withAid) then SUCCESS
-            else FAILURE (waitNode, value)
+            else FAILURE {actAid = actAid, waitNode = waitNode, value = value}
           val _ = aidDictRef := AISD.remove (!aidDictRef) remoteAid
         in
           result
@@ -183,6 +187,21 @@ struct
   fun debug' msg = debug (fn () => msg)
   fun debug'' fmsg = debug (fmsg)
 
+  fun dequePendingSend c =
+    case PendingComm.deque pendingLocalSends c of
+         SOME (act, {sendWaitNode, value}) => SOME {sendAct = act, sendWaitNode = SOME sendWaitNode, value = value}
+       | NONE => (case PendingComm.deque pendingRemoteSends c of
+                       NONE => NONE
+                     | SOME (act, value) => SOME {sendAct = act, sendWaitNode = NONE, value = value})
+
+  fun dequePendingRecv c =
+    case PendingComm.deque pendingLocalRecvs c of
+         SOME (act, {recvWaitNode}) => SOME {recvAct = act, recvWaitNode = SOME recvWaitNode}
+       | NONE => (case PendingComm.deque pendingRemoteRecvs c of
+                       NONE => NONE
+                     | SOME (act, _) => SOME {recvAct = act, recvWaitNode = NONE})
+
+
   fun contentToStr cnt =
     case cnt of
          S_ACT {aid, value} => concat ["S_ACT[", aidToString aid, "]"]
@@ -201,6 +220,12 @@ struct
 
   val emptyW8Vec = Vector.tabulate (0, fn _ => 0wx0)
 
+  fun getWaitNodeOfBlockedThread tidInt =
+  let
+    val t = IntDict.lookup (!blockedThreads) tidInt
+  in
+    valOf (!(C.tidToNode (S.getThreadId t)))
+  end
 
   (* -------------------------------------------------------------------- *)
   (* Message Helper Functions *)
@@ -253,12 +278,29 @@ struct
   (* Client Daemon *)
   (* -------------------------------------------------------------------- *)
 
-  fun processMsg (msg as MSG {cid as ChannelId c, pid as ProcessId n, tid, cnt}) =
+  fun processMsg (msg as MSG {cid as ChannelId c, pid as ProcessId n, tid as ThreadId t, cnt}) =
   let
     val () = ()
   in
     case cnt of
-        _ => ()
+        S_ACT {aid = sendActAid, value} =>
+          (case dequePendingRecv c of
+              NONE => (* No matching receives *)
+                (if isAidLocal sendActAid then (* locally generated *)
+                  let
+                    val waitNode = getWaitNodeOfBlockedThread t
+                  in
+                    PendingComm.addAid pendingLocalSends c sendActAid
+                      {sendWaitNode = waitNode, value = value}
+                  end
+                else (* remotely generated *)
+                  PendingComm.addAid pendingRemoteSends c sendActAid value)
+            | SOME {recvAct, recvWaitNode = NONE} => (* matching remote act *)
+                raise Fail "NotImplemented"
+            | SOME {recvAct, recvWaitNode = SOME waitNode} => (* matching local act *)
+                raise Fail "NotImplemented")
+      | R_ACT {aid = recvActAid} => raise Fail "NotImplemented"
+      | _ => ()
   end
 
   fun clientDaemon source =
