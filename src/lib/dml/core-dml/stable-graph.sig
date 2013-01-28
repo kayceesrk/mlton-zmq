@@ -34,6 +34,7 @@ sig
 
   val isAidLocal : action_id -> bool
 
+  structure ActionIdOrdered : ORDERED where type t = action_id
   structure AISS : SET  where type elem = action_id
   structure AISD : DICT where type key = action_id
 
