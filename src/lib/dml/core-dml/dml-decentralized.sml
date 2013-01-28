@@ -350,15 +350,11 @@ struct
                       let
                         val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(3)", SOME 1)
                         val _ = debug' ("DmlDecentralized.processLocalSend(3)")
+                        val _ = msgSend (S_ACT {channel = ChannelId c, sendActAid = sendActAid, value = value})
                         val _ = PendingComm.addAid pendingLocalSends c sendActAid
                           {sendWaitNode = sendWaitNode, value = value}
                         val _ = case callerKind of
-                                    Client =>
-                                      let
-                                        val _ = msgSend (S_ACT {channel = ChannelId c, sendActAid = sendActAid, value = value})
-                                      in
-                                        blockCurrentThread ()
-                                      end
+                                    Client => blockCurrentThread ()
                                   | Daemon => emptyW8Vec
                       in
                         ()
@@ -367,9 +363,7 @@ struct
                       let
                         val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(4)", SOME 1)
                         val _ = debug' ("DmlDecentralized.processLocalSend(4)")
-                        val _ = case callerKind of
-                                    Client => msgSend (S_ACT {channel = ChannelId c, sendActAid = sendActAid, value = value})
-                                  | _ => ()
+                        val _ = msgSend (S_ACT {channel = ChannelId c, sendActAid = sendActAid, value = value})
                         val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedSends
                           {actAid = sendActAid, remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
@@ -416,15 +410,11 @@ struct
                     NONE => (* No matching remote send either *)
                       let
                         val _ = debug' ("DmlDecentralized.processLocalRecv(3)")
+                        val _ = msgSend (R_ACT {channel = ChannelId c, recvActAid = recvActAid})
                         val _ = PendingComm.addAid pendingLocalRecvs c recvActAid
                           {recvWaitNode = recvWaitNode}
                         val value = case callerKind of
-                                    Client =>
-                                    let
-                                      val _ = msgSend (R_ACT {channel = ChannelId c, recvActAid = recvActAid})
-                                    in
-                                      blockCurrentThread ()
-                                    end
+                                    Client => blockCurrentThread ()
                                   | Daemon => emptyW8Vec
                       in
                         value
@@ -432,9 +422,7 @@ struct
                   | SOME (sendActAid, value) => (* matching remote send *)
                       let
                         val _ = debug' ("DmlDecentralized.processLocalRecv(4)")
-                        val _ = case callerKind of
-                                    Client => msgSend (R_ACT {channel = ChannelId c, recvActAid = recvActAid})
-                                  | _ => ()
+                        val _ = msgSend (R_ACT {channel = ChannelId c, recvActAid = recvActAid})
                         val _ = msgSend (R_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedRecvs
                           {actAid = recvActAid, remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
@@ -505,18 +493,31 @@ struct
                end)
         end
       | S_JOIN {channel = ChannelId c, sendActAid, recvActAid} =>
-          (case MatchedComm.processJoin matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
-               MatchedComm.NOOP => ()
-             | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
-                 let
-                   val _ = setMatchAid recvWaitNode sendActAid
-                 in
-                   resumeThread (aidToTidInt recvActAid) value
-                 end
-             | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
-                   ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode}))
+          let
+            val _ = PendingComm.removeAid pendingLocalSends c sendActAid
+            val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
+            val _ = PendingComm.removeAid pendingLocalRecvs c recvActAid
+            val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
+          in
+            case MatchedComm.processJoin matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
+                MatchedComm.NOOP => ()
+              | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
+                  let
+                    val _ = setMatchAid recvWaitNode sendActAid
+                  in
+                    resumeThread (aidToTidInt recvActAid) value
+                  end
+              | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
+                    ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
+          end
       | R_JOIN {channel = ChannelId c, recvActAid, sendActAid} =>
-          (case MatchedComm.processJoin matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
+          let
+            val _ = PendingComm.removeAid pendingLocalSends c sendActAid
+            val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
+            val _ = PendingComm.removeAid pendingLocalRecvs c recvActAid
+            val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
+          in
+            case MatchedComm.processJoin matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
                MatchedComm.NOOP => ()
              | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
                  let
@@ -525,7 +526,8 @@ struct
                    resumeThread (aidToTidInt sendActAid) emptyW8Vec
                  end
              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
-                   ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value}))
+                   ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
+          end
       | _ => ()
   end
 
