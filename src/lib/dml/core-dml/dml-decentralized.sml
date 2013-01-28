@@ -20,7 +20,7 @@ signature MATCHED_COMM =
 sig
   type 'a t
   datatype 'a join_result =
-    SUCCESS
+    SUCCESS of 'a
   | FAILURE of {actAid : StableGraph.action_id,
                 waitNode : StableGraph.node,
                 value : 'a}
@@ -39,18 +39,17 @@ struct
   structure Assert = LocalAssert(val assert = false)
   structure Debug = LocalDebug(val debug = true)
 
-  structure ZMQ = MLton.ZMQ
+  open StableGraph
+
   structure IntDict = IntSplayDict
   structure StrDict = StringSplayDict
   structure S = CML.Scheduler
   structure C = CML
-  structure IQ = IQueue
   structure ISS = IntSplaySet
-  structure Weak = MLton.Weak
 
   open RepTypes
-  open StableGraph
 
+  structure ZMQ = MLton.ZMQ
   (* -------------------------------------------------------------------- *)
   (* Datatype definitions *)
   (* -------------------------------------------------------------------- *)
@@ -88,7 +87,7 @@ struct
       val aidDict = AISD.remove aidDict aid
     in
       strDictRef := StrDict.insert (!strDictRef) channel aidDict
-    end handle Absent => ()
+    end handle StrDict.Absent => ()
 
     exception FIRST of action_id
 
@@ -99,14 +98,14 @@ struct
       let
         val _ = AISD.app (fn (k, _) => raise FIRST k) aidDict
       in
-        raise Absent
+        raise AISD.Absent
       end handle FIRST k => k
       val aid = getOne ()
       val return = SOME (aid, AISD.lookup aidDict aid)
       val _ = removeAid strDictRef channel aid
     in
       return
-    end handle Absent => NONE
+    end handle AISD.Absent => NONE
   end
 
   structure MatchedComm : MATCHED_COMM =
@@ -114,7 +113,7 @@ struct
     type 'a t = {actAid : action_id, waitNode : node, value : 'a} AISD.dict ref
 
     datatype 'a join_result =
-      SUCCESS
+      SUCCESS of 'a
     | FAILURE of {actAid : StableGraph.action_id,
                   waitNode : StableGraph.node,
                   value : 'a}
@@ -142,13 +141,13 @@ struct
         let
           val {actAid, waitNode, value} = AISD.lookup (!aidDictRef) remoteAid
           val result =
-            if MLton.equal (actAid, withAid) then SUCCESS
+            if MLton.equal (actAid, withAid) then SUCCESS value
             else FAILURE {actAid = actAid, waitNode = waitNode, value = value}
           val _ = aidDictRef := AISD.remove (!aidDictRef) remoteAid
         in
           result
         end
-    end handle Absent => NOOP
+    end handle AISD.Absent => NOOP
 
   end
 
@@ -167,11 +166,32 @@ struct
   val matchedRecvs : w8vec MatchedComm.t = MatchedComm.empty ()
 
   val blockedThreads = ref (IntDict.empty)
+  val allThreads = ref (IntDict.empty)
 
   (* State for join and exit*)
   val numPeers = ref ~1
   val peers = ref (ISS.empty)
   val exitDaemon = ref false
+
+  (* -------------------------------------------------------------------- *)
+  (* AllThreads Helper Functions *)
+  (* -------------------------------------------------------------------- *)
+
+  fun addToAllThreads () =
+  let
+    val newAllThreads = IntDict.insert (!allThreads) (S.tidInt ()) (S.getCurThreadId ())
+  in
+    allThreads := newAllThreads
+  end
+
+  fun removeFromAllThreads () =
+  let
+    val newAllThreads = IntDict.remove (!allThreads) (S.tidInt ())
+  in
+    allThreads := newAllThreads
+  end
+
+  fun tid2tid (ThreadId tid) = IntDict.find (!allThreads) tid
 
   (* -------------------------------------------------------------------- *)
   (* Helper Functions *)
@@ -183,7 +203,7 @@ struct
 
   fun msgToString msg =
     case msg of
-         S_ACT  {channel = ChannelId cidStr, sendActAid, value} => concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
+         S_ACT  {channel = ChannelId cidStr, sendActAid, ...} => concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
        | R_ACT  {channel = ChannelId cidStr, recvActAid} => concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
        | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
        | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
@@ -207,7 +227,7 @@ struct
   fun resumeThread tidInt (value : w8vec) =
   let
     val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", SOME 1)
-    val t = IntDict.lookup (!blockedThreads) tidInt handle Absent => raise Fail "DmlDecentralized.unblockThread: Absent"
+    val t = IntDict.lookup (!blockedThreads) tidInt handle IntDict.Absent => raise Fail "DmlDecentralized.unblockThread: Absent"
     val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
     val rt = S.prepVal (t, value)
   in
@@ -413,6 +433,18 @@ struct
                   {actAid = sendActAid, remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
                end)
         end
+      | S_JOIN {channel = ChannelId c, sendActAid, recvActAid} =>
+          (case MatchedComm.processJoin matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
+               MatchedComm.NOOP => ()
+             | MatchedComm.SUCCESS value => resumeThread (aidToTidInt recvActAid) value
+             | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
+                 ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode}))
+      | R_JOIN {channel = ChannelId c, recvActAid, sendActAid} =>
+          (case MatchedComm.processJoin matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
+               MatchedComm.NOOP => ()
+             | MatchedComm.SUCCESS _ => resumeThread (aidToTidInt sendActAid) emptyW8Vec
+             | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
+                 ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value}))
       | _ => ()
   end
 
@@ -486,11 +518,26 @@ struct
                                       | _ => true)
       fun body () =
       let
-        (* start the daemon *)
-        val _ = C.spawn clientDaemon
+        (* start the daemon. Insert a CR_RB node just so that functions which
+         * expect a node at every tid will not throw exceptions. *)
+        val _ = C.spawn (fn () =>
+                  let
+                    val _ = insertCommitRollbackNode ()
+                  in
+                    clientDaemon ()
+                  end)
+        val _ = addToAllThreads ()
+        val _ = insertCommitRollbackNode ()
+        val _ = saveCont ()
+        fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();
+                                                               case e of
+                                                                    CML.Kill => ()
+                                                                  | _ => raise e)
+        val _ = safeBody ()
       in
-        f ()
+        ()
       end
+
       val _ = RunCML.doit (body, to)
       val PROXY {source, sink, ...} = !proxy
       val _ = ZMQ.sockClose (valOf source)
@@ -508,8 +555,11 @@ struct
     val _ = debug' ("DmlDecentralized.send(1)")
     val {actAid, waitNode} = handleSend {cid = c}
     val m = MLton.serialize (m)
+    val ChannelId cstr = c
   in
-    ()
+    processLocalSend Client
+      {channel = cstr, sendActAid = actAid,
+       sendWaitNode = waitNode, value = m}
   end
 
 
@@ -517,13 +567,35 @@ struct
   let
     val _ = debug' ("DmlDecentralized.recv(1)")
     val {actAid, waitNode} = handleRecv {cid = c}
+    val ChannelId cstr = c
+    val serM = processLocalRecv Client
+                {channel = cstr, recvActAid = actAid,
+                 recvWaitNode = waitNode}
   in
-    raise Fail "DmlDecentralized.recv: not implemented"
+    MLton.deserialize serM
   end
 
   val exitDaemon = fn () => exitDaemon := true
 
-  fun spawn f = ignore (C.spawn f)
+  fun spawn f =
+    let
+      val tid = S.newTid ()
+      val tidInt = C.tidToInt tid
+      val aid = handleSpawn {childTid = ThreadId tidInt}
+      fun prolog () =
+        let
+          val _ = addToAllThreads ()
+        in
+          handleInit {parentAid = aid}
+        end
+      fun safeBody () = (removeFromAllThreads(f(prolog()))) handle e => (removeFromAllThreads ();
+                                                                     case e of
+                                                                          CML.Kill => ()
+                                                                        | _ => raise e)
+    in
+      ignore (C.spawnWithTid (safeBody, tid))
+    end
+
 
 end
 

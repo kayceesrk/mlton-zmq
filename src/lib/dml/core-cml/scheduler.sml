@@ -16,7 +16,7 @@ structure Scheduler : SCHEDULER =
    struct
       structure Assert = LocalAssert(val assert = false)
       structure GlobalDebug = Debug
-      structure Debug = LocalDebug(val debug = true)
+      (* structure Debug = LocalDebug(val debug = true) *)
 
       open Critical
 
@@ -71,8 +71,8 @@ structure Scheduler : SCHEDULER =
       fun tidRev () = TID.tidToRev (getCurThreadId ())
       fun tidNextActionNum () = TID.tidNextActionNum (getCurThreadId ())
       fun tidNode () = TID.tidToNode (getCurThreadId ())
-      fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg)
-      fun debug' msg = debug (fn () => msg)
+      (* fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg) *)
+      (* fun debug' msg = debug (fn () => msg) *)
 
       fun saveCont f = TID.tidSaveCont (getCurThreadId (), f)
       fun restoreCont () = TID.tidRestoreCont (getCurThreadId ())
