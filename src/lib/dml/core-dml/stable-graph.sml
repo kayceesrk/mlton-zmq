@@ -184,18 +184,19 @@ struct
     setCurrentNode (SOME newNode)
   end
 
-  fun handleInit {parentAid : action_id} : unit =
+  fun handleInit {parentAid : action_id} =
   let
     val nodeRef = S.tidNode ()
     val _ = case !nodeRef of
                  SOME _ => raise Fail "StableGraph.handleInit: tid already has a node"
                | NONE => ()
     val beginNode = G.newNode (depGraph)
-    val act = ACTION {aid = newAid (), act = BEGIN {parentAid = parentAid}}
+    val beginAid = newAid ()
+    val act = ACTION {aid = beginAid, act = BEGIN {parentAid = parentAid}}
     val _ = setNodeEnv (beginNode, act)
     val _ = nodeRef := (SOME beginNode)
   in
-    ()
+    beginAid
   end
 
   (* Must be called by spawning thread. Adds \po edge.
@@ -218,11 +219,12 @@ struct
                  SOME _ => raise Fail "StableGraph.insertCommitRollbackNode : tid already has a node"
                | NONE => ()
     val crNode = G.newNode (depGraph)
-    val act = ACTION {aid = newAid (), act = COM_RB}
+    val comRbAid = newAid ()
+    val act = ACTION {aid = comRbAid, act = COM_RB}
     val _ = setNodeEnv (crNode, act)
     val _ = nodeRef := (SOME crNode)
   in
-    ()
+    comRbAid
   end
 
 
@@ -286,10 +288,10 @@ struct
 
   fun getMatchAid (node: unit N.t) =
   let
-    val ACTION {aid, act} = getNodeEnv node
+    val ACTION {act, ...} = getNodeEnv node
     val matchAid = case act of
-                      SEND_WAIT {cid, matchAid = SOME mAid} => mAid
-                    | RECV_WAIT {cid, matchAid = SOME mAid} => mAid
+                      SEND_WAIT {matchAid = SOME mAid, ...} => mAid
+                    | RECV_WAIT {matchAid = SOME mAid, ...} => mAid
                     | _ => raise Fail "StableGraph.getMatchAid"
   in
     matchAid
@@ -297,6 +299,12 @@ struct
 
   fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =
     pidInt = (!processId)
+
+  fun getPrevAid (ACTION_ID {pid, tid, rid, aid}) =
+    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - 1}
+
+  fun getNextAid (ACTION_ID {pid, tid, rid, aid}) =
+    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1}
 
   (********************************************************************
    * DFS
@@ -428,11 +436,11 @@ struct
      visitedSet = !visitedSet}
   end
 
-  fun saveCont () =
+  fun saveCont f =
   let
     val _ = debug (fn () => "StableGraph.saveCont")
   in
-    S.saveCont (insertCommitRollbackNode)
+    S.saveCont (f)
   end
 
   fun restoreCont () =
