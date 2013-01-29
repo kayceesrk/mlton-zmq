@@ -34,6 +34,17 @@ sig
                              withAid: StableGraph.action_id} -> 'a join_result
 end
 
+signature SATED_COMM =
+sig
+  type t
+
+  val empty : unit -> t
+  val waitTillSated          : t -> StableGraph.action_id -> unit
+  val addSatedAct            : t -> StableGraph.action_id -> unit
+  val handleCallbackRequest  : t -> {requestor: RepTypes.process_id, onAid: StableGraph.action_id} -> unit
+  val handleCallbackResponse : t -> {requestor: RepTypes.process_id, onAid: StableGraph.action_id} -> unit
+end
+
 structure DmlDecentralized : DML =
 struct
   structure Assert = LocalAssert(val assert = true)
@@ -66,6 +77,8 @@ struct
                | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
                | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN   of {pid: process_id}
+               | CALLBACK_REQ  of {requestor: process_id, onAid: action_id}
+               | CALLBACK_RESP of {requestor: process_id, onAid: action_id}
 
   datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
 
@@ -182,6 +195,8 @@ struct
 
   end
 
+
+
   (* -------------------------------------------------------------------- *)
   (* state *)
   (* -------------------------------------------------------------------- *)
@@ -196,7 +211,7 @@ struct
   val matchedSends : w8vec MatchedComm.t = MatchedComm.empty ()
   val matchedRecvs : w8vec MatchedComm.t = MatchedComm.empty ()
 
-  val blockedThreads = ref (IntDict.empty)
+  val blockedThreads : w8vec S.thread IntDict.dict ref = ref (IntDict.empty)
   val allThreads = ref (IntDict.empty)
 
   (* State for join and exit*)
@@ -236,8 +251,10 @@ struct
        | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
        | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
        | CONN {pid = ProcessId pidInt} => concat ["CONN[", Int.toString pidInt, "]"]
+       | CALLBACK_REQ {requestor = ProcessId pidInt, onAid} => concat ["CBRQ[",Int.toString pidInt, ",", aidToString onAid,"]"]
+       | CALLBACK_RESP {requestor = ProcessId pidInt, onAid} => concat ["CBRS[",Int.toString pidInt, ",", aidToString onAid,"]"]
 
-  val emptyW8Vec = Vector.tabulate (0, fn _ => 0wx0)
+  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 
   (* -------------------------------------------------------------------- *)
   (* Scheduler Helper Functions *)
@@ -311,6 +328,98 @@ struct
   in
     r
   end
+
+  (* -------------------------------------------------------------------- *)
+  (* Sated Communications -- Callback support *)
+  (* -------------------------------------------------------------------- *)
+
+  structure SatedComm : SATED_COMM =
+  struct
+    datatype status = DONE
+                    | PENDING of {msgs    : process_id list,
+                                  threads : thread_id list}
+
+    type t = status AISD.dict ref
+
+    fun empty () = ref (AISD.empty)
+
+    fun waitTillSated aidDictRef aid =
+    let
+      val _ = Assert.assertAtomic' ("SatedComm.waitTillSated(1)", SOME 1)
+
+      fun handlePendingCase {msgs, threads} : w8vec =
+        let
+          val tid = ThreadId (S.tidInt ())
+          val pid = ProcessId (!processId)
+          val _ = msgSend (CALLBACK_REQ {requestor = pid, onAid = aid})
+          val _ = aidDictRef := AISD.insert (!aidDictRef) aid (PENDING {msgs = msgs, threads = tid::threads})
+        in
+          blockCurrentThread ()
+        end
+
+      val _ =
+        case AISD.find (!aidDictRef) aid of
+            NONE => handlePendingCase {msgs = [], threads = []}
+          | SOME DONE => (S.atomicEnd (); emptyW8Vec)
+          | SOME (PENDING {msgs, threads}) => handlePendingCase {msgs = msgs, threads = threads}
+    in
+      Assert.assertNonAtomic' ("SatedComm.waitTillSated(2)")
+    end
+
+    fun handleCallbackRequest aidDictRef {requestor, onAid} =
+    let
+      val _ = Assert.assertAtomic' ("SatedAct.handleCallbackRequest", SOME 1)
+    in
+      if not (isAidLocal onAid) then ()
+      else
+        let
+          fun handlePendingCase {msgs, threads} =
+            aidDictRef := AISD.insert (!aidDictRef) onAid (PENDING {msgs = requestor::msgs, threads = threads})
+        in
+          case AISD.find (!aidDictRef) onAid of
+             NONE => handlePendingCase {msgs = [],threads = []}
+           | SOME DONE => msgSend (CALLBACK_RESP {requestor = requestor, onAid = onAid})
+           | SOME (PENDING {msgs, threads}) => handlePendingCase {msgs = msgs, threads = threads}
+        end
+    end
+
+    fun handleCallbackResponse aidDictRef {requestor = ProcessId pidInt, onAid} =
+    let
+      val _ = Assert.assertAtomic' ("SatedAct.handleCallbackResponse", SOME 1)
+    in
+      if not (pidInt = (!processId)) then ()
+      else
+        case AISD.lookup (!aidDictRef) onAid of
+             DONE => ()
+           | PENDING {msgs, threads} =>
+               let
+                 val _ = Assert.assert ([], fn () => "SatedComm.handleCallbackResponse: msgs must be empty",
+                                        fn () => length msgs = 0)
+                 val _ = ignore (ListMLton.map (threads, fn ThreadId tidInt => resumeThread tidInt emptyW8Vec))
+               in
+                 aidDictRef := AISD.insert (!aidDictRef) onAid DONE
+               end
+    end
+
+    fun addSatedAct aidDictRef aid =
+    let
+      val _ = Assert.assertAtomic' ("SatedAct.addSatedAct", SOME 1)
+    in
+      case AISD.find (!aidDictRef) aid of
+           NONE => aidDictRef := AISD.insert (!aidDictRef) aid DONE
+         | SOME DONE => raise Fail "SatedAct.addSatedAct: already added aid"
+         | SOME (PENDING {msgs, threads}) =>
+             let
+               val _ = ignore (ListMLton.map (threads, fn ThreadId tidInt => resumeThread tidInt emptyW8Vec))
+               val _ = ignore (ListMLton.map (msgs, fn pid => msgSend (CALLBACK_RESP {requestor = pid, onAid = aid})))
+             in
+               aidDictRef := AISD.insert (!aidDictRef) aid DONE
+             end
+    end
+  end
+
+  val satedCommHelper = SatedComm.empty ()
+
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -528,6 +637,8 @@ struct
              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
                    ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
           end
+      | CALLBACK_REQ m => SatedComm.handleCallbackRequest satedCommHelper m
+      | CALLBACK_RESP m => SatedComm.handleCallbackResponse satedCommHelper m
       | _ => ()
   end
 
@@ -577,7 +688,7 @@ struct
               else n+1
       val () = case msgRecvSafe () of
                     NONE => join n
-                  | SOME (m as CONN {pid = ProcessId pidInt}) =>
+                  | SOME (CONN {pid = ProcessId pidInt}) =>
                       let
                         val _ = debug' ("DmlDecentralized.connect.join(2)")
                         val _ = if ISS.member (!peers) pidInt then ()
