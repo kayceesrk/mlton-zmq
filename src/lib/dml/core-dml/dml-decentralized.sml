@@ -41,6 +41,7 @@ sig
   val empty : unit -> t
   val waitTillSated          : t -> StableGraph.action_id -> unit
   val addSatedAct            : t -> StableGraph.action_id -> unit
+  val addSatedComm           : t -> {aid: StableGraph.action_id, matchAid: StableGraph.action_id} -> unit
   val handleCallbackRequest  : t -> {requestor: RepTypes.process_id, onAid: StableGraph.action_id} -> unit
   val handleCallbackResponse : t -> {requestor: RepTypes.process_id, onAid: StableGraph.action_id} -> unit
 end
@@ -213,36 +214,23 @@ struct
 
   fun addToAllThreads () =
   let
+    val _ = S.atomicBegin ()
     val newAllThreads = IntDict.insert (!allThreads) (S.tidInt ()) (S.getCurThreadId ())
+    val _ =  allThreads := newAllThreads
   in
-    allThreads := newAllThreads
+    S.atomicEnd ()
   end
 
   fun removeFromAllThreads () =
   let
+    val _ = S.atomicBegin ()
     val newAllThreads = IntDict.remove (!allThreads) (S.tidInt ())
+    val _ = allThreads := newAllThreads
   in
-    allThreads := newAllThreads
+    S.atomicEnd ()
   end
 
   fun tid2tid (ThreadId tid) = IntDict.find (!allThreads) tid
-
-  (* -------------------------------------------------------------------- *)
-  (* Helper Functions *)
-  (* -------------------------------------------------------------------- *)
-
-
-  fun msgToString msg =
-    case msg of
-         S_ACT  {channel = ChannelId cidStr, sendActAid, ...} => concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
-       | R_ACT  {channel = ChannelId cidStr, recvActAid} => concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
-       | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
-       | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
-       | CONN {pid = ProcessId pidInt} => concat ["CONN[", Int.toString pidInt, "]"]
-       | CALLBACK_REQ {requestor = ProcessId pidInt, onAid} => concat ["CBRQ[",Int.toString pidInt, ",", aidToString onAid,"]"]
-       | CALLBACK_RESP {requestor = ProcessId pidInt, onAid} => concat ["CBRS[",Int.toString pidInt, ",", aidToString onAid,"]"]
-
-  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 
   (* -------------------------------------------------------------------- *)
   (* Scheduler Helper Functions *)
@@ -269,6 +257,18 @@ struct
   (* -------------------------------------------------------------------- *)
   (* Message Helper Functions *)
   (* -------------------------------------------------------------------- *)
+
+  fun msgToString msg =
+    case msg of
+         S_ACT  {channel = ChannelId cidStr, sendActAid, ...} => concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
+       | R_ACT  {channel = ChannelId cidStr, recvActAid} => concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
+       | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
+       | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
+       | CONN {pid = ProcessId pidInt} => concat ["CONN[", Int.toString pidInt, "]"]
+       | CALLBACK_REQ {requestor = ProcessId pidInt, onAid} => concat ["CBRQ[",Int.toString pidInt, ",", aidToString onAid,"]"]
+       | CALLBACK_RESP {requestor = ProcessId pidInt, onAid} => concat ["CBRS[",Int.toString pidInt, ",", aidToString onAid,"]"]
+
+  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 
   fun msgSend (msg : msg) =
   let
@@ -318,6 +318,14 @@ struct
   end
 
   (* -------------------------------------------------------------------- *)
+  (* Other Helper Functions *)
+  (* -------------------------------------------------------------------- *)
+
+  fun getCurrentNode () = valOf (!(S.tidNode ()))
+  fun getCurrentAid () = getAidFromNode (getCurrentNode ())
+
+
+  (* -------------------------------------------------------------------- *)
   (* Sated Communications -- Callback support *)
   (* -------------------------------------------------------------------- *)
 
@@ -333,6 +341,7 @@ struct
 
     fun waitTillSated (SATE {final = aidDictRef, ...}) aid =
     let
+      val _ = S.atomicBegin ()
       val _ = Assert.assertAtomic' ("SatedComm.waitTillSated(1)", SOME 1)
 
       fun handlePendingCase {msgs, threads} : w8vec =
@@ -371,15 +380,19 @@ struct
         end
     end
 
+    (* Note that handleCallbackResponse's onAids are all non-local. Hence, they
+     * can be directly added to final (aidDictRef), as opposed to adding first
+     * to pending (aidSetRef) and moving to final in program order. *)
     fun handleCallbackResponse (SATE {final = aidDictRef, ...}) {requestor = ProcessId pidInt, onAid} =
     let
       val _ = Assert.assertAtomic' ("SatedAct.handleCallbackResponse", SOME 1)
     in
       if not (pidInt = (!processId)) then ()
       else
-        case AISD.lookup (!aidDictRef) onAid of
-             DONE => ()
-           | PENDING {msgs, threads} =>
+        case AISD.find (!aidDictRef) onAid of
+             NONE => aidDictRef := AISD.insert (!aidDictRef) onAid DONE
+           | SOME DONE => ()
+           | SOME (PENDING {msgs, threads}) =>
                let
                  val _ = Assert.assert ([], fn () => "SatedComm.handleCallbackResponse: msgs must be empty",
                                         fn () => length msgs = 0)
@@ -424,6 +437,9 @@ struct
         addToFinal aid
       else aidSetRef := AISS.insert (!aidSetRef) aid
     end
+
+    fun addSatedComm state {aid, matchAid} =
+      addSatedAct state aid
   end
 
   val satedCommHelper = SatedComm.empty ()
@@ -510,17 +526,14 @@ struct
               val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = resumeBlockedRecv {recvActAid = recvActAid} value
-              val _ = case callerKind of
-                          Daemon => satiateSend {sendActAid = sendActAid}
-                        | Client => S.atomicEnd ()
+              val _ = satiateSend {sendActAid = sendActAid}
             in
               ()
             end
-    val _ =  debug' ("DmlDecentralized.processLocalSend(6)")
+    val _ = debug' ("DmlDecentralized.processLocalSend(6)")
+    val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(6)", SOME 1)
   in
-    case callerKind of
-         Client => Assert.assertNonAtomic' ("DmlDecentralized.processLocalSend(6)")
-       | Daemon => Assert.assertAtomic' ("DmlDecentralized.processLocalSend(6)", SOME 1)
+    ()
   end
 
   fun processLocalRecv callerKind {channel = c, recvActAid, recvWaitNode} =
@@ -746,7 +759,7 @@ struct
                   end)
         val _ = addToAllThreads ()
         val comRbAid = insertCommitRollbackNode ()
-        val _ = SatedComm.addSatedAct satedCommHelper comRbAid
+        val _ = S.doAtomic (fn () => SatedComm.addSatedAct satedCommHelper comRbAid)
         val _ = saveCont ()
         fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();
                                                                case e of
@@ -775,10 +788,11 @@ struct
     val {actAid, waitNode} = handleSend {cid = c}
     val m = MLton.serialize (m)
     val ChannelId cstr = c
+    val _ = processLocalSend Client
+              {channel = cstr, sendActAid = actAid,
+               sendWaitNode = waitNode, value = m}
   in
-    processLocalSend Client
-      {channel = cstr, sendActAid = actAid,
-       sendWaitNode = waitNode, value = m}
+    S.atomicEnd ()
   end
 
 
@@ -802,13 +816,15 @@ struct
       val tid = S.newTid ()
       val tidInt = C.tidToInt tid
       val aid = handleSpawn {childTid = ThreadId tidInt}
-      val _ = SatedComm.addSatedAct satedCommHelper aid
+      val _ = S.doAtomic (fn () => SatedComm.addSatedAct satedCommHelper aid)
       fun prolog () =
         let
+          val _ = S.atomicBegin ()
           val _ = addToAllThreads ()
           val beginAct = handleInit {parentAid = aid}
+          val _ = SatedComm.addSatedAct satedCommHelper beginAct
         in
-          SatedComm.addSatedAct satedCommHelper beginAct
+          S.atomicEnd ()
         end
       fun safeBody () = (removeFromAllThreads(f(prolog()))) handle e => (removeFromAllThreads ();
                                                                      case e of
@@ -818,6 +834,7 @@ struct
       ignore (C.spawnWithTid (safeBody, tid))
     end
 
+  fun commit () = SatedComm.waitTillSated satedCommHelper (getCurrentAid ())
 
 end
 

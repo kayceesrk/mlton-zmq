@@ -436,6 +436,13 @@ struct
      visitedSet = !visitedSet}
   end
 
+  fun getAidFromNode node =
+    let
+      val ACTION {aid, ...} = getNodeEnv node
+    in
+      aid
+    end
+
   fun saveCont f =
   let
     val _ = debug (fn () => "StableGraph.saveCont")

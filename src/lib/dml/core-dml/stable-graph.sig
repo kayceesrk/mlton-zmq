@@ -35,6 +35,7 @@ sig
   val isAidLocal : action_id -> bool
   val getPrevAid : action_id -> action_id
   val getNextAid : action_id -> action_id
+  val getAidFromNode : node -> action_id
 
   structure ActionIdOrdered : ORDERED where type t = action_id
   structure AISS : SET  where type elem = action_id
