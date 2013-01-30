@@ -428,15 +428,22 @@ struct
 
   val satedCommHelper = SatedComm.empty ()
 
-  fun resumeThreadBlockedOnComm aid value =
+  fun resumeBlockedRecv {recvActAid} value =
   let
-    val tidInt = aidToTidInt aid
-    val _ = SatedComm.addSatedAct satedCommHelper aid
-    val _ = SatedComm.addSatedAct satedCommHelper (getNextAid aid)
+    val tidInt = aidToTidInt recvActAid
+    val _ = SatedComm.addSatedAct satedCommHelper recvActAid
+    val _ = SatedComm.addSatedAct satedCommHelper (getNextAid recvActAid)
   in
     resumeThread tidInt value
   end
 
+  fun satiateSend {sendActAid} =
+  let
+    val _ = SatedComm.addSatedAct satedCommHelper sendActAid
+    val _ = SatedComm.addSatedAct satedCommHelper (getNextAid sendActAid)
+  in
+    ()
+  end
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -479,9 +486,6 @@ struct
                         val _ = msgSend (S_ACT {channel = ChannelId c, sendActAid = sendActAid, value = value})
                         val _ = PendingComm.addAid pendingLocalSends c sendActAid
                           {sendWaitNode = sendWaitNode, value = value}
-                        val _ = case callerKind of
-                                    Client => blockCurrentThread ()
-                                  | Daemon => emptyW8Vec
                       in
                         ()
                       end
@@ -493,9 +497,6 @@ struct
                         val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedSends
                           {actAid = sendActAid, remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
-                        val _ = case callerKind of
-                                    Client => blockCurrentThread ()
-                                  | Daemon => emptyW8Vec
                       in
                         ()
                       end
@@ -508,9 +509,9 @@ struct
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
-              val _ = resumeThreadBlockedOnComm recvActAid value
+              val _ = resumeBlockedRecv {recvActAid = recvActAid} value
               val _ = case callerKind of
-                          Daemon => resumeThreadBlockedOnComm sendActAid emptyW8Vec
+                          Daemon => satiateSend {sendActAid = sendActAid}
                         | Client => S.atomicEnd ()
             in
               ()
@@ -566,9 +567,9 @@ struct
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
-              val _ = resumeThreadBlockedOnComm sendActAid emptyW8Vec
+              val _ = satiateSend {sendActAid = sendActAid}
               val () = case callerKind of
-                          Daemon => resumeThreadBlockedOnComm recvActAid value
+                          Daemon => resumeBlockedRecv {recvActAid = recvActAid} value
                         | Client => S.atomicEnd ()
             in
               value
@@ -631,7 +632,7 @@ struct
                   let
                     val _ = setMatchAid recvWaitNode sendActAid
                   in
-                    resumeThreadBlockedOnComm recvActAid value
+                    resumeBlockedRecv {recvActAid = recvActAid} value
                   end
               | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
                     ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
@@ -649,7 +650,7 @@ struct
                  let
                    val _ = setMatchAid sendWaitNode recvActAid
                  in
-                   resumeThreadBlockedOnComm sendActAid emptyW8Vec
+                   satiateSend {sendActAid = sendActAid}
                  end
              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
                    ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
