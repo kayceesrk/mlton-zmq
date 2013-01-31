@@ -26,7 +26,7 @@ let
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
                    processId = 1, numPeers = 2}
 in
-  ignore (runDML (fn () => loop 100, NONE))
+  ignore (runDML (fn () => loop 1, NONE))
 end
 
 fun ponger () =
@@ -44,7 +44,7 @@ let
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
                    processId = 2, numPeers = 2}
 in
-  ignore (runDML (fn () => loop 100, NONE))
+  ignore (runDML (fn () => loop 1, NONE))
 end
 
 

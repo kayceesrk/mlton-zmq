@@ -41,6 +41,7 @@ sig
   val empty : unit -> t
   val waitTillSated      : t -> StableGraph.action_id -> unit
   val addSatedAct        : t -> StableGraph.action_id -> unit
+  val addSatedActForce   : t -> StableGraph.action_id -> unit
   val addSatedComm       : t -> {aid: StableGraph.action_id,
                                  matchAid: StableGraph.action_id,
                                  value: RepTypes.w8vec option} -> unit
@@ -267,7 +268,7 @@ struct
        | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
        | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
        | CONN {pid = ProcessId pidInt} => concat ["CONN[", Int.toString pidInt, "]"]
-       | SATED {recipient = ProcessId pidInt, remoteAid, matchAid} => concat ["CBRQ[",Int.toString pidInt, ",", aidToString remoteAid, ",", aidToString matchAid, "]"]
+       | SATED {recipient = ProcessId pidInt, remoteAid, matchAid} => concat ["SATED[",Int.toString pidInt, ",", aidToString remoteAid, ",", aidToString matchAid, "]"]
 
   val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 
@@ -332,6 +333,8 @@ struct
 
   structure SatedComm : SATED_COMM =
   struct
+    structure Debug = LocalDebug(val debug = true)
+
     datatype t = SC of {waiting : thread_id AISD.dict ref, (* waiting threads *)
                         pending : {matchAid: action_id, value: w8vec option} option AISD.dict ref, (* matched but unsated actions *)
                         final   : {matchAid: action_id, value: w8vec option} option AISD.dict ref}
@@ -362,7 +365,7 @@ struct
              (resumeThread tidInt emptyW8Vec;
               waiting := AISD.remove (!waiting) aid)
 
-    fun maybeProcessPending (state as SC {final, waiting, pending}) nextAid =
+    fun maybeProcessPending (state as SC {pending, ...}) nextAid =
       case AISD.find (!pending) nextAid of
            NONE => ()
          | SOME kind =>
@@ -374,29 +377,64 @@ struct
                   | SOME {matchAid, value} => addSatedComm state {aid = nextAid, matchAid = matchAid, value = value}
              end
 
-    and addSatedAct (state as SC {final, waiting, pending}) aid =
+    and addSatedAct (state as SC {final, pending, ...}) aid =
     let
       val _ = Assert.assertAtomic' ("SatedComm.addSatedAct", SOME 1)
     in
       if AISD.member (!final) (getPrevAid aid) then
-        (final := AISD.insert (!final) aid NONE;
-        maybeWakeupThread state aid;
-        maybeProcessPending state (getNextAid aid))
+        let
+          val _ = final := AISD.insert (!final) aid NONE
+          val _ = maybeWakeupThread state aid
+          val _ = maybeProcessPending state (getNextAid aid)
+        in
+          ()
+        end
       else
         pending := AISD.insert (!pending) aid NONE
     end
 
-    and addSatedComm (state as SC {final, waiting, pending}) {aid, matchAid, value} =
+    and addSatedActForce (state as SC {final, ...}) aid =
+    let
+      val _ = S.atomicBegin ()
+      val _ = Assert.assertAtomic' ("SatedComm.addSatedActForce", NONE)
+      val _ = final := AISD.insert (!final) aid NONE
+      val _ = maybeWakeupThread state aid
+      val _ = maybeProcessPending state (getNextAid aid)
+    in
+      S.atomicEnd ()
+    end
+
+    and addSatedComm (state as SC {final, pending, ...}) {aid, matchAid, value} =
     let
       val _ = Assert.assertAtomic' ("SatedComm.addSatedComm", SOME 1)
     in
+      (* prevAct, matchAct \in final *)
       if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!final) matchAid then
-        (final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value});
-         maybeWakeupThread state aid;
-         maybeProcessPending state aid)
+        let
+          val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
+          val _ = maybeWakeupThread state aid
+          val _ = maybeProcessPending state (getNextAid aid)
+        in
+          ()
+        end
+      (* prevAct \in final, matchAct \notin final, remote(matchAid) *)
       else if AISD.member (!final) (getPrevAid aid) andalso not (isAidLocal matchAid) then
-        msgSend (SATED {recipient = ProcessId (aidToPidInt matchAid),
-                        remoteAid = aid, matchAid = matchAid})
+        let
+          val _ = msgSend (SATED {recipient = ProcessId (aidToPidInt matchAid),
+                                  remoteAid = aid, matchAid = matchAid})
+          val _ = pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
+        in
+          ()
+        end
+      (* prevAct \in final, matchAct \in pending, local(matchAid) *)
+      else if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!pending) matchAid andalso (isAidLocal matchAid) then
+        let
+          val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
+          val _ = maybeProcessPending state matchAid
+        in
+          ()
+        end
+      (* prevAct \notin final *)
       else
         pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
     end
@@ -409,23 +447,22 @@ struct
       maybeProcessPending state matchAid
     end
 
-
-  end
+  end (* structure SatedComm *)
 
   val satedCommHelper = SatedComm.empty ()
 
-  fun resumeBlockedRecv {recvActAid} value =
+  fun resumeBlockedRecv {sendActAid, recvActAid} value =
   let
     val tidInt = aidToTidInt recvActAid
-    val _ = SatedComm.addSatedAct satedCommHelper recvActAid
+    val _ = SatedComm.addSatedComm satedCommHelper {aid = recvActAid, matchAid = sendActAid, value = SOME value}
     val _ = SatedComm.addSatedAct satedCommHelper (getNextAid recvActAid)
   in
     resumeThread tidInt value
   end
 
-  fun satiateSend {sendActAid} =
+  fun satiateSend {sendActAid, recvActAid} =
   let
-    val _ = SatedComm.addSatedAct satedCommHelper sendActAid
+    val _ = SatedComm.addSatedComm satedCommHelper {aid = sendActAid, matchAid = recvActAid, value = NONE}
     val _ = SatedComm.addSatedAct satedCommHelper (getNextAid sendActAid)
   in
     ()
@@ -495,8 +532,8 @@ struct
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
-              val _ = resumeBlockedRecv {recvActAid = recvActAid} value
-              val _ = satiateSend {sendActAid = sendActAid}
+              val _ = resumeBlockedRecv {sendActAid = sendActAid, recvActAid = recvActAid} value
+              val _ = satiateSend {sendActAid = sendActAid, recvActAid = recvActAid}
             in
               ()
             end
@@ -550,9 +587,9 @@ struct
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = ChannelId c, sendActAid = sendActAid, recvActAid = recvActAid})
-              val _ = satiateSend {sendActAid = sendActAid}
+              val _ = satiateSend {sendActAid = sendActAid, recvActAid = recvActAid}
               val () = case callerKind of
-                          Daemon => resumeBlockedRecv {recvActAid = recvActAid} value
+                          Daemon => resumeBlockedRecv {sendActAid = sendActAid, recvActAid = recvActAid} value
                         | Client => S.atomicEnd ()
             in
               value
@@ -615,7 +652,7 @@ struct
                   let
                     val _ = setMatchAid recvWaitNode sendActAid
                   in
-                    resumeBlockedRecv {recvActAid = recvActAid} value
+                    resumeBlockedRecv {sendActAid = sendActAid, recvActAid = recvActAid} value
                   end
               | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
                     ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
@@ -633,7 +670,7 @@ struct
                  let
                    val _ = setMatchAid sendWaitNode recvActAid
                  in
-                   satiateSend {sendActAid = sendActAid}
+                   satiateSend {sendActAid = sendActAid, recvActAid = recvActAid}
                  end
              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
                    ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
@@ -711,7 +748,7 @@ struct
     ()
   end
 
-  fun saveCont () = StableGraph.saveCont (fn () => SatedComm.addSatedAct satedCommHelper (insertCommitRollbackNode ()))
+  fun saveCont () = StableGraph.saveCont (fn () => SatedComm.addSatedActForce satedCommHelper (insertCommitRollbackNode ()))
 
   fun runDML (f, to) =
     let
@@ -731,7 +768,7 @@ struct
                   end)
         val _ = addToAllThreads ()
         val comRbAid = insertCommitRollbackNode ()
-        val _ = SatedComm.addSatedAct satedCommHelper comRbAid
+        val _ = SatedComm.addSatedActForce satedCommHelper comRbAid
         val _ = saveCont ()
         fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();
                                                                case e of
@@ -794,7 +831,7 @@ struct
           val _ = S.atomicBegin ()
           val _ = addToAllThreads ()
           val beginAct = handleInit {parentAid = aid}
-          val _ = SatedComm.addSatedAct satedCommHelper beginAct
+          val _ = SatedComm.addSatedActForce satedCommHelper beginAct
         in
           S.atomicEnd ()
         end
@@ -805,6 +842,14 @@ struct
     in
       ignore (C.spawnWithTid (safeBody, tid))
     end
+
+  fun commit () =
+  let
+    val node = valOf (!(S.tidNode()))
+    val aid = getAidFromNode node
+  in
+    SatedComm.waitTillSated satedCommHelper aid
+  end
 end
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)
