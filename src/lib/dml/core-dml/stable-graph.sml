@@ -337,7 +337,7 @@ struct
    * returns false and sets the node to be visited such that subsequent
    * queries with the same node return true. *)
   fun dfs {startNode : unit N.t,
-           foo : unit N.t * 'a -> 'a,
+           workAndAccumulate : unit N.t * 'a -> 'a,
            acc : 'a,
            tid2tid,
            hasBeenVisited : unit N.t -> bool} =
@@ -347,7 +347,7 @@ struct
         else
           let
             val _ = debug (fn () => "StableGraph.dfs: "^(nodeToString n))
-            val newAcc = foo (n, acc)
+            val newAcc = workAndAccumulate (n, acc)
             val adjs = N.successors n
             val succs = map E.to adjs
             val ACTION {act, ...} = getNodeEnv n
@@ -398,7 +398,7 @@ struct
          false)
     end
 
-    fun foo (node, rbDict) =
+    fun workAndAccumulate (node, rbDict) =
     let
       val ACTION {act, ...} = getNodeEnv node
 
@@ -421,8 +421,8 @@ struct
     end
 
     val rbDict =
-      dfs {startNode = startNode, foo = foo, acc = rbDict,
-           tid2tid = tid2tid, hasBeenVisited = hasBeenVisited}
+      dfs {startNode = startNode, workAndAccumulate = workAndAccumulate,
+           acc = rbDict, tid2tid = tid2tid, hasBeenVisited = hasBeenVisited}
 
     val (_,rbList) = ListMLton.unzip (GISD.toList rbDict)
     val (localRestore, remoteRollbacks) =
@@ -459,3 +459,4 @@ struct
 end
 
 (* TODO: remove nodes from property list *)
+(* TODO: never match communications from the same thread *)
