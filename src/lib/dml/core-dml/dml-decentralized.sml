@@ -374,7 +374,7 @@ struct
          | SOME kind =>
              let
                val _ = pending := AISD.remove (!pending) nextAid
-               val _ = debug (fn () => "Add to pending"^(aidToString nextAid))
+               val _ = debug (fn () => "Add to pending "^(aidToString nextAid))
              in
                case kind of
                     NONE => addSatedAct state nextAid
@@ -388,7 +388,7 @@ struct
       if AISD.member (!final) (getPrevAid aid) then
         let
           val _ = final := AISD.insert (!final) aid NONE
-          val _ = debug (fn () => "Add to final"^(aidToString aid))
+          val _ = debug (fn () => "Add to final "^(aidToString aid))
           val _ = maybeWakeupThread state aid
           val _ = maybeProcessPending state (getNextAid aid)
         in
@@ -397,7 +397,7 @@ struct
       else
         let
           val _ = pending := AISD.insert (!pending) aid NONE
-          val _ = debug (fn () => "Add to pending"^(aidToString aid))
+          val _ = debug (fn () => "Add to pending "^(aidToString aid))
         in
           ()
         end
@@ -408,7 +408,7 @@ struct
       val _ = S.atomicBegin ()
       val _ = Assert.assertAtomic' ("SatedComm.addSatedActForce", NONE)
       val _ = final := AISD.insert (!final) aid NONE
-      val _ = debug (fn () => "Add to final"^(aidToString aid))
+      val _ = debug (fn () => "Add to final "^(aidToString aid))
       val _ = maybeWakeupThread state aid
       val _ = maybeProcessPending state (getNextAid aid)
     in
@@ -423,7 +423,7 @@ struct
       if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!final) matchAid then
         let
           val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
-          val _ = debug (fn () => "Add to final"^(aidToString aid))
+          val _ = debug (fn () => "Add to final "^(aidToString aid))
           val _ = maybeWakeupThread state aid
           val _ = maybeProcessPending state (getNextAid aid)
         in
@@ -435,7 +435,7 @@ struct
           val _ = msgSend (SATED {recipient = ProcessId (aidToPidInt matchAid),
                                   remoteAid = aid, matchAid = matchAid})
           val _ = pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
-          val _ = debug (fn () => "Add to pending"^(aidToString aid))
+          val _ = debug (fn () => "Add to pending "^(aidToString aid))
         in
           ()
         end
@@ -443,7 +443,7 @@ struct
       else if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!pending) matchAid andalso (isAidLocal matchAid) then
         let
           val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
-          val _ = debug (fn () => "Add to final"^(aidToString aid))
+          val _ = debug (fn () => "Add to final "^(aidToString aid))
           val _ = maybeProcessPending state matchAid
         in
           ()
@@ -452,7 +452,7 @@ struct
       else
         let
           val _ = pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
-          val _ = debug (fn () => "Add to pending"^(aidToString aid))
+          val _ = debug (fn () => "Add to pending "^(aidToString aid))
         in
           ()
         end
@@ -462,7 +462,7 @@ struct
     let
       val _ = Assert.assertAtomic' ("SatedComm.handleSatedMessage", SOME 1)
       val _ = final := AISD.insert (!final) remoteAid NONE
-      val _ = debug (fn () => "Add to final"^(aidToString remoteAid))
+      val _ = debug (fn () => "Add to final "^(aidToString remoteAid))
     in
       maybeProcessPending state matchAid
     end
@@ -487,6 +487,15 @@ struct
   in
     ()
   end
+
+  fun satiateRecv {sendActAid, recvActAid} value =
+  let
+    val _ = SatedComm.addSatedComm satedCommHelper {aid = recvActAid, matchAid = sendActAid, value = SOME value}
+    val _ = SatedComm.addSatedAct satedCommHelper (getNextAid recvActAid)
+  in
+    ()
+  end
+
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -610,7 +619,12 @@ struct
               val _ = satiateSend {sendActAid = sendActAid, recvActAid = recvActAid}
               val () = case callerKind of
                           Daemon => resumeBlockedRecv {sendActAid = sendActAid, recvActAid = recvActAid} value
-                        | Client => S.atomicEnd ()
+                        | Client =>
+                            let
+                              val _ = satiateRecv {sendActAid = sendActAid, recvActAid = recvActAid} value
+                            in
+                              S.atomicEnd ()
+                            end
             in
               value
             end
