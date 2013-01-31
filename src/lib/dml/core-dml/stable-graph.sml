@@ -457,3 +457,5 @@ struct
     S.restoreCont ()
   end
 end
+
+(* TODO: remove nodes from property list *)

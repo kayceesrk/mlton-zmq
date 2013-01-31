@@ -335,6 +335,9 @@ struct
   struct
     structure Debug = LocalDebug(val debug = true)
 
+    fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
+    fun debug' msg = debug (fn () => msg)
+
     datatype t = SC of {waiting : thread_id AISD.dict ref, (* waiting threads *)
                         pending : {matchAid: action_id, value: w8vec option} option AISD.dict ref, (* matched but unsated actions *)
                         final   : {matchAid: action_id, value: w8vec option} option AISD.dict ref}
@@ -371,6 +374,7 @@ struct
          | SOME kind =>
              let
                val _ = pending := AISD.remove (!pending) nextAid
+               val _ = debug (fn () => "Add to pending"^(aidToString nextAid))
              in
                case kind of
                     NONE => addSatedAct state nextAid
@@ -384,13 +388,19 @@ struct
       if AISD.member (!final) (getPrevAid aid) then
         let
           val _ = final := AISD.insert (!final) aid NONE
+          val _ = debug (fn () => "Add to final"^(aidToString aid))
           val _ = maybeWakeupThread state aid
           val _ = maybeProcessPending state (getNextAid aid)
         in
           ()
         end
       else
-        pending := AISD.insert (!pending) aid NONE
+        let
+          val _ = pending := AISD.insert (!pending) aid NONE
+          val _ = debug (fn () => "Add to pending"^(aidToString aid))
+        in
+          ()
+        end
     end
 
     and addSatedActForce (state as SC {final, ...}) aid =
@@ -398,6 +408,7 @@ struct
       val _ = S.atomicBegin ()
       val _ = Assert.assertAtomic' ("SatedComm.addSatedActForce", NONE)
       val _ = final := AISD.insert (!final) aid NONE
+      val _ = debug (fn () => "Add to final"^(aidToString aid))
       val _ = maybeWakeupThread state aid
       val _ = maybeProcessPending state (getNextAid aid)
     in
@@ -412,6 +423,7 @@ struct
       if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!final) matchAid then
         let
           val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
+          val _ = debug (fn () => "Add to final"^(aidToString aid))
           val _ = maybeWakeupThread state aid
           val _ = maybeProcessPending state (getNextAid aid)
         in
@@ -423,6 +435,7 @@ struct
           val _ = msgSend (SATED {recipient = ProcessId (aidToPidInt matchAid),
                                   remoteAid = aid, matchAid = matchAid})
           val _ = pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
+          val _ = debug (fn () => "Add to pending"^(aidToString aid))
         in
           ()
         end
@@ -430,19 +443,26 @@ struct
       else if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!pending) matchAid andalso (isAidLocal matchAid) then
         let
           val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
+          val _ = debug (fn () => "Add to final"^(aidToString aid))
           val _ = maybeProcessPending state matchAid
         in
           ()
         end
       (* prevAct \notin final *)
       else
-        pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
+        let
+          val _ = pending := AISD.insert (!pending) aid (SOME {matchAid = matchAid, value = value})
+          val _ = debug (fn () => "Add to pending"^(aidToString aid))
+        in
+          ()
+        end
     end
 
     and handleSatedMessage (state as SC {final, waiting, pending}) {recipient, remoteAid, matchAid} =
     let
       val _ = Assert.assertAtomic' ("SatedComm.handleSatedMessage", SOME 1)
       val _ = final := AISD.insert (!final) remoteAid NONE
+      val _ = debug (fn () => "Add to final"^(aidToString remoteAid))
     in
       maybeProcessPending state matchAid
     end
@@ -741,7 +761,7 @@ struct
     in
       ()
     end
-    val _ = join 0
+    val _ = if np = 1 then () else join 0
     (* If we get here, then we have joined *)
     val _ = debug' ("DmlDecentralized.connect.join(3)")
   in
