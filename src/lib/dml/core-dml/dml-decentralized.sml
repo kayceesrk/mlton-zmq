@@ -20,16 +20,16 @@ signature MATCHED_COMM =
 sig
   type 'a t
   datatype 'a join_result =
-    SUCCESS of {value : 'a, waitNode: ActionManager.node}
+    SUCCESS of {value : 'a, waitNode: POHelper.node}
   | FAILURE of {actAid : ActionManager.action_id,
-                waitNode : ActionManager.node,
+                waitNode : POHelper.node,
                 value : 'a}
   | NOOP
 
   val empty : unit -> 'a t
   val add   : 'a t -> {actAid: ActionManager.action_id,
                        remoteMatchAid: ActionManager.action_id,
-                       waitNode: ActionManager.node} -> 'a -> unit
+                       waitNode: POHelper.node} -> 'a -> unit
   val join  : 'a t -> {remoteAid: ActionManager.action_id,
                        withAid: ActionManager.action_id} -> 'a join_result
 end
@@ -50,13 +50,15 @@ sig
                                  matchAid: ActionManager.action_id} -> unit
 end
 
-structure DmlDecentralized : DML =
+structure DmlDecentralized : DML_INTERNAL =
 struct
   structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
 
-  open ActionManager
   open RepTypes
+  open ActionManager
+  open CommunicationManager
+  open POHelper
 
   structure IntDict = IntSplayDict
   structure StrDict = StringSplayDict
@@ -73,10 +75,11 @@ struct
   fun debug' msg = debug (fn () => msg)
 
   (* -------------------------------------------------------------------- *)
-  (* Datatype definitions *)
+  (* Datatype and value definitions *)
   (* -------------------------------------------------------------------- *)
 
   datatype 'a chan = CHANNEL of channel_id
+  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 
   (* -------------------------------------------------------------------- *)
   (* Pending Communication Helper *)
@@ -138,9 +141,9 @@ struct
     type 'a t = {actAid : action_id, waitNode : node, value : 'a} AISD.dict ref
 
     datatype 'a join_result =
-      SUCCESS of {value : 'a, waitNode: ActionManager.node}
+      SUCCESS of {value : 'a, waitNode: POHelper.node}
     | FAILURE of {actAid : ActionManager.action_id,
-                  waitNode : ActionManager.node,
+                  waitNode : POHelper.node,
                   value : 'a}
     | NOOP
 
@@ -249,72 +252,6 @@ struct
   in
     S.ready rt
   end
-
-  (* -------------------------------------------------------------------- *)
-  (* Message Helper Functions *)
-  (* -------------------------------------------------------------------- *)
-
-  fun msgToString msg =
-    case msg of
-         S_ACT  {channel = ChannelId cidStr, sendActAid, ...} => concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
-       | R_ACT  {channel = ChannelId cidStr, recvActAid} => concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
-       | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
-       | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
-       | CONN {pid = ProcessId pidInt} => concat ["CONN[", Int.toString pidInt, "]"]
-       | SATED {recipient = ProcessId pidInt, remoteAid, matchAid} => concat ["SATED[",Int.toString pidInt, ",", aidToString remoteAid, ",", aidToString matchAid, "]"]
-
-  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
-
-  fun msgSend (msg : msg) =
-  let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.msgSend", SOME 1)
-    val PROXY {sink, ...} = !proxy
-    val _ = ZMQ.send (valOf sink, ROOTED_MSG {msg = msg, sender = ProcessId (!processId)})
-    val _ = debug (fn () => "Sent: "^(msgToString msg))
-  in
-    ()
-  end
-
-  fun msgSendSafe msg =
-  let
-    val _ = Assert.assertNonAtomic' ("DmlDecentralized.msgSendSafe")
-    val _ = S.atomicBegin ()
-    val _ = msgSend msg
-    val _ = S.atomicEnd ()
-  in
-    ()
-  end
-
-  fun msgRecv () : msg option =
-  let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.msgRecv", SOME 1)
-    val PROXY {source, ...} = !proxy
-  in
-    case ZMQ.recvNB (valOf source) of
-         NONE => NONE
-       | SOME (ROOTED_MSG {msg, sender = ProcessId pidInt}) =>
-           if pidInt = (!processId) then NONE
-           else
-             let
-               val _ = debug (fn () => "Received: "^(msgToString msg))
-             in
-              SOME msg
-             end
-  end
-
-  fun msgRecvSafe () =
-  let
-    val _ = Assert.assertNonAtomic' ("DmlDecentralized.msgRecvSafe")
-    val _ = S.atomicBegin ()
-    val r = msgRecv ()
-    val _ = S.atomicEnd ()
-  in
-    r
-  end
-
-  (* -------------------------------------------------------------------- *)
-  (* Other Helper Functions *)
-  (* -------------------------------------------------------------------- *)
 
   (* -------------------------------------------------------------------- *)
   (* Sated Communications -- Callback support *)
@@ -772,7 +709,9 @@ struct
     ()
   end
 
-  fun saveCont () = ActionManager.saveCont (fn () => SatedComm.addSatedActForce satedCommHelper (insertCommitRollbackNode ()))
+
+
+  fun saveCont () = POHelper.saveCont (fn () => SatedComm.addSatedActForce satedCommHelper (insertCommitRollbackNode ()))
 
   fun runDML (f, to) =
     let

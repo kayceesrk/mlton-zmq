@@ -42,3 +42,8 @@ sig
    * *)
   (* ------------------------------------------------------*)
 end
+
+signature DML_INTERNAL =
+sig
+  include DML
+end

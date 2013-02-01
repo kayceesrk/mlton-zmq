@@ -27,12 +27,23 @@ struct
                                      rid: int,
                                      aid: int}
 
+  datatype action_type = SEND_WAIT of {cid: channel_id, matchAid: action_id option}
+                       | SEND_ACT of {cid: channel_id}
+                       | RECV_WAIT of {cid: channel_id, matchAid: action_id option}
+                       | RECV_ACT of {cid: channel_id}
+                       | SPAWN of {childTid: thread_id}
+                       | BEGIN of {parentAid: action_id}
+                       | COM_RB (* This indicates the node that is inserted after commit or rollback *)
+
+  datatype action = ACTION of {aid: action_id, act: action_type}
+
   datatype msg = S_ACT  of {channel: channel_id, sendActAid: action_id, value: w8vec}
                | R_ACT  of {channel: channel_id, recvActAid: action_id}
                | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
                | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN   of {pid: process_id}
                | SATED  of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
+               | AR_ADD of {action: action, prevAction: action option}
 
   datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
 
