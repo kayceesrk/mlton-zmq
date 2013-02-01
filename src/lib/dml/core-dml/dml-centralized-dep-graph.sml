@@ -22,7 +22,7 @@ struct
   structure CR  = Critical
 
   open RepTypes
-  open StableGraph
+  open ActionManager
 
 
   (* -------------------------------------------------------------------- *)

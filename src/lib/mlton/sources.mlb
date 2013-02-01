@@ -102,6 +102,7 @@ ann "forceUsed" in
       structure Ref
       structure Regexp
       structure Relation
+			structure ResizableArray
       structure Result
       structure Sexp
       structure Signal

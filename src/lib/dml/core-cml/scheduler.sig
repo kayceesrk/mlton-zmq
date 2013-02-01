@@ -28,7 +28,7 @@ sig
   val tidInt : unit -> int
   val tidRev : unit -> int
   val tidNextActionNum : unit -> int
-  val tidNode : unit -> unit DirectedGraph.Node.t option ref
+  val tidActions : unit -> exn ResizableArray.t
 
   val saveCont : (unit -> unit) (* action to do before restore *) -> unit
   val restoreCont : unit -> unit

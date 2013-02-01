@@ -6,7 +6,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-ann  
+ann
    "sequenceNonUnit warn"
    "nonexhaustiveMatch warn" "redundantMatch warn"
    "warnUnused false" "forceUsed"
@@ -143,6 +143,8 @@ in
       control.fun
       queue.sig
       two-list-queue.sml
+			resizable-array.sig
+			resizable-array.fun
       array2.sig
       array2.sml
       env.sig
@@ -267,6 +269,7 @@ in
       structure Ref
       structure Regexp
       structure Relation
+			structure ResizableArray
       structure Result
       structure SMLofNJ
       structure Sexp

@@ -11,27 +11,27 @@ signature PENDING_COMM =
 sig
   type 'a t
   val empty     : unit -> 'a t
-  val addAid    : 'a t -> RepTypes.channel_id -> StableGraph.action_id -> 'a -> unit
-  val removeAid : 'a t -> RepTypes.channel_id -> StableGraph.action_id -> unit
-  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: StableGraph.action_id} -> (StableGraph.action_id * 'a) option
+  val addAid    : 'a t -> RepTypes.channel_id -> ActionManager.action_id -> 'a -> unit
+  val removeAid : 'a t -> RepTypes.channel_id -> ActionManager.action_id -> unit
+  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionManager.action_id} -> (ActionManager.action_id * 'a) option
 end
 
 signature MATCHED_COMM =
 sig
   type 'a t
   datatype 'a join_result =
-    SUCCESS of {value : 'a, waitNode: StableGraph.node}
-  | FAILURE of {actAid : StableGraph.action_id,
-                waitNode : StableGraph.node,
+    SUCCESS of {value : 'a, waitNode: ActionManager.node}
+  | FAILURE of {actAid : ActionManager.action_id,
+                waitNode : ActionManager.node,
                 value : 'a}
   | NOOP
 
   val empty : unit -> 'a t
-  val add   : 'a t -> {actAid: StableGraph.action_id,
-                       remoteMatchAid: StableGraph.action_id,
-                       waitNode: StableGraph.node} -> 'a -> unit
-  val join  : 'a t -> {remoteAid: StableGraph.action_id,
-                       withAid: StableGraph.action_id} -> 'a join_result
+  val add   : 'a t -> {actAid: ActionManager.action_id,
+                       remoteMatchAid: ActionManager.action_id,
+                       waitNode: ActionManager.node} -> 'a -> unit
+  val join  : 'a t -> {remoteAid: ActionManager.action_id,
+                       withAid: ActionManager.action_id} -> 'a join_result
 end
 
 signature SATED_COMM =
@@ -39,15 +39,15 @@ sig
   type t
 
   val empty : unit -> t
-  val waitTillSated      : t -> StableGraph.action_id -> unit
-  val addSatedAct        : t -> StableGraph.action_id -> unit
-  val addSatedActForce   : t -> StableGraph.action_id -> unit
-  val addSatedComm       : t -> {aid: StableGraph.action_id,
-                                 matchAid: StableGraph.action_id,
+  val waitTillSated      : t -> ActionManager.action_id -> unit
+  val addSatedAct        : t -> ActionManager.action_id -> unit
+  val addSatedActForce   : t -> ActionManager.action_id -> unit
+  val addSatedComm       : t -> {aid: ActionManager.action_id,
+                                 matchAid: ActionManager.action_id,
                                  value: RepTypes.w8vec option} -> unit
   val handleSatedMessage : t -> {recipient: RepTypes.process_id,
-                                 remoteAid: StableGraph.action_id,
-                                 matchAid: StableGraph.action_id} -> unit
+                                 remoteAid: ActionManager.action_id,
+                                 matchAid: ActionManager.action_id} -> unit
 end
 
 structure DmlDecentralized : DML =
@@ -55,7 +55,7 @@ struct
   structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
 
-  open StableGraph
+  open ActionManager
   open RepTypes
 
   structure IntDict = IntSplayDict
@@ -138,9 +138,9 @@ struct
     type 'a t = {actAid : action_id, waitNode : node, value : 'a} AISD.dict ref
 
     datatype 'a join_result =
-      SUCCESS of {value : 'a, waitNode: StableGraph.node}
-    | FAILURE of {actAid : StableGraph.action_id,
-                  waitNode : StableGraph.node,
+      SUCCESS of {value : 'a, waitNode: ActionManager.node}
+    | FAILURE of {actAid : ActionManager.action_id,
+                  waitNode : ActionManager.node,
                   value : 'a}
     | NOOP
 
@@ -772,7 +772,7 @@ struct
     ()
   end
 
-  fun saveCont () = StableGraph.saveCont (fn () => SatedComm.addSatedActForce satedCommHelper (insertCommitRollbackNode ()))
+  fun saveCont () = ActionManager.saveCont (fn () => SatedComm.addSatedActForce satedCommHelper (insertCommitRollbackNode ()))
 
   fun runDML (f, to) =
     let
@@ -867,8 +867,7 @@ struct
 
   fun commit () =
   let
-    val node = valOf (!(S.tidNode()))
-    val aid = getAidFromNode node
+    val aid = getLastAid ()
   in
     SatedComm.waitTillSated satedCommHelper aid
   end

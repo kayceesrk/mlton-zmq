@@ -28,7 +28,7 @@ structure ThreadID : THREAD_ID_EXTRA =
          concat["[", StringCvt.padLeft #"0" 6 (Int.toString id), "]"]
       fun tidToInt (TID {id, ...}) = id
       fun tidToRev (TID {revisionId,...}) = !revisionId
-      fun tidToNode (TID {currentNode, ...}) = currentNode
+      fun tidToActions (TID {actions, ...}) = !actions
       fun tidNextActionNum (TID {actionNum,...}) =
       let
         val res = !actionNum + 1
@@ -37,25 +37,21 @@ structure ThreadID : THREAD_ID_EXTRA =
         res
       end
 
-      fun tidSaveCont (TID {cont, ...}, doBeforeRestore) =
+      fun tidSaveCont (TID {cont, actionNum, ...}, doBeforeRestore) =
         MLton.Cont.callcc (fn k =>
+          (* XXX racy *)
           let
-        (* XXX racy *)
-            val _ = cont := (fn () =>
-              let
-                val _ = doBeforeRestore ()
-              in
-                MLton.Cont.throw (k, ())
-              end)
+            val curANum = !actionNum
+            val comp = (fn () => actionNum := curANum) o doBeforeRestore
           in
-            ()
+            cont := (fn () => (comp (); MLton.Cont.throw (k, ())))
           end)
 
-      fun tidRestoreCont (TID {cont, revisionId, currentNode, ...}) =
+      fun tidRestoreCont (TID {cont, revisionId, actions, ...}) =
       let
         (* XXX racy *)
         val _ = revisionId := !revisionId + 1
-        val _ = currentNode := NONE
+        val _ = actions := (ResizableArray.empty ())
       in
         (!cont) ()
       end
@@ -67,7 +63,7 @@ structure ThreadID : THREAD_ID_EXTRA =
          TID {id = n,
               exnHandler = ref (!defaultExnHandler),
               props = ref [],
-              currentNode = ref NONE,
+              actions = ref (ResizableArray.empty ()),
               cont = ref (fn _ => raise Kill),
               revisionId =  ref 0,
               actionNum = ref 0,

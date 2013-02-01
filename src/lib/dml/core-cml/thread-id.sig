@@ -18,10 +18,10 @@ sig
   val compareTid : (thread_id * thread_id) -> order
   val hashTid    : thread_id -> word
 
-  val tidToString : thread_id -> string
-  val tidToInt : thread_id -> int
-  val tidToRev : thread_id -> int
-  val tidToNode : thread_id -> unit DirectedGraph.Node.t option ref
+  val tidToString  : thread_id -> string
+  val tidToInt     : thread_id -> int
+  val tidToRev     : thread_id -> int
+  val tidToActions : thread_id -> exn ResizableArray.t
   val tidNextActionNum : thread_id -> int
 
   val tidSaveCont    : thread_id * (unit -> unit) -> unit

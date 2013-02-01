@@ -25,7 +25,7 @@ structure RepTypes =
             (* hold thread-local properties *)
             props: exn list ref,
             (* state for rollback *)
-            currentNode: unit DirectedGraph.Node.t option ref,
+            actions: exn ResizableArray.t ref,
             (* saved continuation *)
             cont: (unit -> unit) ref,
             (* revision number of the thread; incremented on rollback. *)
