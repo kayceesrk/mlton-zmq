@@ -327,10 +327,6 @@ struct
   (* Other Helper Functions *)
   (* -------------------------------------------------------------------- *)
 
-  fun getCurrentNode () = valOf (!(S.tidNode ()))
-  fun getCurrentAid () = getAidFromNode (getCurrentNode ())
-
-
   (* -------------------------------------------------------------------- *)
   (* Sated Communications -- Callback support *)
   (* -------------------------------------------------------------------- *)
@@ -340,7 +336,7 @@ struct
     structure Debug = LocalDebug(val debug = true)
 
     fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-    fun debug' msg = debug (fn () => msg)
+    (* fun debug' msg = debug (fn () => msg) *)
 
     datatype t = SC of {waiting : thread_id AISD.dict ref, (* waiting threads *)
                         pending : {matchAid: action_id, value: w8vec option} option AISD.dict ref, (* matched but unsated actions *)
@@ -462,7 +458,7 @@ struct
         end
     end
 
-    and handleSatedMessage (state as SC {final, waiting, pending}) {recipient, remoteAid, matchAid} =
+    and handleSatedMessage (state as SC {final, ...}) {recipient = _, remoteAid, matchAid} =
     let
       val _ = Assert.assertAtomic' ("SatedComm.handleSatedMessage", SOME 1)
       val _ = final := AISD.insert (!final) remoteAid NONE
@@ -525,6 +521,7 @@ struct
 
   fun processLocalSend callerKind {channel = c, sendActAid, sendWaitNode, value} =
   let
+    val _ = callerKind
     val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(1)", SOME 1)
     val _ = debug' ("DmlDecentralized.processLocalSend(1)")
     val _ =
