@@ -3,5 +3,5 @@ local
 	$(SML_LIB)/basis/mlton.mlb
 	$(SML_LIB)/dml/dml.mlb
 in
-	cycle/cycle.sml
+	self-cycle/self-cycle.sml
 end
