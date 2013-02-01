@@ -861,7 +861,7 @@ struct
       val tid = S.newTid ()
       val tidInt = C.tidToInt tid
       val aid = handleSpawn {childTid = ThreadId tidInt}
-      val _ = SatedComm.addSatedAct satedCommHelper aid
+      val _ = S.doAtomic (fn () => SatedComm.addSatedAct satedCommHelper aid)
       fun prolog () =
         let
           val _ = S.atomicBegin ()
