@@ -76,16 +76,6 @@ struct
   (* Datatype definitions *)
   (* -------------------------------------------------------------------- *)
 
-
-  datatype msg = S_ACT  of {channel: channel_id, sendActAid: action_id, value: w8vec}
-               | R_ACT  of {channel: channel_id, recvActAid: action_id}
-               | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
-               | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
-               | CONN   of {pid: process_id}
-               | SATED  of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
-
-  datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
-
   datatype 'a chan = CHANNEL of channel_id
 
   (* -------------------------------------------------------------------- *)
@@ -197,7 +187,6 @@ struct
   (* state *)
   (* -------------------------------------------------------------------- *)
 
-  val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
 
   val pendingLocalSends : {sendWaitNode : node, value : w8vec} PendingComm.t = PendingComm.empty ()
   val pendingLocalRecvs : {recvWaitNode : node} PendingComm.t = PendingComm.empty ()

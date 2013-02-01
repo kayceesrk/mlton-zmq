@@ -9,10 +9,8 @@
 signature STABLE_GRAPH =
 sig
 
-  datatype action_id = ACTION_ID of {pid: RepTypes.process_id,
-                                     tid: RepTypes.thread_id,
-                                     rid: int,
-                                     aid: int}
+  type action_id = RepTypes.action_id
+
   type node = unit DirectedGraph.Node.t
 
   val dummyAid    : unit -> action_id

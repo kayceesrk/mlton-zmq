@@ -38,9 +38,6 @@ struct
    * Action
    *******************************************************************)
 
-  (* provides a unique action id across the program *)
-  datatype action_id = ACTION_ID of {pid: process_id, tid: thread_id, rid: int, aid: int}
-
   fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
     concat [Int.toString pid, ":", Int.toString tid, ":", Int.toString rid, ":", Int.toString aid]
 
