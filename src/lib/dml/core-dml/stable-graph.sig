@@ -18,6 +18,7 @@ sig
   val dummyAid    : unit -> action_id
   val aidToPidInt : action_id -> int
   val aidToTidInt : action_id -> int
+  val aidToTid    : action_id -> RepTypes.thread_id
   val aidToString : action_id -> string
   val aidToNode   : action_id * (RepTypes.thread_id -> CML.thread_id option) -> node option
   val getAidFromTid : CML.thread_id -> action_id

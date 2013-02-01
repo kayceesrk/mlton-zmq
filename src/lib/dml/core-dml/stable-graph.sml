@@ -67,6 +67,7 @@ struct
 
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
+  fun aidToTid (ACTION_ID {tid, ...}) = tid
 
   fun actTypeToString at =
     case at of

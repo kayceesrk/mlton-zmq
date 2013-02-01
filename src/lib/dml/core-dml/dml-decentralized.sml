@@ -13,7 +13,7 @@ sig
   val empty     : unit -> 'a t
   val addAid    : 'a t -> RepTypes.channel_id -> StableGraph.action_id -> 'a -> unit
   val removeAid : 'a t -> RepTypes.channel_id -> StableGraph.action_id -> unit
-  val deque     : 'a t -> RepTypes.channel_id -> (StableGraph.action_id * 'a) option
+  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: StableGraph.action_id} -> (StableGraph.action_id * 'a) option
 end
 
 signature MATCHED_COMM =
@@ -117,12 +117,16 @@ struct
 
     exception FIRST of action_id
 
-    fun deque strDictRef (ChannelId channel) =
+    fun deque strDictRef (ChannelId channel) {againstAid} =
     let
       val aidDict = StrDict.lookup (!strDictRef) channel
       fun getOne () =
       let
-        val _ = AISD.app (fn (k, _) => raise FIRST k) aidDict
+        val _ = AISD.app (fn (k, _) =>
+                  if (aidToTidInt k = aidToTidInt againstAid) andalso
+                     (aidToPidInt k = aidToPidInt againstAid)
+                  then () (* dont match actions from the same thread *)
+                  else raise FIRST k) aidDict
       in
         raise AISD.Absent
       end handle FIRST k => k
@@ -524,13 +528,13 @@ struct
     val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(1)", SOME 1)
     val _ = debug' ("DmlDecentralized.processLocalSend(1)")
     val _ =
-      case PendingComm.deque pendingLocalRecvs c of
+      case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
           NONE => (* No matching receives, check remote *)
             let
               val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(2)", SOME 1)
               val _ = debug' ("DmlDecentralized.processLocalSend(2)")
             in
-              case PendingComm.deque pendingRemoteRecvs c of
+              case PendingComm.deque pendingRemoteRecvs c {againstAid = sendActAid} of
                     NONE => (* No matching remote recv either *)
                       let
                         val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(3)", SOME 1)
@@ -577,12 +581,12 @@ struct
     val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalRecv(1)", SOME 1)
     val _ = debug' ("DmlDecentralized.processLocalRecv(1)")
     val value =
-      case PendingComm.deque pendingLocalSends c of
+      case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
           NONE => (* No local matching sends, check remote *)
             let
               val _ = debug' ("DmlDecentralized.processLocalRecv(2)")
             in
-              case PendingComm.deque pendingRemoteSends c of
+              case PendingComm.deque pendingRemoteSends c {againstAid = recvActAid} of
                     NONE => (* No matching remote send either *)
                       let
                         val _ = debug' ("DmlDecentralized.processLocalRecv(3)")
@@ -646,7 +650,7 @@ struct
           val _ = Assert.assert ([], fn () => "DmlDecentralized.processMsg: remote S_ACT",
                                  fn () => not (isAidLocal sendActAid))
         in
-          (case PendingComm.deque pendingLocalRecvs c of
+          (case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
               NONE => (* No matching receives *)
                 PendingComm.addAid pendingRemoteSends c sendActAid value
             | SOME (recvActAid, {recvWaitNode}) => (* matching recv *)
@@ -662,7 +666,7 @@ struct
           val _ = Assert.assert ([], fn () => "DmlDecentralized.processMsg: remote R_ACT",
                                  fn () => not (isAidLocal recvActAid))
         in
-          (case PendingComm.deque pendingLocalSends c of
+          (case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
               NONE => (* No matching sends *)
                 PendingComm.addAid pendingRemoteRecvs c recvActAid ()
             | SOME (sendActAid, {sendWaitNode, value}) => (* matching send *)
