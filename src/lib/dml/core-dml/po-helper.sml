@@ -26,13 +26,40 @@ struct
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
   fun debug' msg = debug (fn () => msg)
 
+  (********************************************************************
+   * Datatypes
+   *******************************************************************)
+
   datatype node = NODE of {array: exn ResizableArray.t, index: int}
+  exception NodeExn of action
+
+  fun getActionFromArrayAtIndex (array, index) =
+    case RA.sub (array, index) of
+         NodeExn act => act
+       | _ => raise Fail "getActionFromArrayAtIndex"
+
+
+  (********************************************************************
+   * Arbitrator interfacing
+   *******************************************************************)
+
+  fun handleFinalizingSatedNode (NODE {array, index}) =
+  let
+    val prevAction =
+      if index = 0 then NONE
+      else SOME (getActionFromArrayAtIndex (array, index - 1))
+  in
+    msgSendSafe (AR_ADD {action = getActionFromArrayAtIndex (array, index),
+                         prevAction = prevAction})
+  end
 
   (********************************************************************
    * Node management
    *******************************************************************)
 
-  exception NodeExn of action
+
+  fun getPrevNode (NODE {array, index}) =
+    NODE {array = array, index = index - 1}
 
   fun handleInit {parentAid : action_id} =
   let
@@ -40,21 +67,13 @@ struct
     val beginAid = newAid ()
     val act = ACTION {aid = beginAid, act = BEGIN {parentAid = parentAid}}
     val _ = RA.addToEnd (actions, NodeExn act)
+    val node = NODE {array = actions, index = RA.length actions - 1}
+    (* initial action can be immediately added arbitrator since it will be
+    * immediately added to finalSatedComm using forceAddSatedComm (See
+    * dml-decentralized.sml where call to handleInit is made.) *)
+    val _ = handleFinalizingSatedNode node
   in
     beginAid
-  end
-
-  (* Must be called by spawning thread. Adds \po edge.
-   * Returns: a new begin node.
-   * *)
-  fun handleSpawn {childTid} =
-  let
-    val actions = S.tidActions ()
-    val spawnAid = newAid ()
-    val spawnAct = ACTION {aid = spawnAid, act = SPAWN {childTid = childTid}}
-    val _ = RA.addToEnd (actions, NodeExn spawnAct)
-  in
-    spawnAid
   end
 
   fun insertCommitRollbackNode () =
@@ -63,10 +82,25 @@ struct
     val comRbAid = newAid ()
     val act = ACTION {aid = comRbAid, act = COM_RB}
     val _ = RA.addToEnd (actions, NodeExn act)
+    val node = NODE {array = actions, index = RA.length actions - 1}
+    (* initial action can be immediately added arbitrator since it will be
+    * immediately added to finalSatedComm using forceAddSatedComm (See
+    * dml-decentralized.sml where call to insertCommitRollbackNode is made.) *)
+    val _ = handleFinalizingSatedNode node
   in
     comRbAid
   end
 
+  fun handleSpawn {childTid} =
+  let
+    val actions = S.tidActions ()
+    val spawnAid = newAid ()
+    val spawnAct = ACTION {aid = spawnAid, act = SPAWN {childTid = childTid}}
+    val _ = RA.addToEnd (actions, NodeExn spawnAct)
+    val spawnNode = NODE {array = actions, index = RA.length actions - 1}
+  in
+    {spawnAid = spawnAid, spawnNode = spawnNode}
+  end
 
   fun handleSend {cid: channel_id} =
   let
@@ -100,10 +134,6 @@ struct
     {waitNode = waitNode, actAid = actAid}
   end
 
-  fun getActionFromArrayAtIndex (array, index) =
-    case RA.sub (array, index) of
-         NodeExn act => act
-       | _ => raise Fail "getActionFromArrayAtIndex"
 
   fun setMatchAid (NODE {array, index}) (matchAid: action_id) =
   let
@@ -165,6 +195,3 @@ struct
     S.restoreCont ()
   end
 end
-
-(* TODO: remove nodes from property list *)
-(* TODO: never match communications from the same thread *)

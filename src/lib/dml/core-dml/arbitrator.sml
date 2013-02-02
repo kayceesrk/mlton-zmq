@@ -83,6 +83,9 @@ struct
     val _ = ZMQ.sockConnect (source, source_str)
     val _ = ZMQ.sockConnect (sink, sink_str)
     val _ = ZMQ.sockSetSubscribe (source, Vector.tabulate (0, fn _ => 0wx0))
+    (* In order to allow arbitrator to receive messages. Make sure processIds
+     * of clients is >= 0. *)
+    val _ = processId := ~1
     val _ = proxy := PROXY {context = SOME context, source = SOME source, sink = SOME sink}
 
     fun mainLoop () =
@@ -98,6 +101,6 @@ struct
                mainLoop ()
              end
   in
-    mainLoop ()
+    ignore (RunCML.doit (mainLoop, NONE))
   end
 end

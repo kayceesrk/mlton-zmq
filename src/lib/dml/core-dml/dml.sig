@@ -9,6 +9,7 @@
 
 signature DML =
 sig
+  include ARBITRATOR
   type 'a chan
 
   (* ------------------------------------------------------*)

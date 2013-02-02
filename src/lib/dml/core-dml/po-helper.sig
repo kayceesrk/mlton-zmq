@@ -14,15 +14,17 @@ sig
 
   val insertCommitRollbackNode : unit -> action_id
   val handleInit  : {parentAid: action_id} -> action_id
-  val handleSpawn : {childTid : RepTypes.thread_id} -> action_id
+  val handleSpawn : {childTid : RepTypes.thread_id} -> {spawnAid: action_id, spawnNode: node}
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
 
   val setMatchAid : node -> action_id -> unit
   val getMatchAid : node -> action_id
   val removeMatchAid : node -> unit
-  val getLastAid : unit -> action_id
+  val getPrevNode : node -> node
+  val getLastAid  : unit -> action_id
 
+  val handleFinalizingSatedNode : node -> unit
   val saveCont    : (unit -> unit) -> unit
   val restoreCont : unit -> unit
 end
