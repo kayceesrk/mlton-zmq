@@ -11,6 +11,8 @@ open Dml
 
 fun proxy () = startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
 
+fun arbit () = startArbitrator {sink = "tcp://localhost:5556", source = "tcp://localhost:5557"}
+
 fun pinger () =
 let
   val pingChan : int chan = channel "pinger"
@@ -52,4 +54,5 @@ val args::_ = CommandLine.arguments ()
 val _ = if args = "proxy" then proxy ()
         else if args = "pinger" then pinger ()
         else if args = "ponger" then ponger ()
+        else if args = "arbit" then arbit ()
         else raise Fail "Unknown argument: Valid arguments are proxy | pinger | ponger"

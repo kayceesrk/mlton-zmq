@@ -8,5 +8,5 @@
 
 signature ARBITRATOR =
 sig
-  val startArbitrator : {sink: string, source: string} -> unit
+  val startArbitrator : {sink: string, source: string, numPeers: int} -> unit
 end

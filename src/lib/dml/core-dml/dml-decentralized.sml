@@ -205,7 +205,6 @@ struct
   val allThreads = ref (IntDict.empty)
 
   (* State for join and exit*)
-  val numPeers = ref ~1
   val peers = ref (ISS.empty)
   val exitDaemon = ref false
 
@@ -671,7 +670,7 @@ struct
 
   val yield = C.yield
 
-  fun connect {sink = sink_str, source = source_str, processId = pid, numPeers = np} =
+  fun connect {sink = sink_str, source = source_str, processId = pid, numPeers} =
   let
     val context = ZMQ.ctxNew ()
     val source = ZMQ.sockCreate (context, ZMQ.Sub)
@@ -682,7 +681,6 @@ struct
     val _ = proxy := PROXY {context = SOME context, source = SOME source, sink = SOME sink}
 
     val _ = processId := pid
-    val _ = numPeers := np
 
     val _ = debug' ("DmlDecentralized.connect.join(1)")
     fun join n =
@@ -703,14 +701,14 @@ struct
                         val _ = if ISS.member (!peers) pidInt then ()
                                 else peers := ISS.insert (!peers) pidInt
                       in
-                        if ISS.size (!peers) = (!numPeers - 1) then msgSendSafe (CONN {pid = ProcessId (!processId)})
+                        if ISS.size (!peers) = numPeers then msgSendSafe (CONN {pid = ProcessId (!processId)})
                         else join n
                       end
                   | SOME m => raise Fail ("DmlDecentralized.connect: unexpected message during connect" ^ (msgToString m))
     in
       ()
     end
-    val _ = if np = 1 then () else join 0
+    val _ = join 0
     (* If we get here, then we have joined *)
     val _ = debug' ("DmlDecentralized.connect.join(3)")
   in

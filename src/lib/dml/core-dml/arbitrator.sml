@@ -11,15 +11,23 @@ struct
 
   structure G = DirectedGraph
   structure N = G.Node
+  structure S = CML.Scheduler
+  structure ISS = IntSplaySet
+  structure Assert = LocalAssert(val assert = true)
+  structure Debug = LocalDebug(val debug = true)
 
   open RepTypes
   open ActionManager
   open CommunicationManager
 
+
   val {get = act, set = setAct, ...} =
     Property.getSetOnce (N.plist, Property.initRaise ("NodeLocator.act", N.layout))
 
   val graph = G.new ()
+
+  fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
+  fun debug' msg = debug (fn () => msg)
 
   structure NodeLocator =
   struct
@@ -75,8 +83,12 @@ struct
     end
 
 
-  fun startArbitrator {sink = sink_str, source = source_str} =
+  fun startArbitrator {sink = sink_str, source = source_str, numPeers} =
   let
+    (* State for join and exit*)
+    val peers = ref (ISS.empty)
+    val exitDaemon = ref false
+
     val context = ZMQ.ctxNew ()
     val source = ZMQ.sockCreate (context, ZMQ.Sub)
     val sink = ZMQ.sockCreate (context, ZMQ.Pub)
@@ -87,6 +99,34 @@ struct
      * of clients is >= 0. *)
     val _ = processId := ~1
     val _ = proxy := PROXY {context = SOME context, source = SOME source, sink = SOME sink}
+
+    val _ = debug' ("DmlDecentralized.connect.join(1)")
+    fun join n =
+    let
+      val n = if n = 100000 then
+                let
+                  val _ = debug' ("DmlDecentralized.connect.join: send CONN")
+                  val _ = msgSendSafe (CONN {pid = ProcessId (!processId)})
+                in
+                  0
+                end
+              else n+1
+      val () = case msgRecvSafe () of
+                    NONE => join n
+                  | SOME (CONN {pid = ProcessId pidInt}) =>
+                      let
+                        val _ = debug' ("DmlDecentralized.connect.join(2)")
+                        val _ = if ISS.member (!peers) pidInt then ()
+                                else peers := ISS.insert (!peers) pidInt
+                      in
+                        if ISS.size (!peers) = numPeers then msgSendSafe (CONN {pid = ProcessId (!processId)})
+                        else join n
+                      end
+                  | SOME m => raise Fail ("DmlDecentralized.connect: unexpected message during connect" ^ (msgToString m))
+    in
+      ()
+    end
+    val _ = join 0
 
     fun mainLoop () =
       case msgRecvSafe () of
@@ -101,6 +141,6 @@ struct
                mainLoop ()
              end
   in
-    ignore (RunCML.doit (mainLoop, NONE))
+    mainLoop ()
   end
 end
