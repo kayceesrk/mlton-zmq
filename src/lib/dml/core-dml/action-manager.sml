@@ -83,4 +83,20 @@ struct
   structure AISS = ActionIdSplaySet
   structure ActionIdSplayDict = SplayDict (structure Key = ActionIdOrdered)
   structure AISD = ActionIdSplayDict
+
+  structure PTROrdered :> ORDERED where type t = ptr =
+  struct
+    type t = ptr
+
+    val eq = MLton.equal
+    fun compare ({pid = ProcessId pidInt1, tid = ThreadId tidInt1, rid = rid1},
+                 {pid = ProcessId pidInt2, tid = ThreadId tidInt2, rid = rid2}) =
+      (case Int.compare (pidInt1, pidInt2) of
+            EQUAL => (case Int.compare (tidInt1, tidInt2) of
+                           EQUAL => Int.compare (rid1, rid2)
+                         | lg => lg)
+          | lg => lg)
+  end
+
+  structure PTRDict = SplayDict (structure Key = PTROrdered)
 end

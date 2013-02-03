@@ -6,12 +6,12 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature DIRECTED_SUB_GRAPH = 
+signature DIRECTED_SUB_GRAPH =
    sig
       (* the main graph type *)
       type t
 
-      structure Node: 
+      structure Node:
          sig
             type graph
             type edge
@@ -114,7 +114,7 @@ signature DIRECTED_SUB_GRAPH =
 (*      val random: {numNodes: int, numEdges: int} -> t*)
 (*      val removeBackEdges: t -> unit *)
       (* removeEdge fails if edge isn't there. *)
-(*      val removeEdge: t * Edge.t -> unit *)
+      val removeEdge: t * {from: Node.t, to: Node.t} -> unit
       (* Strongly-connected components.
        * Each component is given as a list of nodes.
        * The components are returned topologically sorted.

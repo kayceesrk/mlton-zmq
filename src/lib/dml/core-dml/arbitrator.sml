@@ -9,9 +9,11 @@
 structure Arbitrator : ARBITRATOR =
 struct
 
-  structure G = DirectedGraph
+  structure G = DirectedSubGraph
   structure N = G.Node
+  structure E = G.Edge
   structure S = CML.Scheduler
+  structure D = G.DfsParam
   structure ISS = IntSplaySet
   structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
@@ -31,7 +33,7 @@ struct
 
   structure NodeLocator =
   struct
-    val dict : unit N.t AISD.dict ref = ref (AISD.empty)
+    val dict : N.t AISD.dict ref = ref (AISD.empty)
 
     fun node (action as ACTION {aid, act}) =
     let
@@ -52,18 +54,28 @@ struct
 
   structure NL = NodeLocator
 
+  exception Cycle
+
   fun processCommit action =
   let
-    val _ =
-      File.withOut
-      ("graph.dot", fn out =>
-        Layout.output
-        (G.layoutDot (graph, fn _ =>
-                    {edgeOptions = fn _ => [],
-                    nodeOptions = fn n => [Dot.NodeOption.label (actionToString (act n))],
-                    options = [],
-                    title = "scc graph"}),
-        out))
+    val startNode = NL.node action
+    val {get = amVisiting, set = setVisiting, destroy, ...} =
+      Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
+    val w = {startNode = fn n => amVisiting n := true,
+             finishNode = fn n =>
+               let
+                 val _ = amVisiting n := false
+                 val _ = ListMLton.map (N.successors (graph, n),
+                      fn e => G.removeEdge (graph, {from = n, to = E.to (graph, e)}))
+               in
+                 ()
+               end,
+             handleTreeEdge = D.ignore,
+             handleNonTreeEdge = fn e => if !(amVisiting (E.to (graph, e))) then raise Cycle else (),
+             startTree = D.ignore,
+             finishTree = D.ignore,
+             finishDfs = destroy}
+    val _ = G.dfsNodes (graph, [startNode], w) handle Cycle => (destroy (); raise Cycle)
   in
     ()
   end

@@ -11,6 +11,8 @@ sig
 
   type action_id = RepTypes.action_id
   type action = RepTypes.action
+  type ptr = RepTypes.ptr
+
 
   val newAid      : unit -> action_id
   val dummyAid    : unit -> action_id
@@ -27,4 +29,5 @@ sig
   structure ActionIdOrdered : ORDERED where type t = action_id
   structure AISS : SET  where type elem = action_id
   structure AISD : DICT where type key = action_id
+  structure PTRDict : DICT where type key = ptr
 end

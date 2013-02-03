@@ -54,6 +54,7 @@ ann "forceUsed" in
       structure Date
       structure Dir
       structure DirectedGraph
+      structure DirectedSubGraph
       structure DisjointSet
       structure DotColor
       structure Dot

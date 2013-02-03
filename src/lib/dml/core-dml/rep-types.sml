@@ -27,6 +27,8 @@ struct
                                      rid: int,
                                      aid: int}
 
+  type ptr = {pid: process_id, tid: thread_id, rid: int}
+
   datatype action_type = SEND_WAIT of {cid: channel_id, matchAid: action_id option}
                        | SEND_ACT of {cid: channel_id}
                        | RECV_WAIT of {cid: channel_id, matchAid: action_id option}

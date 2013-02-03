@@ -5,7 +5,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-structure DirectedSubGraph: DIRECTED_SUB_GRAPH = 
+structure DirectedSubGraph: DIRECTED_SUB_GRAPH =
 struct
 
 structure Types =
@@ -35,11 +35,11 @@ structure Edge =
          val plist = make #plist
          val to = make #to
       end
-      val from = fn (T {nodeP, edgeP, ...}, e) => 
+      val from = fn (T {nodeP, edgeP, ...}, e) =>
          (Assert.assert("DirectedSubGraph.Edge.from", fn () => edgeP e)
           ; Assert.assert("DirectedSubGraph.Edge.from", fn () => nodeP (from e))
           ; from e)
-      val to = fn (T {nodeP, edgeP, ...}, e) => 
+      val to = fn (T {nodeP, edgeP, ...}, e) =>
          (Assert.assert("DirectedSubGraph.Edge.to", fn () => edgeP e)
           ; Assert.assert("DirectedSubGraph.Edge.to", fn () => nodeP (to e))
           ; to e)
@@ -94,10 +94,9 @@ structure Node =
                                   equals (to, Edge.to (g, e)))
          else false
 
-   (*       fun removeSuccessor (Node {successors, ...}, n) =
-    *    successors := List.removeFirst (!successors, fn Edge.Edge {to, ...} =>
-    *                                   equals (n, to))
-    *)
+      fun removeSuccessor (Node {successors, ...}, n) =
+        successors := List.removeFirst (!successors, fn Edge.Edge {to, ...} =>
+                                       equals (n, to))
    end
 
 structure DfsParam =
@@ -128,7 +127,7 @@ structure DfsParam =
                          finishTree = ignore,
                          finishDfs = ignore}
 
-      fun seq f g a = (f a; g a)
+      fun seq f g a = (ignore (f a); g a)
 
       fun combine ({startNode, finishNode,
                     handleTreeEdge, handleNonTreeEdge,
@@ -174,24 +173,24 @@ fun foreachEdge (g, f) =
 (*                       subGraphs                        *)
 (*--------------------------------------------------------*)
 
-fun subGraph (g as T {nodes, nodeP, edgeP, ...}, 
-              {nodeP = nodeP', edgeP = edgeP'}) = 
+fun subGraph (g as T {nodes, nodeP, edgeP, ...},
+              {nodeP = nodeP', edgeP = edgeP'}) =
    let
       val nodeP = fn n => if nodeP n then nodeP' n else false
       val edgeP = fn e => if edgeP e then edgeP' e else false
       val _ =
          Assert.assert
-         ("DirectedSubGraph.subGraph", fn () => 
-          List.forall(!nodes, fn n => 
+         ("DirectedSubGraph.subGraph", fn () =>
+          List.forall(!nodes, fn n =>
                       if nodeP n
                          then Node.forallSuccessors(g, n, fn e =>
                                                     nodeP (Edge.to (g, e)))
                       else true))
-   in 
+   in
       T {nodes = nodes, nodeP = nodeP, edgeP = edgeP}
    end
 
-fun supGraph (g as T {nodes, ...}) = 
+fun supGraph (g as T {nodes, ...}) =
    T {nodes = nodes, nodeP = fn _ => true, edgeP = fn _ => true}
 
 fun nodes (T {nodes, nodeP, ...}) = List.keepAll(!nodes, nodeP)
@@ -212,7 +211,7 @@ fun addEdge (g as T {nodeP, ...}, e as {from, to}) =
       ; e
    end
 
-(*fun removeEdge (_, {from, to}) = Node.removeSuccessor (from, to) *)
+fun removeEdge (_, {from, to}) = Node.removeSuccessor (from, to)
 
 fun layoutDot (g, {edgeOptions: Edge.t -> Dot.EdgeOption.t list,
                    nodeOptions: Node.t -> Dot.NodeOption.t list,
@@ -234,7 +233,7 @@ fun layoutDot (g, {edgeOptions: Edge.t -> Dot.EdgeOption.t list,
                                 (Node.successors (g, n), fn e =>
                                  {name = nodeId (Edge.to (g, e)),
                                   options = edgeOptions e})})
-      val res = 
+      val res =
          Dot.layout {nodes = nodes,
                      options = options,
                      title = title}
@@ -247,7 +246,7 @@ fun layoutDot (g, {edgeOptions: Edge.t -> Dot.EdgeOption.t list,
 (*                   Depth-First Search                   *)
 (*--------------------------------------------------------*)
 
-fun dfsNodes (g as T {nodeP, ...}, ns, 
+fun dfsNodes (g as T {nodeP, ...}, ns,
               {startNode, finishNode,
                handleTreeEdge, handleNonTreeEdge,
                startTree, finishTree, finishDfs}) =
@@ -256,20 +255,20 @@ fun dfsNodes (g as T {nodeP, ...}, ns,
          Property.destGetSet (Node.plist, Property.initConst false)
       fun visit n =
          (Assert.assert("DirectedSubGraph.dfsNodes", fn () => nodeP n)
-          ; startNode n
+          ; ignore (startNode n)
           ; setVisited (n, true)
           ; Node.foreachSuccessor (g, n, fn e =>
                                    let val n' = Edge.to (g, e)
                                    in if hasBeenVisited n'
                                          then handleNonTreeEdge e
-                                      else (visit n'; handleTreeEdge e)
+                                      else (ignore (visit n'); handleTreeEdge e)
                                    end)
           ; finishNode n)
    in List.foreach (ns, fn n =>
                     (Assert.assert("DirectedSubGraph.dfsNodes", fn () => nodeP n)
                      ; if hasBeenVisited n
                           then ()
-                       else (startTree n; visit n; finishTree n)))
+                       else (ignore (startTree n); ignore (visit n); finishTree n)))
       ; destroy ()
       ; finishDfs ()
    end
@@ -443,7 +442,7 @@ fun transposeParam g =
 fun transpose g = let val (gt, p) = transposeParam g
                   in dfs (g, p); gt
                   end
-  *) 
+  *)
 (*--------------------------------------------------------*)
 (*             Strongly Connected Components              *)
 (*--------------------------------------------------------*)
@@ -517,7 +516,7 @@ fun stronglyConnectedComponents g =
             else ()
          end
       val handleTreeEdge = updateLow
-      fun handleNonTreeEdge e = 
+      fun handleNonTreeEdge e =
          if isOnStack (Edge.to (g, e))
             then updateLow e
          else ()
@@ -625,7 +624,7 @@ fun dominators (graph, {root}) =
             val _ = sdno' v := i
             val _ = Array.update (nodes, i, v)
             val _ =
-               Node.foreachSuccessor 
+               Node.foreachSuccessor
                (graph, v, fn e =>
                 let
                    val w = Edge.to (graph, e)
@@ -643,7 +642,7 @@ fun dominators (graph, {root}) =
             then ()
          else Error.bug "DirectedSubGraph.dominators: graph is not connected"
       (* compress ancestor path to node v to the node whose label has the
-       * maximal (minimal?) semidominator number. 
+       * maximal (minimal?) semidominator number.
        *)
       fun compress (v: Node.t): unit =
          if Node.equals (n0, ancestor (ancestor v))
@@ -762,7 +761,7 @@ fun dominatorTree (graph, {root: Node.t, nodeValue: Node.t -> 'a}): 'a Tree.t =
                                                   value = nodeValue n}))
       val _ =
          foreachNode
-         (graph, fn n => 
+         (graph, fn n =>
           if Node.equals (n, root)
              then ()
           else List.push (#children (nodeInfo (idom n)), n))
@@ -786,12 +785,12 @@ fun dominatorTree (graph, {root: Node.t, nodeValue: Node.t -> 'a}): 'a Tree.t =
  * http://www.research.ibm.com/people/r/rama/Papers/ibmtr21513.revised.ps).
  *)
 
-structure GraphNodeInfo = 
+structure GraphNodeInfo =
   struct
     type t = {forestNode: Node.t}
   end
 
-structure ForestNodeInfo = 
+structure ForestNodeInfo =
   struct
     type t = {parent: Node.t option,
               loopNodes: Node.t list}
@@ -842,15 +841,15 @@ fun loopForest {headers, graph, root}
 
       val {get = graphNodeInfo : Node.t -> GraphNodeInfo.t,
            set = setGraphNodeInfo, ...}
-        = Property.getSetOnce 
+        = Property.getSetOnce
           (Node.plist, Property.initRaise ("graphNodeInfo", Node.layout))
       val forestNode = #forestNode o graphNodeInfo
 
       val {get = forestNodeInfo : Node.t -> ForestNodeInfo.t,
            set = setForestNodeInfo, ...}
-        = Property.getSetOnce 
+        = Property.getSetOnce
           (Node.plist, Property.initRaise ("forestNodeInfo", Node.layout))
-      val parent = #parent o forestNodeInfo 
+      val parent = #parent o forestNodeInfo
       val loopNodes = #loopNodes o forestNodeInfo
 
 
@@ -890,7 +889,7 @@ fun loopForest {headers, graph, root}
             (scc,
              fn n => (List.push(nodeNesting n, depth) ;
                       Node.foreachSuccessor
-                      (graph, n, 
+                      (graph, n,
                        fn e => let
                                  val from = n
                                  val to = Edge.to (graph, e)
@@ -922,7 +921,7 @@ fun loopForest {headers, graph, root}
                              val _ = foreachNode
                                      (graph',
                                       fn n => (Node.foreachSuccessor
-                                               (graph', n, 
+                                               (graph', n,
                                                 fn e => ignore(List.pop(edgeNesting e)));
                                                ignore(List.pop(nodeNesting n))))
                              val _ = Int.dec depth
@@ -933,7 +932,7 @@ fun loopForest {headers, graph, root}
                        fun default' n
                          = let
                            in
-                              setForestNodeInfo (n', {loopNodes = [n], 
+                              setForestNodeInfo (n', {loopNodes = [n],
                                                       parent = parent}) ;
                               setGraphNodeInfo (n, {forestNode = n'})
                            end
@@ -976,25 +975,25 @@ fun loopForest {headers, graph, root}
 
       val {get = graphNodeInfo : Node.t -> GraphNodeInfo.t,
            set = setGraphNodeInfo, ...}
-        = Property.getSetOnce 
+        = Property.getSetOnce
           (Node.plist, Property.initRaise ("graphNodeInfo", Node.layout))
       val forestNode = #forestNode o graphNodeInfo
 
-      val {get = getIsHeader : Node.t -> bool ref, 
+      val {get = getIsHeader : Node.t -> bool ref,
            set = setIsHeader, ...}
         = Property.getSetOnce
           (Node.plist, Property.initFun (fn _ => ref false))
 
       val {get = forestNodeInfo : Node.t -> ForestNodeInfo.t,
            set = setForestNodeInfo, ...}
-        = Property.getSetOnce 
+        = Property.getSetOnce
           (Node.plist, Property.initRaise ("forestNodeInfo", Node.layout))
-      val parent = #parent o forestNodeInfo 
+      val parent = #parent o forestNodeInfo
       val loopNodes = #loopNodes o forestNodeInfo
 
       val {get = subGraphNodeInfo : Node.t -> SubGraphNodeInfo.t,
            set = setSubGraphNodeInfo, ...}
-        = Property.getSetOnce 
+        = Property.getSetOnce
           (Node.plist, Property.initRaise ("subGraphNodeInfo", Node.layout))
       val childSubGraphNode = #childSubGraphNode o subGraphNodeInfo
       val childSubGraphNode' = ! o childSubGraphNode
@@ -1018,12 +1017,12 @@ fun loopForest {headers, graph, root}
              fn n => let
                        val n' = newNode graph'
 
-                       val {childSubGraphNode, graphNode, ...} 
+                       val {childSubGraphNode, graphNode, ...}
                          = subGraphNodeInfo n
                      in
                        childSubGraphNode := SOME n' ;
                        setSubGraphNodeInfo
-                       (n', 
+                       (n',
                         {childSubGraphNode = ref NONE,
                          graphNode = graphNode})
                      end) ;
@@ -1031,7 +1030,7 @@ fun loopForest {headers, graph, root}
             (scc,
              fn n => Node.foreachSuccessor
                      (graph, n, fn e =>
-                      let 
+                      let
                          val from = n
                          val to = Edge.to (graph, e)
                       in
@@ -1071,7 +1070,7 @@ fun loopForest {headers, graph, root}
                        fun default' n
                          = let
                            in
-                              setForestNodeInfo (n', {loopNodes = [graphNode n], 
+                              setForestNodeInfo (n', {loopNodes = [graphNode n],
                                                       parent = parent}) ;
                               setGraphNodeInfo (graphNode n, {forestNode = n'})
                            end
@@ -1086,7 +1085,7 @@ fun loopForest {headers, graph, root}
                           | scc => default ()
                      end)
 
-      val graph' 
+      val graph'
         = let
             val graph' = new ()
             val {get = nodeInfo': Node.t -> Node.t,
@@ -1095,11 +1094,11 @@ fun loopForest {headers, graph, root}
                 (Node.plist,
                  Property.initFun (fn node => let
                                                 val node' = newNode graph'
-                                              in 
+                                              in
                                                 setSubGraphNodeInfo
-                                                (node', 
+                                                (node',
                                                  {childSubGraphNode = ref NONE,
-                                                  graphNode = node}) ; 
+                                                  graphNode = node}) ;
                                                 node'
                                               end))
           in
@@ -1134,7 +1133,7 @@ fun loopForestSteensgaard {graph, root}
             val headers = ref []
           in
             foreachEdge
-            (graph, fn (n, e) => let 
+            (graph, fn (n, e) => let
                                    val from = Edge.from (graph, e)
                                    val to = Edge.to (graph, e)
                                  in
@@ -1150,7 +1149,7 @@ fun loopForestSteensgaard {graph, root}
       fun headers X
         = List.keepAll
           (X,
-           fn node 
+           fn node
             => Exn.withEscape
                (fn escape
                  => (foreachEdge

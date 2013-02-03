@@ -63,7 +63,7 @@ in
 	 		structure ListMLton = List
 	 		structure Property
 			structure PropertyList
-      structure DirectedGraph
+      structure DirectedSubGraph
 			structure ResizableArray
 			structure File
 			structure Dot
