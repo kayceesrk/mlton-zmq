@@ -37,17 +37,17 @@ struct
 
   fun actTypeToString at =
     case at of
-         SEND_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["SW (",cstr,",*)"]
-       | SEND_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["SW (",cstr,",",aidToString act,")"]
-       | SEND_ACT {cid = ChannelId cstr} => concat ["SA (", cstr, ")"]
-       | RECV_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["RW (",cstr,",*)"]
-       | RECV_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["RW (",cstr,",",aidToString act,")"]
-       | RECV_ACT {cid = ChannelId cstr} => concat ["RA (", cstr, ")"]
-       | BEGIN {parentAid} => concat ["B (", aidToString parentAid, ")"]
+         SEND_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["SW(",cstr,",*)"]
+       | SEND_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["SW(",cstr,",",aidToString act,")"]
+       | SEND_ACT {cid = ChannelId cstr} => concat ["SA(", cstr, ")"]
+       | RECV_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["RW(",cstr,",*)"]
+       | RECV_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["RW(",cstr,",",aidToString act,")"]
+       | RECV_ACT {cid = ChannelId cstr} => concat ["RA(", cstr, ")"]
+       | BEGIN {parentAid} => concat ["B(", aidToString parentAid, ")"]
        | SPAWN {childTid = ThreadId tid} => concat ["F(", Int.toString tid, ")"]
        | COM_RB => "CR"
 
-  fun actionToString (ACTION {aid, act}) = concat ["[",aidToString aid,",",actTypeToString act,"]"]
+  fun actionToString (ACTION {aid, act}) = concat ["[",aidToString aid,", ",actTypeToString act,"]"]
 
   fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =
     pidInt = (!processId)

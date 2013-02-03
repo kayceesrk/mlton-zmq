@@ -52,12 +52,28 @@ struct
 
   structure NL = NodeLocator
 
+  fun processCommit action =
+  let
+    val _ =
+      File.withOut
+      ("graph.dot", fn out =>
+        Layout.output
+        (G.layoutDot (graph, fn _ =>
+                    {edgeOptions = fn _ => [],
+                    nodeOptions = fn n => [Dot.NodeOption.label (actionToString (act n))],
+                    options = [],
+                    title = "scc graph"}),
+        out))
+  in
+    ()
+  end
+
   fun processAdd {action, prevAction} =
     let
       val curNode = NL.node action
       val _ = case prevAction of
                     NONE => ()
-                  | SOME prev => ignore (G.addEdge (graph, {from = NL.node prev, to = curNode}))
+                  | SOME prev => ignore (G.addEdge (graph, {to = NL.node prev, from = curNode}))
       val ACTION {act, aid} = action
     in
       case act of
@@ -135,12 +151,13 @@ struct
              let
                val _ =
                  case msg of
-                     AR_ADD m => processAdd m
+                     AR_REQ_ADD m => processAdd m
+                   | AR_REQ_COM {action} => processCommit action
                    | _ => ()
              in
                mainLoop ()
              end
   in
-    mainLoop ()
+    ignore (RunCML.doit (mainLoop, NONE))
   end
 end

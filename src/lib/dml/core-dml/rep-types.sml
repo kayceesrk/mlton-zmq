@@ -43,7 +43,9 @@ struct
                | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN   of {pid: process_id}
                | SATED  of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
-               | AR_ADD of {action: action, prevAction: action option}
+               (* Arbitrator Communication *)
+               | AR_REQ_ADD of {action: action, prevAction: action option}
+               | AR_REQ_COM of {action: action}
 
   datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
 

@@ -24,7 +24,11 @@ sig
   val getPrevNode : node -> node
   val getLastAid  : unit -> action_id
 
+  (* The following communicate with the arbitrator using the action stored in
+   * the nodes *)
   val handleFinalizingSatedNode : node -> unit
+  val requestCommit             : unit -> unit
+
   val saveCont    : (unit -> unit) -> unit
   val restoreCont : unit -> unit
 end

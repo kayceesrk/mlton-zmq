@@ -813,8 +813,14 @@ struct
   fun commit () =
   let
     val aid = getLastAid ()
+    val _ = SatedComm.waitTillSated satedCommHelper aid
+
+    (* All previous actions were stated. start the commit protocol *)
+    val _ = S.atomicBegin ()
+    val _ = POHelper.requestCommit ()
+    val _ = blockCurrentThread ()
   in
-    SatedComm.waitTillSated satedCommHelper aid
+    ()
   end
 end
 

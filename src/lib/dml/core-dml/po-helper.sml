@@ -49,8 +49,17 @@ struct
       if index = 0 then NONE
       else SOME (getActionFromArrayAtIndex (array, index - 1))
   in
-    msgSendSafe (AR_ADD {action = getActionFromArrayAtIndex (array, index),
+    msgSendSafe (AR_REQ_ADD {action = getActionFromArrayAtIndex (array, index),
                          prevAction = prevAction})
+  end
+
+  fun requestCommit () =
+  let
+    val _ = Assert.assertAtomic' ("POHelper.requestCommit", SOME 1)
+    val actions = S.tidActions ()
+    val lastAction = getActionFromArrayAtIndex (actions, (RA.length actions) - 1)
+  in
+    msgSend (AR_REQ_COM {action = lastAction})
   end
 
   (********************************************************************

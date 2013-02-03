@@ -65,5 +65,8 @@ in
 			structure PropertyList
       structure DirectedGraph
 			structure ResizableArray
+			structure File
+			structure Dot
+			structure Layout
 	 end
 end

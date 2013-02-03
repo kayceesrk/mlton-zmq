@@ -33,7 +33,6 @@ let
     val _ = send (c1, 0)
     val _ = send (c2, 0)
     val _ = commit ()
-    val _ = recv (c2)
   in
     exitDaemon ()
   end

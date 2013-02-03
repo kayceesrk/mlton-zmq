@@ -22,13 +22,22 @@ struct
 
   fun msgToString msg =
     case msg of
-         S_ACT  {channel = ChannelId cidStr, sendActAid, ...} => concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
-       | R_ACT  {channel = ChannelId cidStr, recvActAid} => concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
-       | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} => concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
-       | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} => concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
-       | CONN   {pid = ProcessId pidInt} => concat ["CONN[", Int.toString pidInt, "]"]
-       | SATED  {recipient = ProcessId pidInt, remoteAid, matchAid} => concat ["SATED[",Int.toString pidInt, ",", aidToString remoteAid, ",", aidToString matchAid, "]"]
-       | AR_ADD {action, prevAction} => concat ["AR_ADD[", actionToString action, ",", case prevAction of NONE => "NONE" | SOME a => actionToString a, "]"]
+         S_ACT  {channel = ChannelId cidStr, sendActAid, ...} =>
+           concat ["S_ACT[", cidStr, ",", aidToString sendActAid, "]"]
+       | R_ACT  {channel = ChannelId cidStr, recvActAid} =>
+           concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
+       | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} =>
+           concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
+       | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} =>
+           concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
+       | CONN   {pid = ProcessId pidInt} =>
+           concat ["CONN[", Int.toString pidInt, "]"]
+       | SATED  {recipient = ProcessId pidInt, remoteAid, matchAid} =>
+           concat ["SATED[",Int.toString pidInt, ",", aidToString remoteAid, ",", aidToString matchAid, "]"]
+       | AR_REQ_ADD {action, prevAction} =>
+           concat ["AR_REQ_ADD[", actionToString action, ",",
+                   case prevAction of NONE => "NONE" | SOME a => actionToString a, "]"]
+       | AR_REQ_COM {action} => concat ["AR_REQ_COM[", actionToString action, "]"]
 
 
   fun msgSend (msg : msg) =
