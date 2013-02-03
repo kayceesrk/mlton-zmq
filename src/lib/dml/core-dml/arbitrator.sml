@@ -58,13 +58,26 @@ struct
 
   fun processCommit action =
   let
+    val maxVisit = ref (PTRDict.empty)
     val startNode = NL.node action
     val {get = amVisiting, set = setVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
+
     val w = {startNode = fn n => amVisiting n := true,
              finishNode = fn n =>
                let
                  val _ = amVisiting n := false
+
+                 (* Insert into maxVisit *)
+                 val ACTION{aid, ...} = act n
+                 val ptrId = aidToPtr aid
+                 val actNum = aidToActNum aid
+                 fun insert () = maxVisit := PTRDict.insert (!maxVisit) ptrId actNum
+                 val _ = case PTRDict.find (!maxVisit) ptrId of
+                              NONE => insert ()
+                            | SOME actNum' => if actNum > actNum' then insert () else ()
+
+                 (* Remove outoing edges *)
                  val _ = ListMLton.map (N.successors (graph, n),
                       fn e => G.removeEdge (graph, {from = n, to = E.to (graph, e)}))
                in

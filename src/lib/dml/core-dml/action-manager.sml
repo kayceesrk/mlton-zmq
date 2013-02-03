@@ -34,6 +34,7 @@ struct
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
   fun aidToTid (ACTION_ID {tid, ...}) = tid
+  fun aidToActNum (ACTION_ID {aid, ...}) = aid
 
   fun actTypeToString at =
     case at of
@@ -99,4 +100,6 @@ struct
   end
 
   structure PTRDict = SplayDict (structure Key = PTROrdered)
+
+  fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
 end
