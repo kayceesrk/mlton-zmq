@@ -14,6 +14,7 @@ sig
   val addAid    : 'a t -> RepTypes.channel_id -> ActionManager.action_id -> 'a -> unit
   val removeAid : 'a t -> RepTypes.channel_id -> ActionManager.action_id -> unit
   val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionManager.action_id} -> (ActionManager.action_id * 'a) option
+  val cleanup   : 'a t -> int RepTypes.PTRDict.dict -> unit
 end
 
 signature MATCHED_COMM =
@@ -132,6 +133,24 @@ struct
       return
     end handle AISD.Absent => NONE
              | StrDict.Absent => NONE
+
+    fun cleanup strDictRef rollbackAids =
+    let
+      val _ = Assert.assertAtomic' ("PendingComm.cleanup", SOME 1)
+      val oldStrDict = !strDictRef
+      fun getNewAidDict oldAidDict =
+        let
+          val emptyAidDict = AISD.empty
+        in
+          AISD.foldl (fn (aid as ACTION_ID {pid, tid, rid, ...}, value, newAidDict) =>
+            case PTRDict.find rollbackAids {pid = pid, tid = tid, rid = rid} of
+                NONE => AISD.insert newAidDict aid value
+              | SOME _ => newAidDict) emptyAidDict oldAidDict
+        end
+      val newStrDict = StrDict.map (fn aidDict => getNewAidDict aidDict) oldStrDict
+    in
+      strDictRef := newStrDict
+    end
   end
 
   (* -------------------------------------------------------------------- *)
@@ -247,11 +266,54 @@ struct
   fun resumeThread tidInt (value : w8vec) =
   let
     val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", SOME 1)
-    val t = IntDict.lookup (!blockedThreads) tidInt handle IntDict.Absent => raise Fail "DmlDecentralized.unblockThread: Absent"
+    val t = IntDict.lookup (!blockedThreads) tidInt
     val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
     val rt = S.prepVal (t, value)
   in
     S.ready rt
+  end handle IntDict.Absent => ()
+
+  fun rollbackBlockedThreads ptrDict =
+  let
+    val _ = Assert.assertAtomic' ("DmlDecentralized.rollbackBlockedThreads", SOME 1)
+    fun rollbackBlockedThread (t as S.THRD (tid,_)) =
+      let
+        val prolog = fn () => (POHelper.restoreCont (); emptyW8Vec)
+        val rt = S.prep (S.prepend (t, prolog))
+        val _ = S.ready rt
+      in
+        ()
+      end
+    val newBTDict =
+      IntDict.foldl (fn (tidInt, t as S.THRD (tid, _), newBTDict) =>
+        let
+          val pid = ProcessId (!processId)
+          val rid = CML.tidToRev tid
+          val tid = ThreadId tidInt
+        in
+          case PTRDict.find ptrDict {pid = pid, tid = tid, rid = rid} of
+                NONE => IntDict.insert newBTDict tidInt t
+              | SOME _ => (rollbackBlockedThread t; newBTDict)
+        end) IntDict.empty (!blockedThreads)
+  in
+    blockedThreads := newBTDict
+  end
+
+  fun rollbackReadyThreads ptrDict =
+  let
+    val _ = Assert.assertAtomic' ("DmlDecentralized.rollbackReadyThreads", SOME 1)
+    fun restoreSCore (rthrd as S.RTHRD (cmlTid, t)) =
+      let
+        val pid = ProcessId (!processId)
+        val rid = CML.tidToRev cmlTid
+        val tid = ThreadId (CML.tidToInt cmlTid)
+      in
+        case PTRDict.find ptrDict {pid = pid, tid = tid, rid = rid} of
+             NONE => rthrd
+           | SOME _ => S.RTHRD (cmlTid, MLton.Thread.prepare (MLton.Thread.new (restoreCont), ()))
+      end
+  in
+    S.modify restoreSCore
   end
 
   (* -------------------------------------------------------------------- *)
@@ -570,6 +632,19 @@ struct
     value
   end
 
+  fun processRollbackMsg rollbackAids =
+    let
+      val _ = PendingComm.cleanup pendingLocalSends rollbackAids
+      val _ = PendingComm.cleanup pendingRemoteSends rollbackAids
+      val _ = PendingComm.cleanup pendingLocalRecvs rollbackAids
+      val _ = PendingComm.cleanup pendingRemoteRecvs rollbackAids
+      val _ = rollbackBlockedThreads rollbackAids
+      val _ = rollbackReadyThreads rollbackAids
+    in
+      ()
+    end
+
+
   fun processMsg msg =
   let
     val _ = Assert.assertAtomic' ("DmlDecentralized.processMsg", SOME 1)
@@ -650,8 +725,7 @@ struct
       | AR_RES_SUCC {aid} =>
           resumeThread (aidToTidInt aid) emptyW8Vec
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
-      | AR_RES_FAIL {rollbackAids} =>
-          (* Just rollback the threads. Everything else will sort out fine. *)
+      | AR_RES_FAIL {rollbackAids} => processRollbackMsg rollbackAids
       | _ => ()
   end
 
