@@ -717,7 +717,7 @@ struct
 
 
 
-  fun saveCont () = POHelper.saveCont (fn () => SatedComm.forceAddSatedAct satedCommHelper (insertCommitRollbackNode ()))
+  fun saveCont () = POHelper.saveCont (fn () => SatedComm.forceAddSatedAct satedCommHelper (insertRollbackNode ()))
 
   fun runDML (f, to) =
     let
@@ -731,12 +731,12 @@ struct
          * expect a node at every tid will not throw exceptions. *)
         val _ = C.spawn (fn () =>
                   let
-                    val _ = insertCommitRollbackNode ()
+                    val _ = insertCommitNode ()
                   in
                     clientDaemon ()
                   end)
         val _ = addToAllThreads ()
-        val comRbAid = insertCommitRollbackNode ()
+        val comRbAid = insertCommitNode ()
         val _ = SatedComm.forceAddSatedAct satedCommHelper comRbAid
         val _ = saveCont ()
         fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();

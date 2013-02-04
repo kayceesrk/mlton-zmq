@@ -54,12 +54,13 @@ struct
 
   structure NL = NodeLocator
 
-  exception Cycle
 
   fun processCommit action =
   let
     val maxVisit = ref (PTRDict.empty)
+    val foundCycle = ref false
     val startNode = NL.node action
+    val ACTION {aid = actAid, ...} = action
     val {get = amVisiting, set = setVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
 
@@ -84,11 +85,17 @@ struct
                  ()
                end,
              handleTreeEdge = D.ignore,
-             handleNonTreeEdge = fn e => if !(amVisiting (E.to (graph, e))) then raise Cycle else (),
+             handleNonTreeEdge = fn e => if !(amVisiting (E.to (graph, e))) then
+                                           foundCycle := true
+                                         else (),
              startTree = D.ignore,
              finishTree = D.ignore,
              finishDfs = destroy}
-    val _ = G.dfsNodes (graph, [startNode], w) handle Cycle => (destroy (); raise Cycle)
+    val _ = G.dfsNodes (graph, [startNode], w)
+    val _ = if !foundCycle then
+              msgSend (AR_RES_FAIL {rollbackAids = !maxVisit})
+            else
+              msgSend (AR_RES_SUCC {aid = actAid})
   in
     ()
   end
@@ -174,11 +181,13 @@ struct
            NONE => mainLoop ()
          | SOME msg =>
              let
+               val _ = S.atomicBegin ()
                val _ =
                  case msg of
                      AR_REQ_ADD m => processAdd m
                    | AR_REQ_COM {action} => processCommit action
                    | _ => ()
+               val _ = S.atomicEnd ()
              in
                mainLoop ()
              end

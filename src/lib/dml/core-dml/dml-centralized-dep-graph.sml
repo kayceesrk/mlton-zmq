@@ -434,12 +434,12 @@ struct
          * expect a node at every tid will not throw exceptions. *)
         val _ = C.spawn (fn () =>
                   let
-                    val _ = insertCommitRollbackNode ()
+                    val _ = insertCommitNode ()
                   in
                     clientDaemon (valOf source)
                   end)
         val _ = addToAllThreads ()
-        val _ = insertCommitRollbackNode ()
+        val _ = insertCommitNode ()
         val _ = saveCont ()
         fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();
                                                                case e of

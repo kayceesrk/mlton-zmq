@@ -27,7 +27,46 @@ struct
                                      rid: int,
                                      aid: int}
 
+  structure ActionIdOrdered
+    :> ORDERED where type t = action_id
+  = struct
+    type t = action_id
+
+    fun eq (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
+            ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
+            pid1 = pid2 andalso tid1 = tid2 andalso rid1 = rid2 andalso aid1 = aid2
+
+    fun compare (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
+                 ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
+      (case Int.compare (pid1, pid2) of
+           EQUAL => (case Int.compare (tid1, tid2) of
+                          EQUAL => (case Int.compare (rid1, rid2) of
+                                         EQUAL => Int.compare (aid1, aid2)
+                                       | lg => lg)
+                        | lg => lg)
+         | lg => lg)
+  end
+
+  structure AISS = SplaySet (structure Elem = ActionIdOrdered)
+  structure AISD = SplayDict (structure Key = ActionIdOrdered)
+
   type ptr = {pid: process_id, tid: thread_id, rid: int}
+
+  structure PTROrdered :> ORDERED where type t = ptr =
+  struct
+    type t = ptr
+
+    val eq = MLton.equal
+    fun compare ({pid = ProcessId pidInt1, tid = ThreadId tidInt1, rid = rid1},
+                 {pid = ProcessId pidInt2, tid = ThreadId tidInt2, rid = rid2}) =
+      (case Int.compare (pidInt1, pidInt2) of
+            EQUAL => (case Int.compare (tidInt1, tidInt2) of
+                           EQUAL => Int.compare (rid1, rid2)
+                         | lg => lg)
+          | lg => lg)
+  end
+
+  structure PTRDict = SplayDict (structure Key = PTROrdered)
 
   datatype action_type = SEND_WAIT of {cid: channel_id, matchAid: action_id option}
                        | SEND_ACT of {cid: channel_id}
@@ -35,7 +74,8 @@ struct
                        | RECV_ACT of {cid: channel_id}
                        | SPAWN of {childTid: thread_id}
                        | BEGIN of {parentAid: action_id}
-                       | COM_RB (* This indicates the node that is inserted after commit or rollback *)
+                       | COM (* This indicates the node that is inserted after commit or rollback *)
+                       | RB
 
   datatype action = ACTION of {aid: action_id, act: action_type}
 
@@ -48,6 +88,8 @@ struct
                (* Arbitrator Communication *)
                | AR_REQ_ADD of {action: action, prevAction: action option}
                | AR_REQ_COM of {action: action}
+               | AR_RES_SUCC of {aid: action_id}
+               | AR_RES_FAIL of {rollbackAids: int PTRDict.dict}
 
   datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
 

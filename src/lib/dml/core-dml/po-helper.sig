@@ -12,7 +12,8 @@ sig
   type action = RepTypes.action
   type node
 
-  val insertCommitRollbackNode : unit -> action_id
+  val insertCommitNode : unit -> action_id
+  val insertRollbackNode : unit -> action_id
   val handleInit  : {parentAid: action_id} -> action_id
   val handleSpawn : {childTid : RepTypes.thread_id} -> {spawnAid: action_id, spawnNode: node}
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}

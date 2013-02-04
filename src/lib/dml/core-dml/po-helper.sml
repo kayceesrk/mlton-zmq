@@ -85,19 +85,34 @@ struct
     beginAid
   end
 
-  fun insertCommitRollbackNode () =
+  fun insertCommitNode () =
   let
     val actions = S.tidActions ()
-    val comRbAid = newAid ()
-    val act = ACTION {aid = comRbAid, act = COM_RB}
+    val comAid = newAid ()
+    val act = ACTION {aid = comAid, act = COM}
     val _ = RA.addToEnd (actions, NodeExn act)
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
-    * dml-decentralized.sml where call to insertCommitRollbackNode is made.) *)
+    * dml-decentralized.sml where call to insertCommitNode is made.) *)
     val _ = handleFinalizingSatedNode node
   in
-    comRbAid
+    comAid
+  end
+
+  fun insertRollbackNode () =
+  let
+    val actions = S.tidActions ()
+    val rbAid = newAid ()
+    val act = ACTION {aid = rbAid, act = RB}
+    val _ = RA.addToEnd (actions, NodeExn act)
+    val node = NODE {array = actions, index = RA.length actions - 1}
+    (* initial action can be immediately added arbitrator since it will be
+    * immediately added to finalSatedrbm using forceAddSatedrbm (See
+    * dml-decentralized.sml where call to insertRollbackNode is made.) *)
+    val _ = handleFinalizingSatedNode node
+  in
+    rbAid
   end
 
   fun handleSpawn {childTid} =
