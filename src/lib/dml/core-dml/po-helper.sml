@@ -72,6 +72,7 @@ struct
 
   fun handleInit {parentAid : action_id} =
   let
+    val _ = S.atomicBegin ()
     val actions = S.tidActions ()
     val beginAid = newAid ()
     val act = ACTION {aid = beginAid, act = BEGIN {parentAid = parentAid}}
@@ -81,12 +82,14 @@ struct
     * immediately added to finalSatedComm using forceAddSatedComm (See
     * dml-decentralized.sml where call to handleInit is made.) *)
     val _ = handleFinalizingSatedNode node
+    val _ = S.atomicEnd ()
   in
     beginAid
   end
 
   fun insertCommitNode () =
   let
+    val _ = S.atomicBegin ()
     val actions = S.tidActions ()
     val comAid = newAid ()
     val act = ACTION {aid = comAid, act = COM}
@@ -96,6 +99,7 @@ struct
     * immediately added to finalSatedComm using forceAddSatedComm (See
     * dml-decentralized.sml where call to insertCommitNode is made.) *)
     val _ = handleFinalizingSatedNode node
+    val _ = S.atomicEnd ()
   in
     comAid
   end

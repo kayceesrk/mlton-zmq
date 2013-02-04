@@ -23,8 +23,11 @@ struct
   open CommunicationManager
 
 
-  val {get = act, set = setAct, ...} =
+  val {get = nodeGetAct, set = nodeSetAct, ...} =
     Property.getSetOnce (N.plist, Property.initRaise ("NodeLocator.act", N.layout))
+
+  val {get = mustRollbackOnVisit, ...} =
+    Property.getSetOnce (N.plist, Property.initFun (fn _ => ref false))
 
   val graph = G.new ()
 
@@ -40,7 +43,7 @@ struct
       fun insertAndGetNewNode () =
       let
         val n = G.newNode graph
-        val _ = setAct (n, action)
+        val _ = nodeSetAct (n, action)
         val _ = dict := AISD.insert (!dict) aid n
       in
         n
@@ -60,17 +63,25 @@ struct
     val maxVisit = ref (PTRDict.empty)
     val foundCycle = ref false
     val startNode = NL.node action
-    val ACTION {aid = actAid, ...} = action
+    val visitedNodes = ref []
+
     val {get = amVisiting, set = setVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
 
-    val w = {startNode = fn n => amVisiting n := true,
+    val ACTION {aid = actAid, ...} = action
+
+    val w = {startNode = fn n =>
+               if !(mustRollbackOnVisit n) then
+                 foundCycle := true
+               else
+                 (ListMLton.push (visitedNodes, n);
+                  amVisiting n := true),
              finishNode = fn n =>
                let
                  val _ = amVisiting n := false
 
                  (* Insert into maxVisit *)
-                 val ACTION{aid, ...} = act n
+                 val ACTION{aid, ...} = nodeGetAct n
                  val ptrId = aidToPtr aid
                  val actNum = aidToActNum aid
                  fun insert () = maxVisit := PTRDict.insert (!maxVisit) ptrId actNum
@@ -93,7 +104,8 @@ struct
              finishDfs = destroy}
     val _ = G.dfsNodes (graph, [startNode], w)
     val _ = if !foundCycle then
-              msgSend (AR_RES_FAIL {rollbackAids = !maxVisit})
+              (ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
+               msgSend (AR_RES_FAIL {rollbackAids = !maxVisit}))
             else
               msgSend (AR_RES_SUCC {aid = actAid})
   in

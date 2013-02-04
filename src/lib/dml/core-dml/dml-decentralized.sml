@@ -647,6 +647,11 @@ struct
           if not (pidInt = !processId) then ()
           else
             SatedComm.handleSatedMessage satedCommHelper m
+      | AR_RES_SUCC {aid} =>
+          resumeThread (aidToTidInt aid) emptyW8Vec
+          (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
+      | AR_RES_FAIL {rollbackAids} =>
+          (* Just rollback the threads. Everything else will sort out fine. *)
       | _ => ()
   end
 
@@ -819,6 +824,8 @@ struct
     val _ = S.atomicBegin ()
     val _ = POHelper.requestCommit ()
     val _ = blockCurrentThread ()
+    val _ = insertCommitNode ()
+    val _ = Assert.assertNonAtomic' ("DmlDecentralized.commit")
   in
     ()
   end
