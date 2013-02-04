@@ -794,8 +794,6 @@ struct
     ()
   end
 
-
-
   fun saveCont () = POHelper.saveCont (fn () => SatedComm.forceAddSatedAct satedCommHelper (insertRollbackNode ()))
 
   fun runDML (f, to) =
@@ -847,8 +845,12 @@ struct
     val _ = processLocalSend Client
               {channel = c, sendActAid = actAid,
                sendWaitNode = waitNode, value = m}
+    val _ = S.atomicEnd ()
+    val _ = if inNonSpecExecMode () then
+              SatedComm.waitTillSated satedCommHelper (getLastAid ())
+            else ()
   in
-    S.atomicEnd ()
+    ()
   end
 
 
@@ -860,8 +862,12 @@ struct
     val serM = processLocalRecv Client
                 {channel = c, recvActAid = actAid,
                  recvWaitNode = waitNode}
+    val result = MLton.deserialize serM
+    val _ = if inNonSpecExecMode () then
+              SatedComm.waitTillSated satedCommHelper (getLastAid ())
+            else ()
   in
-    MLton.deserialize serM
+    result
   end
 
   val exitDaemon = fn () => exitDaemon := true

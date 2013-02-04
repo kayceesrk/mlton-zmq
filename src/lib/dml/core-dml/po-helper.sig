@@ -30,6 +30,7 @@ sig
   val handleFinalizingSatedNode : node -> unit
   val requestCommit             : unit -> unit
 
+  val inNonSpecExecMode : unit -> bool
   val saveCont    : (unit -> unit) -> unit
   val restoreCont : unit -> unit
 end

@@ -204,6 +204,16 @@ struct
       aid
     end
 
+  fun inNonSpecExecMode () =
+  let
+    val actions = S.tidActions ()
+  in
+    case getActionFromArrayAtIndex (actions, 0) of
+         ACTION {act = COM, ...} => false
+       | ACTION {act = BEGIN _, ...} => false
+       | ACTION {act = RB, ...} => true
+       | _ => raise Fail "POHelper.inNonSpecExecMode: first action is not BEGIN, COM or RB"
+  end
 
   (********************************************************************
    * Continuation Management
