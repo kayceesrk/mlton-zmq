@@ -327,6 +327,7 @@ struct
     val spnm    : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
     (* APM  -- All Previous acts are Matched *)
     val apm     : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
+    (* DONE -- All reachable acts are matched *)
     val done    : AidSet.set ref = ref AidSet.empty
 
     fun waitTillSated onAid =
@@ -371,6 +372,12 @@ struct
       let
         val _ = debug (fn () => "SatedComm.addToDone: "^(aidToString aid))
         val _ = done := AidSet.insert (!done) aid
+        val _ = Option.app (fn peerAid =>
+          if not (isAidLocal peerAid) then
+            msgSend (SATED {recipient = aidToPid peerAid,
+                            remoteAid = aid,
+                            matchAid = peerAid})
+          else ()) peer
         val _ = Option.app POHelper.handleFinalizingSatedNode node
         val _ = maybeWakeupThread aid
         val _ = maybeProcessPending (getNextAid aid)
@@ -406,7 +413,8 @@ struct
     end
 
     and forceAddSatedAct peer aid =
-      addToFinal {aid = aid, node = NONE, peer = peer}
+      if AidSet.member (!done) aid then ()
+      else addToFinal {aid = aid, node = NONE, peer = peer}
 
     and addSatedAct aid node =
       if AidSet.member (!done) (getPrevAid aid) then
@@ -418,10 +426,10 @@ struct
 
     and addSatedComm {aid, matchAid = peerAid, node} =
       if AidSet.member (!done) (getPrevAid aid) then
-        (addToAPM {aid = aid, peer = SOME peerAid, node = node};
-         if AidDict.member (!apm) peerAid then
+        (if AidDict.member (!apm) peerAid orelse
+            AidSet.member (!done) peerAid then
            addToFinal {aid = aid, node = SOME node, peer = SOME peerAid}
-         else ())
+         else addToAPM {aid = aid, peer = SOME peerAid, node = node})
       else if AidDict.member (!apm) (getPrevAid aid) then
         addToAPM {aid = aid, peer = SOME peerAid, node = node}
       else addToSPNM {aid = aid, peer = SOME peerAid, node = node}
@@ -876,9 +884,9 @@ struct
           val _ = addToAllThreads ()
           val beginAct = handleInit {parentAid = spawnAid}
           val _ = SatedComm.forceAddSatedAct beginAct
-          val _ = saveCont ()
+          val _ = S.atomicEnd ()
         in
-          S.atomicEnd ()
+          saveCont ()
         end
       fun safeBody () = (removeFromAllThreads(f(prolog()))) handle e => (removeFromAllThreads ();
                                                                      case e of
