@@ -323,9 +323,11 @@ struct
     (* fun debug' msg = debug (fn () => msg) *)
 
     val waiting : thread_id AidDict.dict ref = ref AidDict.empty
-    val pending : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
-    val readyPeers : AidSet.set ref = ref AidSet.empty
-    val done : AidSet.set ref = ref AidSet.empty
+    (* SPNM -- Some Previous act is Not Matched *)
+    val spnm    : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
+    (* APM  -- All Previous acts are Matched *)
+    val apm     : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
+    val done    : AidSet.set ref = ref AidSet.empty
 
     fun waitTillSated onAid =
     let
@@ -349,23 +351,21 @@ struct
              (resumeThread tidInt emptyW8Vec;
               waiting := AidDict.remove (!waiting) aid)
 
-    fun addToReadyPeers aid =
+    fun addToAPM {aid, peer, node} =
     let
-      val _ = debug (fn () => "SatedComm.addToReadyPeers: "^(aidToString aid))
-      val _ = readyPeers := AidSet.insert (!readyPeers) aid
+      val _ = debug (fn () => "SatedComm.addToAPM: "^(aidToString aid))
+      val _ = apm := AidDict.insert (!apm) aid {peer = peer, node = node}
       val _ = maybeProcessPending (getNextAid aid)
+      val _ = Option.app maybeProcessPending peer
+      val _ = Option.app (fn peerAid =>
+        if not (isAidLocal peerAid) then
+          msgSend (SATED {recipient = aidToPid peerAid,
+                          remoteAid = aid,
+                          matchAid = peerAid})
+        else ()) peer
     in
       ()
     end
-
-    and handlePeerReady aid peerAid =
-    if not (isAidLocal peerAid) then
-      msgSend (SATED {recipient = aidToPid peerAid,
-                      remoteAid = aid,
-                      matchAid = peerAid})
-    else
-      (addToReadyPeers aid;
-       maybeProcessPending peerAid)
 
     and addToFinal {aid, node, peer} =
       let
@@ -380,22 +380,27 @@ struct
       end
 
     and maybeProcessPending aid =
-      case AidDict.find (!pending) aid of
-           NONE => ()
-         | SOME kind =>
-             let
-               val _ = pending := AidDict.remove (!pending) aid
-             in
-               case kind of
-                    {peer = NONE, node} => addSatedAct aid node
-                  | {peer = SOME matchAid, node} =>
-                      addSatedComm {aid = aid, matchAid = matchAid, node = node}
-             end
-
-    and addToPending {aid, peer, node} =
     let
-      val _ = debug (fn () => "SatedComm.addToPending: "^(aidToString aid))
-      val _ = pending := AidDict.insert (!pending) aid {peer = peer, node = node}
+      fun processKind kind =
+        case kind of
+            {peer = NONE, node} => addSatedAct aid node
+          | {peer = SOME matchAid, node} =>
+              addSatedComm {aid = aid, matchAid = matchAid, node = node}
+    in
+      case AidDict.find (!spnm) aid of
+           NONE => (case AidDict.find (!apm) aid of
+                         NONE => ()
+                       | SOME kind => (apm := AidDict.remove (!apm) aid;
+                                       processKind kind))
+         | SOME kind =>
+             (spnm := AidDict.remove (!spnm) aid;
+              processKind kind)
+    end
+
+    and addToSPNM {aid, peer, node} =
+    let
+      val _ = debug (fn () => "SatedComm.addToSPNM: "^(aidToString aid))
+      val _ = spnm := AidDict.insert (!spnm) aid {peer = peer, node = node}
     in
       ()
     end
@@ -406,20 +411,20 @@ struct
     and addSatedAct aid node =
       if AidSet.member (!done) (getPrevAid aid) then
         addToFinal {aid = aid, node = SOME node, peer = NONE}
-      else if AidSet.member (!readyPeers) (getPrevAid aid) then
-        addToReadyPeers aid
+      else if AidDict.member (!apm) (getPrevAid aid) then
+        addToAPM {aid = aid, node = node, peer = NONE}
       else
-        addToPending {aid = aid, peer = NONE, node = node}
+        addToSPNM {aid = aid, peer = NONE, node = node}
 
     and addSatedComm {aid, matchAid = peerAid, node} =
       if AidSet.member (!done) (getPrevAid aid) then
-        (handlePeerReady aid peerAid;
-         if AidSet.member (!readyPeers) peerAid then
+        (addToAPM {aid = aid, peer = SOME peerAid, node = node};
+         if AidDict.member (!apm) peerAid then
            addToFinal {aid = aid, node = SOME node, peer = SOME peerAid}
          else ())
-      else if AidSet.member (!readyPeers) (getPrevAid aid) then
-        handlePeerReady aid peerAid
-      else addToPending {aid = aid, peer = SOME peerAid, node = node}
+      else if AidDict.member (!apm) (getPrevAid aid) then
+        addToAPM {aid = aid, peer = SOME peerAid, node = node}
+      else addToSPNM {aid = aid, peer = SOME peerAid, node = node}
 
     fun handleSatedMessage {remoteAid, matchAid} =
       forceAddSatedAct (SOME remoteAid) matchAid
