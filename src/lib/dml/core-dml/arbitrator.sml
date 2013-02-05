@@ -36,7 +36,7 @@ struct
 
   structure NodeLocator =
   struct
-    val dict : N.t AISD.dict ref = ref (AISD.empty)
+    val dict : N.t AidDict.dict ref = ref (AidDict.empty)
 
     fun node (action as ACTION {aid, act}) =
     let
@@ -44,12 +44,12 @@ struct
       let
         val n = G.newNode graph
         val _ = nodeSetAct (n, action)
-        val _ = dict := AISD.insert (!dict) aid n
+        val _ = dict := AidDict.insert (!dict) aid n
       in
         n
       end
     in
-      case AISD.find (!dict) aid of
+      case AidDict.find (!dict) aid of
            SOME n => n
          | NONE => insertAndGetNewNode ()
     end

@@ -92,21 +92,21 @@ struct
   struct
     open StrDict
 
-    type 'a t = 'a AISD.dict StrDict.dict ref
+    type 'a t = 'a AidDict.dict StrDict.dict ref
 
     fun empty () = ref (StrDict.empty)
 
     fun addAid strDictRef (ChannelId channel) aid value =
     let
-      fun merge oldAidDict = AISD.insert oldAidDict aid value
+      fun merge oldAidDict = AidDict.insert oldAidDict aid value
     in
-      strDictRef := StrDict.insertMerge (!strDictRef) channel (AISD.singleton aid value) merge
+      strDictRef := StrDict.insertMerge (!strDictRef) channel (AidDict.singleton aid value) merge
     end
 
     fun removeAid strDictRef (ChannelId channel) aid =
     let
       val aidDict = StrDict.lookup (!strDictRef) channel
-      val aidDict = AISD.remove aidDict aid
+      val aidDict = AidDict.remove aidDict aid
     in
       strDictRef := StrDict.insert (!strDictRef) channel aidDict
     end handle StrDict.Absent => ()
@@ -118,20 +118,20 @@ struct
       val aidDict = StrDict.lookup (!strDictRef) channel
       fun getOne () =
       let
-        val _ = AISD.app (fn (k, _) =>
+        val _ = AidDict.app (fn (k, _) =>
                   if (aidToTidInt k = aidToTidInt againstAid) andalso
                      (aidToPidInt k = aidToPidInt againstAid)
                   then () (* dont match actions from the same thread *)
                   else raise FIRST k) aidDict
       in
-        raise AISD.Absent
+        raise AidDict.Absent
       end handle FIRST k => k
       val aid = getOne ()
-      val return = SOME (aid, AISD.lookup aidDict aid)
+      val return = SOME (aid, AidDict.lookup aidDict aid)
       val _ = removeAid strDictRef (ChannelId channel) aid
     in
       return
-    end handle AISD.Absent => NONE
+    end handle AidDict.Absent => NONE
              | StrDict.Absent => NONE
 
     fun cleanup strDictRef rollbackAids =
@@ -140,11 +140,11 @@ struct
       val oldStrDict = !strDictRef
       fun getNewAidDict oldAidDict =
         let
-          val emptyAidDict = AISD.empty
+          val emptyAidDict = AidDict.empty
         in
-          AISD.foldl (fn (aid as ACTION_ID {pid, tid, rid, ...}, value, newAidDict) =>
+          AidDict.foldl (fn (aid as ACTION_ID {pid, tid, rid, ...}, value, newAidDict) =>
             case PTRDict.find rollbackAids {pid = pid, tid = tid, rid = rid} of
-                NONE => AISD.insert newAidDict aid value
+                NONE => AidDict.insert newAidDict aid value
               | SOME _ => newAidDict) emptyAidDict oldAidDict
         end
       val newStrDict = StrDict.map (fn aidDict => getNewAidDict aidDict) oldStrDict
@@ -159,7 +159,7 @@ struct
 
   structure MatchedComm : MATCHED_COMM =
   struct
-    type 'a t = {actAid : action_id, waitNode : node, value : 'a} AISD.dict ref
+    type 'a t = {actAid : action_id, waitNode : node, value : 'a} AidDict.dict ref
 
     datatype 'a join_result =
       SUCCESS of {value : 'a, waitNode: POHelper.node}
@@ -168,7 +168,7 @@ struct
                   value : 'a}
     | NOOP
 
-    fun empty () = ref (AISD.empty)
+    fun empty () = ref (AidDict.empty)
 
     fun add aidDictRef {actAid, remoteMatchAid, waitNode} value =
     let
@@ -176,7 +176,7 @@ struct
               else if not (isAidLocal actAid) then raise Fail "MatchedComm.add(2)"
               else ()
     in
-      aidDictRef := AISD.insert (!aidDictRef) remoteMatchAid
+      aidDictRef := AidDict.insert (!aidDictRef) remoteMatchAid
                     {actAid = actAid, waitNode = waitNode, value = value}
     end
 
@@ -184,7 +184,7 @@ struct
     let
       val _ = if isAidLocal remoteAid then raise Fail "MatchedComm.join"
               else ()
-      val {actAid, waitNode, value} = AISD.lookup (!aidDictRef) remoteAid
+      val {actAid, waitNode, value} = AidDict.lookup (!aidDictRef) remoteAid
       val result =
         if MLton.equal (actAid, withAid) then
           let
@@ -198,10 +198,10 @@ struct
           in
             FAILURE {actAid = actAid, waitNode = waitNode, value = value}
           end
-      val _ = aidDictRef := AISD.remove (!aidDictRef) remoteAid
+      val _ = aidDictRef := AidDict.remove (!aidDictRef) remoteAid
     in
       result
-    end handle AISD.Absent => (debug' ("NOOP"); NOOP)
+    end handle AidDict.Absent => (debug' ("NOOP"); NOOP)
 
   end
 
@@ -327,42 +327,42 @@ struct
     fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
     (* fun debug' msg = debug (fn () => msg) *)
 
-    datatype t = SC of {waiting : thread_id AISD.dict ref, (* waiting threads *)
-                        pending : {peer: {matchAid: action_id, value: w8vec option} option, node: POHelper.node} AISD.dict ref, (* matched but unsated actions *)
-                        final   : {matchAid: action_id, value: w8vec option} option AISD.dict ref}
+    datatype t = SC of {waiting : thread_id AidDict.dict ref, (* waiting threads *)
+                        pending : {peer: {matchAid: action_id, value: w8vec option} option, node: POHelper.node} AidDict.dict ref, (* matched but unsated actions *)
+                        final   : {matchAid: action_id, value: w8vec option} option AidDict.dict ref}
 
-    fun empty () = SC {waiting = ref AISD.empty,
-                       pending = ref AISD.empty,
-                       final   = ref AISD.empty}
+    fun empty () = SC {waiting = ref AidDict.empty,
+                       pending = ref AidDict.empty,
+                       final   = ref AidDict.empty}
 
     fun waitTillSated (SC {final, waiting, ...}) onAid =
     let
       val _ = Assert.assertNonAtomic' ("SatedComm.waitTillSated(1)")
       val _ = S.atomicBegin ()
     in
-      if AISD.member (!final) onAid then S.atomicEnd ()
+      if AidDict.member (!final) onAid then S.atomicEnd ()
       else
         let
           val tidInt = S.tidInt ()
-          val _ = waiting := AISD.insert (!waiting) onAid (ThreadId tidInt)
+          val _ = waiting := AidDict.insert (!waiting) onAid (ThreadId tidInt)
         in
           ignore (blockCurrentThread ())
         end
     end
 
     fun maybeWakeupThread (SC {waiting, ...}) aid =
-      case AISD.find (!waiting) aid of
+      case AidDict.find (!waiting) aid of
            NONE => ()
          | SOME (ThreadId tidInt) =>
              (resumeThread tidInt emptyW8Vec;
-              waiting := AISD.remove (!waiting) aid)
+              waiting := AidDict.remove (!waiting) aid)
 
     fun maybeProcessPending (state as SC {pending, ...}) nextAid =
-      case AISD.find (!pending) nextAid of
+      case AidDict.find (!pending) nextAid of
            NONE => ()
          | SOME kind =>
              let
-               val _ = pending := AISD.remove (!pending) nextAid
+               val _ = pending := AidDict.remove (!pending) nextAid
                val _ = debug (fn () => "Add to pending "^(aidToString nextAid))
              in
                case kind of
@@ -374,9 +374,9 @@ struct
     let
       val _ = Assert.assertAtomic' ("SatedComm.addSatedAct", SOME 1)
     in
-      if AISD.member (!final) (getPrevAid aid) then
+      if AidDict.member (!final) (getPrevAid aid) then
         let
-          val _ = final := AISD.insert (!final) aid NONE
+          val _ = final := AidDict.insert (!final) aid NONE
           val _ = POHelper.handleFinalizingSatedNode node
           val _ = debug (fn () => "Add to final "^(aidToString aid))
           val _ = maybeWakeupThread state aid
@@ -386,7 +386,7 @@ struct
         end
       else
         let
-          val _ = pending := AISD.insert (!pending) aid {peer = NONE, node = node}
+          val _ = pending := AidDict.insert (!pending) aid {peer = NONE, node = node}
           val _ = debug (fn () => "Add to pending "^(aidToString aid))
         in
           ()
@@ -397,7 +397,7 @@ struct
     let
       val _ = S.atomicBegin ()
       val _ = Assert.assertAtomic' ("SatedComm.forceAddSatedAct", NONE)
-      val _ = final := AISD.insert (!final) aid NONE
+      val _ = final := AidDict.insert (!final) aid NONE
       val _ = debug (fn () => "Add to final "^(aidToString aid))
       val _ = maybeWakeupThread state aid
       val _ = maybeProcessPending state (getNextAid aid)
@@ -410,9 +410,9 @@ struct
       val _ = Assert.assertAtomic' ("SatedComm.addSatedComm", SOME 1)
     in
       (* prevAct, matchAct \in final *)
-      if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!final) matchAid then
+      if AidDict.member (!final) (getPrevAid aid) andalso AidDict.member (!final) matchAid then
         let
-          val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
+          val _ = final := AidDict.insert (!final) aid (SOME {matchAid = matchAid, value = value})
           val _ = POHelper.handleFinalizingSatedNode node
           val _ = debug (fn () => "Add to final "^(aidToString aid))
           val _ = maybeWakeupThread state aid
@@ -421,20 +421,20 @@ struct
           ()
         end
       (* prevAct \in final, matchAct \notin final, remote(matchAid) *)
-      else if AISD.member (!final) (getPrevAid aid) andalso not (isAidLocal matchAid) then
+      else if AidDict.member (!final) (getPrevAid aid) andalso not (isAidLocal matchAid) then
         let
           val _ = msgSend (SATED {recipient = ProcessId (aidToPidInt matchAid),
                                   remoteAid = aid, matchAid = matchAid})
-          val _ = pending := AISD.insert (!pending) aid {peer = SOME {matchAid = matchAid, value = value}, node = node}
+          val _ = pending := AidDict.insert (!pending) aid {peer = SOME {matchAid = matchAid, value = value}, node = node}
           val _ = debug (fn () => "Add to pending "^(aidToString aid))
         in
           ()
         end
       (* prevAct \in final, matchAct \in pending, prev(matchAct) \in final, local(matchAid) *)
-      else if AISD.member (!final) (getPrevAid aid) andalso (isAidLocal matchAid)
-           andalso AISD.member (!pending) matchAid andalso AISD.member (!final) (getPrevAid matchAid) then
+      else if AidDict.member (!final) (getPrevAid aid) andalso (isAidLocal matchAid)
+           andalso AidDict.member (!pending) matchAid andalso AidDict.member (!final) (getPrevAid matchAid) then
         let
-          val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
+          val _ = final := AidDict.insert (!final) aid (SOME {matchAid = matchAid, value = value})
           val _ = POHelper.handleFinalizingSatedNode node
           val _ = debug (fn () => "Add to final "^(aidToString aid))
           val _ = maybeProcessPending state matchAid
@@ -444,7 +444,7 @@ struct
       (* prevAct \notin final *)
       else
         let
-          val _ = pending := AISD.insert (!pending) aid {peer = SOME {matchAid = matchAid, value = value}, node = node}
+          val _ = pending := AidDict.insert (!pending) aid {peer = SOME {matchAid = matchAid, value = value}, node = node}
           val _ = debug (fn () => "Add to pending "^(aidToString aid))
         in
           ()
@@ -454,7 +454,7 @@ struct
     and handleSatedMessage (state as SC {final, ...}) {recipient = _, remoteAid, matchAid} =
     let
       val _ = Assert.assertAtomic' ("SatedComm.handleSatedMessage", SOME 1)
-      val _ = final := AISD.insert (!final) remoteAid NONE
+      val _ = final := AidDict.insert (!final) remoteAid NONE
       val _ = debug (fn () => "Add to final "^(aidToString remoteAid))
     in
       maybeProcessPending state matchAid
