@@ -38,11 +38,10 @@ end
 signature SATED_COMM =
 sig
   val waitTillSated      : ActionManager.action_id -> unit
-  val addSatedAct        : ActionManager.action_id -> POHelper.node -> unit
+  val addSatedAct        : ActionManager.action_id -> unit
   val forceAddSatedAct   : ActionManager.action_id -> unit
   val addSatedComm       : {aid: ActionManager.action_id,
-                            matchAid: ActionManager.action_id,
-                            node: POHelper.node} -> unit
+                            matchAid: ActionManager.action_id} -> unit
   val handleSatedMessage : {remoteAid: ActionManager.action_id,
                             matchAid: ActionManager.action_id} -> unit
 end
@@ -324,9 +323,9 @@ struct
 
     val waiting : thread_id AidDict.dict ref = ref AidDict.empty
     (* SPNM -- Some Previous act is Not Matched *)
-    val spnm    : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
+    val spnm    : {peer: action_id option} AidDict.dict ref = ref AidDict.empty
     (* APM  -- All Previous acts are Matched *)
-    val apm     : {peer: action_id option, node: node} AidDict.dict ref = ref AidDict.empty
+    val apm     : {peer: action_id option} AidDict.dict ref = ref AidDict.empty
     (* DONE -- All reachable acts are matched *)
     val done    : AidSet.set ref = ref AidSet.empty
 
@@ -352,10 +351,10 @@ struct
              (resumeThread tidInt emptyW8Vec;
               waiting := AidDict.remove (!waiting) aid)
 
-    fun addToAPM {aid, peer, node} =
+    fun addToAPM {aid, peer} =
     let
       val _ = debug (fn () => "SatedComm.addToAPM: "^(aidToString aid))
-      val _ = apm := AidDict.insert (!apm) aid {peer = peer, node = node}
+      val _ = apm := AidDict.insert (!apm) aid {peer = peer}
       val _ = maybeProcessPending (getNextAid aid)
       val _ = Option.app maybeProcessPending peer
       val _ = Option.app (fn peerAid =>
@@ -368,7 +367,7 @@ struct
       ()
     end
 
-    and addToFinal {aid, node, peer} =
+    and addToFinal {aid, peer} =
       let
         val _ = debug (fn () => "SatedComm.addToDone: "^(aidToString aid))
         val _ = done := AidSet.insert (!done) aid
@@ -378,7 +377,6 @@ struct
                             remoteAid = aid,
                             matchAid = peerAid})
           else ()) peer
-        val _ = Option.app POHelper.handleFinalizingSatedNode node
         val _ = maybeWakeupThread aid
         val _ = maybeProcessPending (getNextAid aid)
         val _ = Option.app maybeProcessPending peer
@@ -390,9 +388,9 @@ struct
     let
       fun processKind kind =
         case kind of
-            {peer = NONE, node} => addSatedAct aid node
-          | {peer = SOME matchAid, node} =>
-              addSatedComm {aid = aid, matchAid = matchAid, node = node}
+            {peer = NONE} => addSatedAct aid
+          | {peer = SOME matchAid} =>
+              addSatedComm {aid = aid, matchAid = matchAid}
     in
       case AidDict.find (!spnm) aid of
            NONE => (case AidDict.find (!apm) aid of
@@ -404,35 +402,35 @@ struct
               processKind kind)
     end
 
-    and addToSPNM {aid, peer, node} =
+    and addToSPNM {aid, peer} =
     let
       val _ = debug (fn () => "SatedComm.addToSPNM: "^(aidToString aid))
-      val _ = spnm := AidDict.insert (!spnm) aid {peer = peer, node = node}
+      val _ = spnm := AidDict.insert (!spnm) aid {peer = peer}
     in
       ()
     end
 
     and forceAddSatedAct peer aid =
       if AidSet.member (!done) aid then ()
-      else addToFinal {aid = aid, node = NONE, peer = peer}
+      else addToFinal {aid = aid, peer = peer}
 
-    and addSatedAct aid node =
+    and addSatedAct aid =
       if AidSet.member (!done) (getPrevAid aid) then
-        addToFinal {aid = aid, node = SOME node, peer = NONE}
+        addToFinal {aid = aid, peer = NONE}
       else if AidDict.member (!apm) (getPrevAid aid) then
-        addToAPM {aid = aid, node = node, peer = NONE}
+        addToAPM {aid = aid, peer = NONE}
       else
-        addToSPNM {aid = aid, peer = NONE, node = node}
+        addToSPNM {aid = aid, peer = NONE}
 
-    and addSatedComm {aid, matchAid = peerAid, node} =
+    and addSatedComm {aid, matchAid = peerAid} =
       if AidSet.member (!done) (getPrevAid aid) then
         (if AidDict.member (!apm) peerAid orelse
             AidSet.member (!done) peerAid then
-           addToFinal {aid = aid, node = SOME node, peer = SOME peerAid}
-         else addToAPM {aid = aid, peer = SOME peerAid, node = node})
+           addToFinal {aid = aid, peer = SOME peerAid}
+         else addToAPM {aid = aid, peer = SOME peerAid})
       else if AidDict.member (!apm) (getPrevAid aid) then
-        addToAPM {aid = aid, peer = SOME peerAid, node = node}
-      else addToSPNM {aid = aid, peer = SOME peerAid, node = node}
+        addToAPM {aid = aid, peer = SOME peerAid}
+      else addToSPNM {aid = aid, peer = SOME peerAid}
 
     fun handleSatedMessage {remoteAid, matchAid} =
       forceAddSatedAct (SOME remoteAid) matchAid
@@ -446,27 +444,30 @@ struct
   fun resumeBlockedRecv {sendActAid, recvActAid, recvWaitNode} value =
   let
     val tidInt = aidToTidInt recvActAid
-    val _ = SatedComm.addSatedComm
-             {aid = recvActAid, matchAid = sendActAid, node = getPrevNode recvWaitNode}
-    val _ = SatedComm.addSatedAct (getNextAid recvActAid) recvWaitNode
+    val _ = POHelper.sendToArbitrator (getPrevNode recvWaitNode)
+    val _ = POHelper.sendToArbitrator recvWaitNode
+    val _ = SatedComm.addSatedComm {aid = recvActAid, matchAid = sendActAid}
+    val _ = SatedComm.addSatedAct (getNextAid recvActAid)
   in
     resumeThread tidInt value
   end
 
   fun satiateSend {sendActAid, recvActAid, sendWaitNode} =
   let
-    val _ = SatedComm.addSatedComm
-              {aid = sendActAid, matchAid = recvActAid, node = getPrevNode sendWaitNode}
-    val _ = SatedComm.addSatedAct (getNextAid sendActAid) sendWaitNode
+    val _ = POHelper.sendToArbitrator (getPrevNode sendWaitNode)
+    val _ = POHelper.sendToArbitrator sendWaitNode
+    val _ = SatedComm.addSatedComm {aid = sendActAid, matchAid = recvActAid}
+    val _ = SatedComm.addSatedAct (getNextAid sendActAid)
   in
     ()
   end
 
   fun satiateRecv {sendActAid, recvActAid, recvWaitNode} value =
   let
-    val _ = SatedComm.addSatedComm
-              {aid = recvActAid, matchAid = sendActAid, node = getPrevNode recvWaitNode}
-    val _ = SatedComm.addSatedAct (getNextAid recvActAid) recvWaitNode
+    val _ = POHelper.sendToArbitrator (getPrevNode recvWaitNode)
+    val _ = POHelper.sendToArbitrator recvWaitNode
+    val _ = SatedComm.addSatedComm {aid = recvActAid, matchAid = sendActAid}
+    val _ = SatedComm.addSatedAct (getNextAid recvActAid)
   in
     ()
   end
@@ -863,6 +864,9 @@ struct
     val _ = POHelper.requestCommit ()
     val _ = blockCurrentThread ()
     val _ = debug' ("DmlDecentralized.commit: SUCCESS")
+    (* --- Racy code --- *)
+    val _ = CML.tidCommit (S.getCurThreadId ())
+    (* --- End racy code --- *)
     val comAid = insertCommitNode ()
     val _ = SatedComm.forceAddSatedAct comAid
     val _ = saveCont ()
@@ -877,7 +881,8 @@ struct
       val tid = S.newTid ()
       val tidInt = C.tidToInt tid
       val {spawnAid, spawnNode}= handleSpawn {childTid = ThreadId tidInt}
-      val _ = S.doAtomic (fn () => SatedComm.addSatedAct spawnAid spawnNode)
+      val _ = POHelper.sendToArbitrator spawnNode
+      val _ = S.doAtomic (fn () => SatedComm.addSatedAct spawnAid)
       fun prolog () =
         let
           val _ = S.atomicBegin ()

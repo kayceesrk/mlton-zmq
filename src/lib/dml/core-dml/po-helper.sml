@@ -43,7 +43,7 @@ struct
    * Arbitrator interfacing
    *******************************************************************)
 
-  fun handleFinalizingSatedNode (NODE {array, index}) =
+  fun sendToArbitrator (NODE {array, index}) =
   let
     val prevAction =
       if index = 0 then NONE
@@ -81,7 +81,7 @@ struct
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
     * dml-decentralized.sml where call to handleInit is made.) *)
-    val _ = handleFinalizingSatedNode node
+    val _ = sendToArbitrator node
     val _ = S.atomicEnd ()
   in
     beginAid
@@ -98,7 +98,7 @@ struct
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
     * dml-decentralized.sml where call to insertCommitNode is made.) *)
-    val _ = handleFinalizingSatedNode node
+    val _ = sendToArbitrator node
     val _ = S.atomicEnd ()
   in
     comAid
@@ -114,7 +114,7 @@ struct
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedrbm using forceAddSatedrbm (See
     * dml-decentralized.sml where call to insertRollbackNode is made.) *)
-    val _ = handleFinalizingSatedNode node
+    val _ = sendToArbitrator node
   in
     rbAid
   end

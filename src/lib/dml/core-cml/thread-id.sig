@@ -23,6 +23,7 @@ sig
   val tidToRev     : thread_id -> int
   val tidToActions : thread_id -> exn ResizableArray.t
   val tidNextActionNum : thread_id -> int
+  val tidCommit    : thread_id -> unit
 
   val tidSaveCont    : thread_id * (unit -> unit) -> unit
   val tidRestoreCont : thread_id -> unit

@@ -37,6 +37,16 @@ structure ThreadID : THREAD_ID_EXTRA =
         res
       end
 
+      fun tidCommit (TID {revisionId, actionNum, actions, ...}) =
+      let
+        val _ = revisionId := !revisionId + 1
+        val _ = actionNum := !actionNum + 1
+        val _ = actions := (ResizableArray.empty ())
+      in
+        ()
+      end
+
+
       fun tidSaveCont (TID {cont, actionNum, ...}, doBeforeRestore) =
         MLton.Cont.callcc (fn k =>
           (* XXX racy *)

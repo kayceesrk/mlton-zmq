@@ -27,7 +27,7 @@ sig
 
   (* The following communicate with the arbitrator using the action stored in
    * the nodes *)
-  val handleFinalizingSatedNode : node -> unit
+  val sendToArbitrator : node -> unit
   val requestCommit             : unit -> unit
 
   val inNonSpecExecMode : unit -> bool
