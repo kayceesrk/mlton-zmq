@@ -47,7 +47,7 @@ struct
          | lg => lg)
   end
 
-  structure AISS = SplaySet (structure Elem = ActionIdOrdered)
+  structure AidSet = SplaySet (structure Elem = ActionIdOrdered)
   structure AidDict = SplayDict (structure Key = ActionIdOrdered)
 
   type ptr = {pid: process_id, tid: thread_id, rid: int}
@@ -84,7 +84,8 @@ struct
                | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
                | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN   of {pid: process_id}
-               | SATED  of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
+               (* Handling SatedComm *)
+               | SATED of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
                (* Arbitrator Communication *)
                | AR_REQ_ADD of {action: action, prevAction: action option}
                | AR_REQ_COM of {action: action}

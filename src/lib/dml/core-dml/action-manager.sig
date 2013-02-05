@@ -16,6 +16,7 @@ sig
 
   val newAid      : unit -> action_id
   val dummyAid    : unit -> action_id
+  val aidToPid    : action_id -> RepTypes.process_id
   val aidToPidInt : action_id -> int
   val aidToTidInt : action_id -> int
   val aidToTid    : action_id -> RepTypes.thread_id

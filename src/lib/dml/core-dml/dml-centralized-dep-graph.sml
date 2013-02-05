@@ -36,7 +36,7 @@ struct
                    | R_ACK of {matchAid: action_id, value: w8vec} (* Acknowledgement includes the matching action id *)
                    | J_REQ
                    | J_ACK
-                   | RB_REQ of {visitedSet: AISS.set, aidList: action_id list}
+                   | RB_REQ of {visitedSet: AidSet.set, aidList: action_id list}
 
 
   datatype msg = MSG of {cid : channel_id,
@@ -88,7 +88,7 @@ struct
        | R_ACK {matchAid, ...}  => concat ["R_ACK[", aidToString matchAid,"]"]
        | J_REQ    => "J_REQ"
        | J_ACK    => "J_ACK"
-       | RB_REQ {visitedSet, aidList} => concat ["RB_REQ(", Int.toString (AISS.size visitedSet), ",", Int.toString (length aidList), ")"]
+       | RB_REQ {visitedSet, aidList} => concat ["RB_REQ(", Int.toString (AidSet.size visitedSet), ",", Int.toString (length aidList), ")"]
 
   fun msgToString (MSG {cid = ChannelId cstr, aid, cnt}) =
     concat ["Aid: ", aidToString aid, " Channel: ", cstr," Request: ", contentToStr cnt]
@@ -137,7 +137,7 @@ struct
                                     prefix)
               end)
 
-    (* Convert localRestores from AISS.set to PTRSet.set *)
+    (* Convert localRestores from AidSet.set to PTRSet.set *)
     (* Each thread has exactly one saved continuation, associated with a
     * corresponding revision number. This step is needed because we might have
     * the target thread already rollback beyond the point to which we want the
@@ -146,7 +146,7 @@ struct
     * Hence, we convert action_id to {pid, tid, rid}, look for a matching
     * candidate. If the target thread is still in the revision we want, then we
     * rollback this thread, otherwise, we leave it untouched. *)
-    val localRestore : PTRSet.set = AISS.foldl (fn (e, acc) => PTRSet.insert acc e) PTRSet.empty localRestore
+    val localRestore : PTRSet.set = AidSet.foldl (fn (e, acc) => PTRSet.insert acc e) PTRSet.empty localRestore
 
     (* Process local restores on Scheduler *)
     fun restoreSCore (S.RTHRD (tid, t)) =
@@ -181,7 +181,7 @@ struct
 
     (* dfs *)
     val {localRestore, remoteRollbacks, visitedSet} =
-      rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = AISS.empty}
+      rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = AidSet.empty}
 
     val _ = performLocalRollbackRemoteMsgs
               {localRestore = localRestore,
@@ -204,13 +204,13 @@ struct
                                           NONE => acc
                                         | SOME n => n::acc)
     val _ = debug' ("processRollbackMsg(2)")
-    val (lr, rrb, vs) = ListMLton.fold (nodeList, (AISS.empty, [], visitedSet),
+    val (lr, rrb, vs) = ListMLton.fold (nodeList, (AidSet.empty, [], visitedSet),
         fn (startNode, (lr, rrb, vs)) =>
         let
           val {localRestore, remoteRollbacks, visitedSet} =
             rhNodeToThreads {startNode = startNode, tid2tid = tid2tid, visitedSet = vs}
         in
-          (AISS.union localRestore lr, rrb @ remoteRollbacks, visitedSet)
+          (AidSet.union localRestore lr, rrb @ remoteRollbacks, visitedSet)
         end)
     val _ = debug' ("processRollbackMsg(3)")
     val _ = performLocalRollbackRemoteMsgs
