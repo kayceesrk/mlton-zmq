@@ -430,8 +430,9 @@ struct
         in
           ()
         end
-      (* prevAct \in final, matchAct \in pending, local(matchAid) *)
-      else if AISD.member (!final) (getPrevAid aid) andalso AISD.member (!pending) matchAid andalso (isAidLocal matchAid) then
+      (* prevAct \in final, matchAct \in pending, prev(matchAct) \in final, local(matchAid) *)
+      else if AISD.member (!final) (getPrevAid aid) andalso (isAidLocal matchAid)
+           andalso AISD.member (!pending) matchAid andalso AISD.member (!final) (getPrevAid matchAid) then
         let
           val _ = final := AISD.insert (!final) aid (SOME {matchAid = matchAid, value = value})
           val _ = POHelper.handleFinalizingSatedNode node
@@ -872,29 +873,6 @@ struct
 
   val exitDaemon = fn () => exitDaemon := true
 
-  fun spawn f =
-    let
-      val tid = S.newTid ()
-      val tidInt = C.tidToInt tid
-      val {spawnAid, spawnNode}= handleSpawn {childTid = ThreadId tidInt}
-      val _ = S.doAtomic (fn () => SatedComm.addSatedAct satedCommHelper spawnAid spawnNode)
-      fun prolog () =
-        let
-          val _ = S.atomicBegin ()
-          val _ = addToAllThreads ()
-          val beginAct = handleInit {parentAid = spawnAid}
-          val _ = SatedComm.forceAddSatedAct satedCommHelper beginAct
-        in
-          S.atomicEnd ()
-        end
-      fun safeBody () = (removeFromAllThreads(f(prolog()))) handle e => (removeFromAllThreads ();
-                                                                     case e of
-                                                                          CML.Kill => ()
-                                                                        | _ => raise e)
-      val _ = ignore (C.spawnWithTid (safeBody, tid))
-    in
-      ()
-    end
 
   fun commit () =
   let
@@ -905,6 +883,7 @@ struct
     val _ = S.atomicBegin ()
     val _ = POHelper.requestCommit ()
     val _ = blockCurrentThread ()
+    val _ = debug' ("DmlDecentralized.commit: SUCCESS")
     val comAid = insertCommitNode ()
     val _ = SatedComm.forceAddSatedAct satedCommHelper comAid
     val _ = saveCont ()
@@ -913,6 +892,32 @@ struct
     ()
   end
 
+  fun spawn f =
+    let
+      val _ = commit ()
+      val tid = S.newTid ()
+      val tidInt = C.tidToInt tid
+      val {spawnAid, spawnNode}= handleSpawn {childTid = ThreadId tidInt}
+      val _ = S.doAtomic (fn () => SatedComm.addSatedAct satedCommHelper spawnAid spawnNode)
+      fun prolog () =
+        let
+          val _ = S.atomicBegin ()
+          val _ = addToAllThreads ()
+          val beginAct = handleInit {parentAid = spawnAid}
+          val _ = SatedComm.forceAddSatedAct satedCommHelper beginAct
+          val _ = saveCont ()
+        in
+          S.atomicEnd ()
+        end
+      fun safeBody () = (removeFromAllThreads(f(prolog()))) handle e => (removeFromAllThreads ();
+                                                                     case e of
+                                                                          CML.Kill => ()
+                                                                        | _ => raise e)
+      val _ = ignore (C.spawnWithTid (safeBody, tid))
+      val _ = commit ()
+    in
+      ()
+    end
 
 end
 
