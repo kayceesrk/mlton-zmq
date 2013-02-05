@@ -891,8 +891,9 @@ struct
                                                                      case e of
                                                                           CML.Kill => ()
                                                                         | _ => raise e)
+      val _ = ignore (C.spawnWithTid (safeBody, tid))
     in
-      ignore (C.spawnWithTid (safeBody, tid))
+      ()
     end
 
   fun commit () =
@@ -904,11 +905,15 @@ struct
     val _ = S.atomicBegin ()
     val _ = POHelper.requestCommit ()
     val _ = blockCurrentThread ()
-    val _ = insertCommitNode ()
+    val comAid = insertCommitNode ()
+    val _ = SatedComm.forceAddSatedAct satedCommHelper comAid
+    val _ = saveCont ()
     val _ = Assert.assertNonAtomic' ("DmlDecentralized.commit")
   in
     ()
   end
+
+
 end
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)

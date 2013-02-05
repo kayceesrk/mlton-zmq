@@ -41,10 +41,12 @@ structure ThreadID : THREAD_ID_EXTRA =
         MLton.Cont.callcc (fn k =>
           (* XXX racy *)
           let
-            val curANum = !actionNum
-            val comp = (fn () => actionNum := curANum) o doBeforeRestore
+            val curANum = !actionNum - 1 (* subtracting one to account for the
+                                          * commit node inserted just before the
+                                          * saveCont call *)
+            val comp = doBeforeRestore o (fn () => actionNum := curANum)
           in
-            cont := (fn () => (comp (); MLton.Cont.throw (k, ())))
+            cont := (fn () => (ignore (comp ()); MLton.Cont.throw (k, ())))
           end)
 
       fun tidRestoreCont (TID {cont, revisionId, actions, ...}) =

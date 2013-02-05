@@ -231,5 +231,5 @@ struct
     val _ = debug (fn () => "ActionManager.restoreCont")
   in
     S.restoreCont ()
-  end
+  end handle CML.Kill => S.switchToNext (fn _ => ())
 end

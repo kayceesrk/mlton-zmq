@@ -24,7 +24,7 @@ let
     val _ = recv (c2)
     val _ = recv (c1)
   in
-    ()
+    commit ()
   end
 
   fun core () =
