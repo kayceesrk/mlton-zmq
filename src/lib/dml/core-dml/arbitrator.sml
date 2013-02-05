@@ -15,12 +15,13 @@ struct
   structure S = CML.Scheduler
   structure D = G.DfsParam
   structure ISS = IntSplaySet
-  structure Assert = LocalAssert(val assert = true)
-  structure Debug = LocalDebug(val debug = true)
 
   open RepTypes
   open ActionManager
   open CommunicationManager
+
+  structure Assert = LocalAssert(val assert = false)
+  structure Debug = LocalDebug(val debug = true)
 
 
   val {get = nodeGetAct, set = nodeSetAct, ...} =
@@ -54,12 +55,65 @@ struct
          | NONE => insertAndGetNewNode ()
     end
   end
-
   structure NL = NodeLocator
+
+  structure NodeWaiter =
+  struct
+    val dict : unit S.thread list AidDict.dict ref = ref (AidDict.empty)
+
+    fun numSuccessors node =
+      length (N.successors (graph, node))
+
+    fun numSuccessorsExpected node =
+    let
+      val ACTION {act, ...} = nodeGetAct node
+    in
+      case act of
+           SEND_WAIT _ => 2
+         | SEND_ACT _ => 1
+         | RECV_WAIT _ => 2
+         | RECV_ACT _ => 1
+         | SPAWN _ => 1
+         | BEGIN _ => 1 (* parent*)
+         | COM => 0
+         | RB => 0
+    end
+
+    fun waitTillSated node =
+      if numSuccessors node < numSuccessorsExpected node then
+        let
+          val _ = S.atomicSwitchToNext (fn t =>
+            let
+              val ACTION {aid, ...} = nodeGetAct node
+              val _ = debug (fn () => "NodeWaiter.waitTillSated: waiting on "^(aidToString aid))
+              fun merge l = t::l
+            in
+              dict := AidDict.insertMerge (!dict) aid [t] merge
+            end)
+          val _ = debug (fn () => "NodeWaiter.waitTillSated: resuming")
+          val _ = S.atomicBegin ()
+        in
+          waitTillSated node
+        end
+      else ()
+
+    fun resumeThreads node =
+    let
+      val ACTION {aid, ...} = nodeGetAct node
+      val threadList = AidDict.lookup (!dict) aid
+      val _ = dict := AidDict.remove (!dict) aid
+      val _ = ListMLton.map (threadList, fn t => S.ready (S.prep t))
+    in
+      ()
+    end handle AidDict.Absent => ()
+  end
+  structure NW = NodeWaiter
 
 
   fun processCommit action =
   let
+    val _ = S.atomicBegin ()
+    val _ = debug (fn () => "Arbitrator.processCommit: "^(actionToString action))
     val maxVisit = ref (PTRDict.empty)
     val foundCycle = ref false
     val startNode = NL.node action
@@ -71,11 +125,12 @@ struct
     val ACTION {aid = actAid, ...} = action
 
     val w = {startNode = fn n =>
+               (NW.waitTillSated n;
                if !(mustRollbackOnVisit n) then
                  foundCycle := true
                else
                  (ListMLton.push (visitedNodes, n);
-                  amVisiting n := true),
+                  amVisiting n := true)),
              finishNode = fn n =>
                let
                  val _ = amVisiting n := false
@@ -102,6 +157,7 @@ struct
              startTree = D.ignore,
              finishTree = D.ignore,
              finishDfs = destroy}
+
     val _ = G.dfsNodes (graph, [startNode], w)
     val _ = if !foundCycle then
               (ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
@@ -109,15 +165,22 @@ struct
             else
               msgSend (AR_RES_SUCC {aid = actAid})
   in
-    ()
+    S.atomicEnd ()
   end
 
   fun processAdd {action, prevAction} =
     let
+      fun addEdge {from, to} =
+      let
+        val _ = ignore (G.addEdge (graph, {to = to, from = from}))
+      in
+        NW.resumeThreads from
+      end
+
       val curNode = NL.node action
       val _ = case prevAction of
                     NONE => ()
-                  | SOME prev => ignore (G.addEdge (graph, {to = NL.node prev, from = curNode}))
+                  | SOME prev => addEdge {to = NL.node prev, from = curNode}
       val ACTION {act, aid} = action
     in
       case act of
@@ -125,19 +188,19 @@ struct
               let
                 val spawnAct = ACTION {aid = parentAid, act = SPAWN {childTid = aidToTid aid}}
               in
-                ignore (G.addEdge (graph, {from = curNode, to = NL.node spawnAct}))
+                addEdge {from = curNode, to = NL.node spawnAct}
               end
          | SEND_WAIT {cid, matchAid = SOME matchAid} =>
              let
                val recvAct = ACTION {aid = matchAid, act = RECV_ACT {cid = cid}}
              in
-               ignore (G.addEdge (graph, {from = curNode, to = NL.node recvAct}))
+               addEdge {from = curNode, to = NL.node recvAct}
              end
          | RECV_WAIT {cid, matchAid = SOME matchAid} =>
              let
                val sendAct = ACTION {aid = matchAid, act = SEND_ACT {cid = cid}}
              in
-               ignore (G.addEdge (graph, {from = curNode, to = NL.node sendAct}))
+               addEdge {from = curNode, to = NL.node sendAct}
              end
          | _ => ()
     end
@@ -190,16 +253,14 @@ struct
 
     fun mainLoop () =
       case msgRecvSafe () of
-           NONE => mainLoop ()
+           NONE => (CML.yield (); mainLoop ())
          | SOME msg =>
              let
-               val _ = S.atomicBegin ()
                val _ =
                  case msg of
-                     AR_REQ_ADD m => processAdd m
-                   | AR_REQ_COM {action} => processCommit action
+                     AR_REQ_ADD m => (S.atomicBegin (); processAdd m; S.atomicEnd ())
+                   | AR_REQ_COM {action} => ignore (CML.spawn (fn () => processCommit action))
                    | _ => ()
-               val _ = S.atomicEnd ()
              in
                mainLoop ()
              end

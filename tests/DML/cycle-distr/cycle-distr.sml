@@ -9,10 +9,10 @@
 
 open Dml
 
-fun proxy () = startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
+fun proxy () = startProxy {frontend = "tcp://*:5558", backend = "tcp://*:5559"}
 
-fun arbit () = startArbitrator {sink = "tcp://localhost:5556",
-                                source = "tcp://localhost:5557", numPeers = 2}
+fun arbit () = startArbitrator {sink = "tcp://localhost:5558",
+                                source = "tcp://localhost:5559", numPeers = 2}
 
 fun receiver () =
 let
@@ -28,8 +28,8 @@ let
     commit ()
   end
 
-  val _ = connect {sink = "tcp://localhost:5556",
-                   source = "tcp://localhost:5557",
+  val _ = connect {sink = "tcp://localhost:5558",
+                   source = "tcp://localhost:5559",
                    processId = 1, numPeers = 2}
 in
   ignore (runDML (receiverCore, NONE))
@@ -58,8 +58,8 @@ let
     exitDaemon ()
   end
 
-  val _ = connect {sink = "tcp://localhost:5556",
-                   source = "tcp://localhost:5557",
+  val _ = connect {sink = "tcp://localhost:5558",
+                   source = "tcp://localhost:5559",
                    processId = 0, numPeers = 2}
 in
   ignore (runDML (senderCore, NONE))
