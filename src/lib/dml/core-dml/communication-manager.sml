@@ -9,7 +9,7 @@ struct
    * Debug
    *******************************************************************)
 
-  structure Assert = LocalAssert(val assert = false)
+  structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
 
 
@@ -44,7 +44,7 @@ struct
 
   fun msgSend (msg : msg) =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.msgSend", SOME 1)
+    val _ = Assert.assertAtomic' ("DmlDecentralized.msgSend", NONE)
     val PROXY {sink, ...} = !proxy
     val _ = ZMQ.send (valOf sink, ROOTED_MSG {msg = msg, sender = ProcessId (!processId)})
     val _ = debug (fn () => "Sent: "^(msgToString msg))
@@ -54,7 +54,6 @@ struct
 
   fun msgSendSafe msg =
   let
-    val _ = Assert.assertNonAtomic' ("DmlDecentralized.msgSendSafe")
     val _ = S.atomicBegin ()
     val _ = msgSend msg
     val _ = S.atomicEnd ()
@@ -64,7 +63,7 @@ struct
 
   fun msgRecv () : msg option =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.msgRecv", SOME 1)
+    val _ = Assert.assertAtomic' ("DmlDecentralized.msgRecv", NONE)
     val PROXY {source, ...} = !proxy
   in
     case ZMQ.recvNB (valOf source) of
@@ -81,7 +80,6 @@ struct
 
   fun msgRecvSafe () =
   let
-    val _ = Assert.assertNonAtomic' ("DmlDecentralized.msgRecvSafe")
     val _ = S.atomicBegin ()
     val r = msgRecv ()
     val _ = S.atomicEnd ()

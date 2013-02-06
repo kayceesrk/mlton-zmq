@@ -19,7 +19,7 @@ struct
    * Debug
    *******************************************************************)
 
-  structure Assert = LocalAssert(val assert = false)
+  structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
 
 

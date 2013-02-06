@@ -20,7 +20,7 @@ struct
   open ActionManager
   open CommunicationManager
 
-  structure Assert = LocalAssert(val assert = false)
+  structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
 
 
@@ -119,7 +119,7 @@ struct
     val startNode = NL.node action
     val visitedNodes = ref []
 
-    val {get = amVisiting, set = setVisiting, destroy, ...} =
+    val {get = amVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
 
     val ACTION {aid = actAid, ...} = action
