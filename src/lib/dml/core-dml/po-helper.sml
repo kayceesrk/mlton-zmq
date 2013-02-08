@@ -48,18 +48,18 @@ struct
     val prevAction =
       if index = 0 then NONE
       else SOME (getActionFromArrayAtIndex (array, index - 1))
+    val action = getActionFromArrayAtIndex (array, index)
+    val _ = Arbitrator.processAdd {action = action, prevAction = prevAction}
   in
-    msgSendSafe (AR_REQ_ADD {action = getActionFromArrayAtIndex (array, index),
-                         prevAction = prevAction})
+    msgSendSafe (AR_REQ_ADD {action = action, prevAction = prevAction})
   end
 
-  fun requestCommit () =
+  fun getFinalAction () =
   let
-    val _ = Assert.assertAtomic' ("POHelper.requestCommit", SOME 1)
     val actions = S.tidActions ()
-    val lastAction = getActionFromArrayAtIndex (actions, (RA.length actions) - 1)
+    val finalAction = getActionFromArrayAtIndex (actions, (RA.length actions) - 1)
   in
-    msgSend (AR_REQ_COM {action = lastAction})
+    finalAction
   end
 
   (********************************************************************

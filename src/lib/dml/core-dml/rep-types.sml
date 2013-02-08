@@ -88,7 +88,6 @@ struct
                | SATED of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
                (* Arbitrator Communication *)
                | AR_REQ_ADD of {action: action, prevAction: action option}
-               | AR_REQ_COM of {action: action}
                | AR_RES_SUCC of {aid: action_id}
                | AR_RES_FAIL of {rollbackAids: int PTRDict.dict}
 

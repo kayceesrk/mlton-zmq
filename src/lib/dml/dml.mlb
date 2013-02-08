@@ -14,10 +14,10 @@ in
 			core-dml/action-manager.sml
 			core-dml/communication-manager.sig
 			core-dml/communication-manager.sml
-			core-dml/po-helper.sig
-			core-dml/po-helper.sml
 			core-dml/arbitrator.sig
 			core-dml/arbitrator.sml
+			core-dml/po-helper.sig
+			core-dml/po-helper.sml
 			core-dml/dml.sig
 			(* core-dml/dml-centralized.sml *)
 			(* core-dml/dml-centralized-dep-graph.sml *)

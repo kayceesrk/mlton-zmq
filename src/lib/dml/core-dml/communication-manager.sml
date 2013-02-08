@@ -37,7 +37,6 @@ struct
        | AR_REQ_ADD  {action, prevAction} =>
            concat ["AR_REQ_ADD[", actionToString action, ",",
                    case prevAction of NONE => "NONE" | SOME a => actionToString a, "]"]
-       | AR_REQ_COM  {action} => concat ["AR_REQ_COM[", actionToString action, "]"]
        | AR_RES_SUCC {aid} => concat ["AR_RES_SUCC[", aidToString aid, "]"]
        | AR_RES_FAIL _ => "AR_RES_FAIL"
 

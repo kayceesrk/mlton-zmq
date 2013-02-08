@@ -8,5 +8,6 @@
 
 signature ARBITRATOR =
 sig
-  val startArbitrator : {sink: string, source: string, numPeers: int} -> unit
+  val processAdd    : {action: RepTypes.action, prevAction: RepTypes.action option} -> unit
+  val processCommit : {action: RepTypes.action, pushResult: RepTypes.msg -> unit} -> unit
 end

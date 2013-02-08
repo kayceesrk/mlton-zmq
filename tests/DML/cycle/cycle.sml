@@ -11,9 +11,6 @@ open Dml
 
 fun proxy () = startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
 
-fun arbit () = startArbitrator {sink = "tcp://localhost:5556",
-                                source = "tcp://localhost:5557", numPeers = 1}
-
 fun client () =
 let
   val c1 = channel "c1"
@@ -47,5 +44,4 @@ end
 
 val args::_ = CommandLine.arguments ()
 val _ = if args = "proxy" then proxy ()
-        else if args = "arbit" then arbit ()
         else client ()

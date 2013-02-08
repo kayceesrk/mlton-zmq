@@ -46,6 +46,12 @@ sig
                             matchAid: ActionManager.action_id} -> unit
 end
 
+signature IVAR =
+sig
+  type 'a t
+  val new : unit -> {read: unit -> 'a, write: 'a -> unit}
+end
+
 structure DmlDecentralized : DML_INTERNAL =
 struct
   structure Assert = LocalAssert(val assert = true)
@@ -308,6 +314,67 @@ struct
       end
   in
     S.modify restoreSCore
+  end
+
+
+  (* -------------------------------------------------------------------- *)
+  (* Simle IVar *)
+  (* -------------------------------------------------------------------- *)
+
+
+  structure IVar : IVAR =
+  struct
+    datatype 'a k = THREAD of thread_id
+                  | VALUE of 'a
+                  | EMPTY
+
+    type 'a t = 'a k ref
+
+    fun kToString (k) =
+      case k of
+           THREAD (ThreadId tidInt) => concat ["Thread(", Int.toString tidInt, ")"]
+         | EMPTY => "EMPTY"
+         | VALUE _ => "VALUE"
+
+    fun new () =
+    let
+      val r = ref EMPTY
+      fun write v =
+      let
+        val _ = Assert.assertNonAtomic' ("IVar.write")
+        val _ = S.atomicBegin ()
+        val _ = debug (fn () => ("IVar.write: "^(kToString (!r))))
+        val _ = case (!r) of
+                     EMPTY => r := VALUE v
+                   | THREAD (ThreadId tidInt) => (r := VALUE v; resumeThread tidInt emptyW8Vec)
+                   | VALUE _ => raise Fail "IVar.read: Filled with value!"
+        val _ = S.atomicEnd ()
+      in
+        ()
+      end
+      fun read () =
+      let
+        val _ = Assert.assertNonAtomic' ("IVar.read(1)")
+        val _ = S.atomicBegin ()
+        val _ = debug (fn () => ("IVar.read: "^(kToString (!r))))
+        val v = case (!r) of
+                     EMPTY =>
+                     let
+                       val tidInt = S.tidInt ()
+                       val _ = r := THREAD (ThreadId tidInt)
+                       val _ = blockCurrentThread ()
+                     in
+                       read ()
+                     end
+                   | THREAD _ => raise Fail "IVar.read: some thread waiting!"
+                   | VALUE v => (S.atomicEnd (); v)
+        val _ = Assert.assertNonAtomic' ("IVar.read(2)")
+      in
+        v
+      end
+    in
+      {read = read, write = write}
+    end
   end
 
   (* -------------------------------------------------------------------- *)
@@ -703,10 +770,10 @@ struct
           if not (pidInt = !processId) then ()
           else
             SatedComm.handleSatedMessage {remoteAid = remoteAid, matchAid = matchAid}
-      | AR_RES_SUCC {aid} =>
-          resumeThread (aidToTidInt aid) emptyW8Vec
+      | AR_RES_SUCC {aid} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {rollbackAids} => processRollbackMsg rollbackAids
+      | AR_REQ_ADD {action, prevAction} => processAdd {action = action, prevAction = prevAction}
       | _ => ()
   end
 
@@ -761,14 +828,14 @@ struct
                         val _ = if ISS.member (!peers) pidInt then ()
                                 else peers := ISS.insert (!peers) pidInt
                       in
-                        if ISS.size (!peers) = numPeers then msgSendSafe (CONN {pid = ProcessId (!processId)})
+                        if ISS.size (!peers) = (numPeers-1) then msgSendSafe (CONN {pid = ProcessId (!processId)})
                         else join n
                       end
                   | SOME m => raise Fail ("DmlDecentralized.connect: unexpected message during connect" ^ (msgToString m))
     in
       ()
     end
-    val _ = join 0
+    val _ = if numPeers = 1 then () else join 0
     (* If we get here, then we have joined *)
     val _ = debug' ("DmlDecentralized.connect.join(3)")
   in
@@ -860,9 +927,22 @@ struct
     val _ = SatedComm.waitTillSated aid
 
     (* All previous actions were stated. start the commit protocol *)
-    val _ = S.atomicBegin ()
-    val _ = POHelper.requestCommit ()
-    val _ = blockCurrentThread ()
+    val finalAction = POHelper.getFinalAction ()
+    val {read, write} = IVar.new ()
+    val _ = CML.spawn (fn () => processCommit {action = finalAction, pushResult = write})
+    val _ = case read () of
+                 AR_RES_SUCC _ => ()
+               | AR_RES_FAIL {rollbackAids} =>
+                   let
+                     val _ = S.atomicBegin ()
+                     val _ = processRollbackMsg rollbackAids
+                     val _ = S.atomicEnd ()
+                   in
+                     restoreCont ()
+                   end
+               | _ => raise Fail "DmlDecentralized.commit: unexpected message"
+
+    (* Committed Successfully *)
     val _ = debug' ("DmlDecentralized.commit: SUCCESS")
     (* --- Racy code --- *)
     val _ = CML.tidCommit (S.getCurThreadId ())
