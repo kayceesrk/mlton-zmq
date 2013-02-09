@@ -14,7 +14,7 @@ struct
 
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-  fun debug' msg = debug (fn () => msg)
+  (* fun debug' msg = debug (fn () => msg) *)
 
   (********************************************************************
    * Main

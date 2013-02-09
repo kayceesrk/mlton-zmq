@@ -14,7 +14,6 @@ struct
   structure E = G.Edge
   structure S = CML.Scheduler
   structure D = G.DfsParam
-  structure ISS = IntSplaySet
 
   open RepTypes
   open ActionManager
@@ -36,13 +35,13 @@ struct
   val graph = G.new ()
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-  fun debug' msg = debug (fn () => msg)
+  (* fun debug' msg = debug (fn () => msg) *)
 
   structure NodeLocator =
   struct
     val dict : N.t AidDict.dict ref = ref (AidDict.empty)
 
-    fun node (action as ACTION {aid, act}) =
+    fun node (action as ACTION {aid, ...}) =
     let
       fun insertAndGetNewNode () =
       let
@@ -124,8 +123,6 @@ struct
 
     val {get = amVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
-
-    val ACTION {aid = actAid, ...} = action
 
     val w = {startNode = fn n =>
                let

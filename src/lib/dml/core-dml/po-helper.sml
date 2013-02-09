@@ -24,7 +24,7 @@ struct
 
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-  fun debug' msg = debug (fn () => msg)
+  (* fun debug' msg = debug (fn () => msg) *)
 
   (********************************************************************
    * Datatypes
@@ -199,25 +199,6 @@ struct
   in
     ()
   end
-
-  fun getMatchAid (NODE {array, index}) =
-  let
-    val (ACTION {act, ...}) = getActionFromArrayAtIndex (array, index)
-    val matchAid = case act of
-                      SEND_WAIT {matchAid = SOME mAid, ...} => mAid
-                    | RECV_WAIT {matchAid = SOME mAid, ...} => mAid
-                    | _ => raise Fail "ActionManager.getMatchAid"
-  in
-    matchAid
-  end
-
-  fun getLastAid () =
-    let
-      val actions = S.tidActions ()
-      val (ACTION {aid, ...}) = getActionFromArrayAtIndex (actions, RA.length actions - 1)
-    in
-      aid
-    end
 
   fun inNonSpecExecMode () =
   let

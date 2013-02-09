@@ -32,10 +32,8 @@ struct
   = struct
     type t = action_id
 
-    fun eq (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
-            ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
-            pid1 = pid2 andalso tid1 = tid2 andalso rid1 = rid2 andalso aid1 = aid2
-
+    val eq = MLton.equal
+    val _  = eq
     fun compare (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
                  ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
       (case Int.compare (pid1, pid2) of
@@ -47,7 +45,6 @@ struct
          | lg => lg)
   end
 
-  structure AidSet = SplaySet (structure Elem = ActionIdOrdered)
   structure AidDict = SplayDict (structure Key = ActionIdOrdered)
 
   type ptr = {pid: process_id, tid: thread_id, rid: int}
@@ -57,6 +54,7 @@ struct
     type t = ptr
 
     val eq = MLton.equal
+    val _ = eq
     fun compare ({pid = ProcessId pidInt1, tid = ThreadId tidInt1, rid = rid1},
                  {pid = ProcessId pidInt2, tid = ThreadId tidInt2, rid = rid2}) =
       (case Int.compare (pidInt1, pidInt2) of
