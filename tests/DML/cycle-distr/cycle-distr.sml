@@ -11,9 +11,6 @@ open Dml
 
 fun proxy () = startProxy {frontend = "tcp://*:5558", backend = "tcp://*:5559"}
 
-fun arbit () = startArbitrator {sink = "tcp://localhost:5558",
-                                source = "tcp://localhost:5559", numPeers = 2}
-
 fun receiver () =
 let
   val c1 = channel "c1"
@@ -67,7 +64,6 @@ end
 
 val args::_ = CommandLine.arguments ()
 val _ = if args = "proxy" then proxy ()
-        else if args = "arbit" then arbit ()
         else if args = "sender" then sender ()
         else if args = "receiver" then receiver ()
-        else raise Fail "Usage: cycle-distr.app <proxy|arbit|sender|receiver>"
+        else raise Fail "Usage: cycle-distr.app <proxy|sender|receiver>"
