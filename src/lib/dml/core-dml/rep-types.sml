@@ -88,8 +88,8 @@ struct
                | SATED of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
                (* Arbitrator Communication *)
                | AR_REQ_ADD of {action: action, prevAction: action option}
-               | AR_RES_SUCC of {aid: action_id}
-               | AR_RES_FAIL of {rollbackAids: int PTRDict.dict}
+               | AR_RES_SUCC of {dfsStartAct: action}
+               | AR_RES_FAIL of {rollbackAids: int PTRDict.dict, dfsStartAct: action}
 
   datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
 

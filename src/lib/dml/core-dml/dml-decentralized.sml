@@ -680,8 +680,9 @@ struct
     value
   end
 
-  fun processRollbackMsg rollbackAids =
+  fun processRollbackMsg rollbackAids dfsStartAct =
     let
+      val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct)
       val _ = PendingComm.cleanup pendingLocalSends rollbackAids
       val _ = PendingComm.cleanup pendingRemoteSends rollbackAids
       val _ = PendingComm.cleanup pendingLocalRecvs rollbackAids
@@ -770,9 +771,9 @@ struct
           if not (pidInt = !processId) then ()
           else
             SatedComm.handleSatedMessage {remoteAid = remoteAid, matchAid = matchAid}
-      | AR_RES_SUCC {aid} => ()
+      | AR_RES_SUCC {dfsStartAct} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
-      | AR_RES_FAIL {rollbackAids} => processRollbackMsg rollbackAids
+      | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
       | AR_REQ_ADD {action, prevAction} => processAdd {action = action, prevAction = prevAction}
       | _ => ()
   end
@@ -932,7 +933,7 @@ struct
     val _ = CML.spawn (fn () => processCommit {action = finalAction, pushResult = write})
     val _ = case read () of
                  AR_RES_SUCC _ => ()
-               | AR_RES_FAIL {rollbackAids} =>
+               | AR_RES_FAIL {rollbackAids, ...} =>
                    let
                      val _ = S.atomicBegin ()
                      val _ = processRollbackMsg rollbackAids

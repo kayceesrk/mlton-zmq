@@ -37,8 +37,8 @@ struct
        | AR_REQ_ADD  {action, prevAction} =>
            concat ["AR_REQ_ADD[", actionToString action, ",",
                    case prevAction of NONE => "NONE" | SOME a => actionToString a, "]"]
-       | AR_RES_SUCC {aid} => concat ["AR_RES_SUCC[", aidToString aid, "]"]
-       | AR_RES_FAIL _ => "AR_RES_FAIL"
+       | AR_RES_SUCC {dfsStartAct} => concat ["AR_RES_SUCC[", actionToString dfsStartAct, "]"]
+       | AR_RES_FAIL {dfsStartAct, ...} => concat ["AR_RES_FAIL[", actionToString dfsStartAct, "]"]
 
 
   fun msgSend (msg : msg) =

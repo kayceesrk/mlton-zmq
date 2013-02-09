@@ -171,7 +171,7 @@ struct
       if !foundCycle then
         let
           val _ = ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
-          val res = AR_RES_FAIL {rollbackAids = !maxVisit}
+          val res = AR_RES_FAIL {rollbackAids = !maxVisit, dfsStartAct = action}
           val _ = msgSend res
         in
           res
@@ -179,13 +179,38 @@ struct
       else
         let
           val _ = ignore (ListMLton.map (!visitedNodes, fn n => isCommitted n := true));
-          val res = AR_RES_SUCC {aid = actAid}
+          val res = AR_RES_SUCC {dfsStartAct = action}
           val _ = msgSend res
         in
           res
         end
     val _ = S.atomicEnd ()
     val _ = pushResult res
+  in
+    ()
+  end
+
+  fun markCycleDepGraph dfsStartAct =
+  let
+    val _ = S.atomicBegin ()
+    val _ = debug (fn () => concat ["Arbitrator.markCycleDepGraph: ", actionToString dfsStartAct])
+    val _ = Assert.assertAtomic' ("Arbitrator.markCycleDepGraph", NONE)
+    val startNode = NL.node dfsStartAct
+    val w = {startNode = fn n =>
+              let
+                val _ = if not (!(isCommitted n))
+                        then NW.waitTillSated n
+                        else ()
+              in
+                (mustRollbackOnVisit n) := true
+              end,
+             finishNode = fn n =>
+               ignore (ListMLton.map (N.successors (graph, n),
+                 fn e => G.removeEdge (graph, {from = n, to = E.to (graph, e)}))),
+             handleTreeEdge = D.ignore, handleNonTreeEdge = D.ignore,
+             startTree = D.ignore, finishTree = D.ignore, finishDfs = fn () => ()}
+    val _ = G.dfsNodes (graph, [startNode], w)
+    val _ = S.atomicEnd ()
   in
     ()
   end

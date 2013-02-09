@@ -54,29 +54,45 @@ structure Thread : THREAD =
           ; debug (stringHistory exn)
           ; ((!exnHandler) exn) handle _ => ())
 
-      fun spawnc tid f x =
+      fun atomicSpawnc tid f x =
          let
-            val () = S.atomicBegin ()
-            fun thread tid () =
-               (ignore (f x) handle ex => doHandler (tid, ex)
-               ; generalExit (SOME tid, false))
-            val t = S.newWithTid (thread, tid)
-            val () = S.ready (S.prep t)
-            val () = S.atomicEnd ()
-            val () = debug (fn () => concat ["spawnc ", tidToString tid])  (* NonAtomic *)
+           val _ = Assert.assertAtomic' ("Thread.spawnc", NONE)
+           fun thread tid () =
+              (ignore (f x) handle ex => doHandler (tid, ex)
+              ; generalExit (SOME tid, false))
+           val t = S.newWithTid (thread, tid)
+           val () = S.ready (S.prep t)
+           val () = debug (fn () => concat ["spawnc ", tidToString tid])  (* NonAtomic *)
          in
-            tid
+           tid
          end
 
-      fun spawn f =
-        let
-          val tid = S.newTid ()
-        in
-          spawnc tid f ()
-        end
+     fun spawnc tid f x =
+     let
+       val tid = atomicSpawnc tid f x
+       val _ = S.atomicEnd ()
+     in
+       tid
+     end
+
+     fun spawn f =
+     let
+       val () = S.atomicBegin ()
+       val tid = S.newTid ()
+     in
+       spawnc tid f ()
+     end
+
+     fun atomicSpawn f =
+     let
+       val tid = S.newTid ()
+     in
+       atomicSpawnc tid f ()
+     end
 
      fun spawnWithTid (f, tid) =
-       spawnc tid f ()
+       (S.atomicBegin ();
+        spawnc tid f ())
 
       val getTid = S.getCurThreadId
 
