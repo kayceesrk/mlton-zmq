@@ -84,8 +84,6 @@ struct
                | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
                | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN   of {pid: process_id}
-               (* Handling SatedComm *)
-               | SATED of {recipient: process_id, remoteAid: action_id, matchAid: action_id}
                (* Arbitrator Communication *)
                | AR_REQ_ADD of {action: action, prevAction: action option}
                | AR_RES_SUCC of {dfsStartAct: action}

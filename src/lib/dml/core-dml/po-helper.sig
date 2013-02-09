@@ -21,14 +21,13 @@ sig
 
   val setMatchAid : node -> action_id -> unit
   val getMatchAid : node -> action_id
-  val removeMatchAid : node -> unit
   val getPrevNode : node -> node
   val getLastAid  : unit -> action_id
 
-  (* The following communicate with the arbitrator using the action stored in
-   * the nodes *)
   val sendToArbitrator : node -> unit
   val getFinalAction   : unit -> RepTypes.action
+  val doOnUpdateLastNode : (unit -> unit) -> unit
+  val isLastNodeMatched  : unit -> bool
 
   val inNonSpecExecMode : unit -> bool
   val saveCont    : (unit -> unit) -> unit

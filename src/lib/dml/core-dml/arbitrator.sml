@@ -198,7 +198,9 @@ struct
     val startNode = NL.node dfsStartAct
     val w = {startNode = fn n =>
               let
-                val _ = if not (!(isCommitted n))
+                val isCommitted = !(isCommitted n)
+                val isMarkedAsRolledBack = !(mustRollbackOnVisit n)
+                val _ = if not (isCommitted orelse isMarkedAsRolledBack)
                         then NW.waitTillSated n
                         else ()
               in
@@ -226,7 +228,8 @@ struct
         NW.resumeThreads from
       end
 
-      val _ = debug (fn () => "Arbitrator.processAdd: action="^(actionToString action))
+      val _ = debug (fn () => "Arbitrator.processAdd: action="^(actionToString action)^" prevAction="^
+                   (case prevAction of NONE => "NONE" | SOME a => actionToString a))
       val curNode = NL.node action
       val _ = case prevAction of
                     NONE => ()

@@ -31,12 +31,34 @@ struct
    *******************************************************************)
 
   datatype node = NODE of {array: exn ResizableArray.t, index: int}
-  exception NodeExn of action
+  exception NodeExn of (action * (unit -> unit) option)
 
   fun getActionFromArrayAtIndex (array, index) =
     case RA.sub (array, index) of
-         NodeExn act => act
+         NodeExn (act, _) => act
        | _ => raise Fail "getActionFromArrayAtIndex"
+
+  fun updateActionArray (array, index, act) =
+  let
+    val _ =  case RA.sub (array, index) of
+                 NodeExn (_, SOME f) => f ()
+               | _ => ()
+  in
+    RA.update (array, index, NodeExn (act, NONE))
+  end
+
+  fun doOnUpdateLastNode wakeup =
+  let
+    val _ = Assert.assertAtomic' ("PoHelper.doOnUpdateLastNode", NONE)
+    val array = S.tidActions ()
+    val lastIndex = RA.length array - 1
+    val act = getActionFromArrayAtIndex (array, lastIndex)
+  in
+    RA.update (array, lastIndex, NodeExn (act, SOME wakeup))
+  end
+
+  fun addToActionsEnd (array, act) =
+    RA.addToEnd (array, NodeExn (act, NONE))
 
 
   (********************************************************************
@@ -76,7 +98,7 @@ struct
     val actions = S.tidActions ()
     val beginAid = newAid ()
     val act = ACTION {aid = beginAid, act = BEGIN {parentAid = parentAid}}
-    val _ = RA.addToEnd (actions, NodeExn act)
+    val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
@@ -93,7 +115,7 @@ struct
     val actions = S.tidActions ()
     val comAid = newAid ()
     val act = ACTION {aid = comAid, act = COM}
-    val _ = RA.addToEnd (actions, NodeExn act)
+    val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
@@ -109,7 +131,7 @@ struct
     val actions = S.tidActions ()
     val rbAid = newAid ()
     val act = ACTION {aid = rbAid, act = RB}
-    val _ = RA.addToEnd (actions, NodeExn act)
+    val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedrbm using forceAddSatedrbm (See
@@ -124,8 +146,9 @@ struct
     val actions = S.tidActions ()
     val spawnAid = newAid ()
     val spawnAct = ACTION {aid = spawnAid, act = SPAWN {childTid = childTid}}
-    val _ = RA.addToEnd (actions, NodeExn spawnAct)
+    val _ = addToActionsEnd (actions, spawnAct)
     val spawnNode = NODE {array = actions, index = RA.length actions - 1}
+    val _ = sendToArbitrator spawnNode
   in
     {spawnAid = spawnAid, spawnNode = spawnNode}
   end
@@ -136,11 +159,11 @@ struct
     (* act *)
     val actAid = newAid ()
     val actAct = ACTION {aid = actAid, act = SEND_ACT {cid = cid}}
-    val _ = RA.addToEnd (actions, NodeExn actAct)
+    val _ = addToActionsEnd (actions, actAct)
     (* wait *)
     val waitAid = newAid ()
     val waitAct = ACTION {aid = waitAid, act = SEND_WAIT {cid = cid, matchAid = NONE}}
-    val _ = RA.addToEnd (actions, NodeExn waitAct)
+    val _ = addToActionsEnd (actions, waitAct)
     val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
   in
     {waitNode = waitNode, actAid = actAid}
@@ -152,37 +175,29 @@ struct
     (* act *)
     val actAid = newAid ()
     val actAct = ACTION {aid = actAid, act = RECV_ACT {cid = cid}}
-    val _ = RA.addToEnd (actions, NodeExn actAct)
+    val _ = addToActionsEnd (actions, actAct)
     (* wait *)
     val waitAid = newAid ()
     val waitAct = ACTION {aid = waitAid, act = RECV_WAIT {cid = cid, matchAid = NONE}}
-    val _ = RA.addToEnd (actions, NodeExn waitAct)
+    val _ = addToActionsEnd (actions, waitAct)
     val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
   in
     {waitNode = waitNode, actAid = actAid}
   end
 
 
-  fun setMatchAid (NODE {array, index}) (matchAid: action_id) =
+  fun setMatchAid (n as NODE {array, index}) (matchAid: action_id) =
   let
     val (ACTION {aid, act}) = getActionFromArrayAtIndex (array, index)
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
                     | _ => raise Fail "ActionManager.setMatchAid"
+    val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct})
+    val _ = sendToArbitrator (getPrevNode n)
+    val _ = sendToArbitrator n
   in
-    RA.update (array, index, NodeExn (ACTION {aid = aid, act = newAct}))
-  end
-
-  fun removeMatchAid (NODE {array, index}) =
-  let
-    val (ACTION {aid, act}) = getActionFromArrayAtIndex (array, index)
-    val newAct = case act of
-                      SEND_WAIT {cid, ...} => SEND_WAIT {cid = cid, matchAid = NONE}
-                    | RECV_WAIT {cid, ...} => RECV_WAIT {cid = cid, matchAid = NONE}
-                    | _ => raise Fail "ActionManager.removeMatchAid"
-  in
-    RA.update (array, index, NodeExn (ACTION {aid = aid, act = newAct}))
+    ()
   end
 
   fun getMatchAid (NODE {array, index}) =
@@ -213,6 +228,18 @@ struct
        | ACTION {act = BEGIN _, ...} => false
        | ACTION {act = RB, ...} => true
        | _ => raise Fail "POHelper.inNonSpecExecMode: first action is not BEGIN, COM or RB"
+  end
+
+  fun isLastNodeMatched () =
+  let
+    val actions = S.tidActions ()
+    val lastIndex = RA.length actions - 1
+    val ACTION {act, ...} = getActionFromArrayAtIndex (actions, lastIndex)
+  in
+    case act of
+      SEND_WAIT {matchAid = NONE, ...} => false
+    | RECV_WAIT {matchAid = NONE, ...} => false
+    | _ => true
   end
 
   (********************************************************************

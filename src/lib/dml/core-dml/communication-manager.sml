@@ -32,8 +32,6 @@ struct
            concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
        | CONN   {pid = ProcessId pidInt} =>
            concat ["CONN[", Int.toString pidInt, "]"]
-       | SATED  {recipient = ProcessId pidInt, remoteAid, matchAid} =>
-           concat ["SATED[",Int.toString pidInt, ",", aidToString remoteAid, ",", aidToString matchAid, "]"]
        | AR_REQ_ADD  {action, prevAction} =>
            concat ["AR_REQ_ADD[", actionToString action, ",",
                    case prevAction of NONE => "NONE" | SOME a => actionToString a, "]"]

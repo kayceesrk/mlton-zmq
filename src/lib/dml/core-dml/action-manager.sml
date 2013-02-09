@@ -17,7 +17,7 @@ struct
    *******************************************************************)
 
   fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
-    concat [Int.toString pid, ":", Int.toString tid, ":", Int.toString rid, ":", Int.toString aid]
+    concat [Int.toString pid, ".", Int.toString tid, ".", Int.toString rid, ".", Int.toString aid]
 
   fun dummyAid () = ACTION_ID {pid = ProcessId (!processId), tid = ThreadId ~1, rid = ~1, aid = ~1}
 

@@ -35,17 +35,6 @@ sig
                        withAid: ActionManager.action_id} -> 'a join_result
 end
 
-signature SATED_COMM =
-sig
-  val waitTillSated      : ActionManager.action_id -> unit
-  val addSatedAct        : ActionManager.action_id -> unit
-  val forceAddSatedAct   : ActionManager.action_id -> unit
-  val addSatedComm       : {aid: ActionManager.action_id,
-                            matchAid: ActionManager.action_id} -> unit
-  val handleSatedMessage : {remoteAid: ActionManager.action_id,
-                            matchAid: ActionManager.action_id} -> unit
-end
-
 signature IVAR =
 sig
   type 'a t
@@ -136,6 +125,7 @@ struct
 
     fun cleanup strDictRef rollbackAids =
     let
+      val _ = debug (fn () => "PendingComm.cleanup: length="^(Int.toString (StrDict.size(!strDictRef))))
       val _ = Assert.assertAtomic' ("PendingComm.cleanup", SOME 1)
       val oldStrDict = !strDictRef
       fun getNewAidDict oldAidDict =
@@ -324,6 +314,12 @@ struct
 
   structure IVar : IVAR =
   struct
+    structure Assert = LocalAssert(val assert = true)
+    structure Debug = LocalDebug(val debug = false)
+
+    fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
+    fun debug' msg = debug (fn () => msg)
+
     datatype 'a k = THREAD of thread_id
                   | VALUE of 'a
                   | EMPTY
@@ -376,169 +372,6 @@ struct
       {read = read, write = write}
     end
   end
-
-  (* -------------------------------------------------------------------- *)
-  (* Sated Communications -- Callback support *)
-  (* -------------------------------------------------------------------- *)
-
-  structure SatedComm : SATED_COMM =
-  struct
-    structure Debug = LocalDebug(val debug = true)
-
-    fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-    (* fun debug' msg = debug (fn () => msg) *)
-
-    val waiting : thread_id AidDict.dict ref = ref AidDict.empty
-    (* SPNM -- Some Previous act is Not Matched *)
-    val spnm    : {peer: action_id option} AidDict.dict ref = ref AidDict.empty
-    (* APM  -- All Previous acts are Matched *)
-    val apm     : {peer: action_id option} AidDict.dict ref = ref AidDict.empty
-    (* DONE -- All reachable acts are matched *)
-    val done    : AidSet.set ref = ref AidSet.empty
-
-    fun waitTillSated onAid =
-    let
-      val _ = Assert.assertNonAtomic' ("SatedComm.waitTillSated(1)")
-      val _ = S.atomicBegin ()
-    in
-      if AidSet.member (!done) onAid then S.atomicEnd ()
-      else
-        let
-          val tidInt = S.tidInt ()
-          val _ = waiting := AidDict.insert (!waiting) onAid (ThreadId tidInt)
-        in
-          ignore (blockCurrentThread ())
-        end
-    end
-
-    fun maybeWakeupThread aid =
-      case AidDict.find (!waiting) aid of
-           NONE => ()
-         | SOME (ThreadId tidInt) =>
-             (resumeThread tidInt emptyW8Vec;
-              waiting := AidDict.remove (!waiting) aid)
-
-    fun addToAPM {aid, peer} =
-    let
-      val _ = debug (fn () => "SatedComm.addToAPM: "^(aidToString aid))
-      val _ = apm := AidDict.insert (!apm) aid {peer = peer}
-      val _ = maybeProcessPending (getNextAid aid)
-      val _ = Option.app maybeProcessPending peer
-      val _ = Option.app (fn peerAid =>
-        if not (isAidLocal peerAid) then
-          msgSend (SATED {recipient = aidToPid peerAid,
-                          remoteAid = aid,
-                          matchAid = peerAid})
-        else ()) peer
-    in
-      ()
-    end
-
-    and addToFinal {aid, peer} =
-      let
-        val _ = debug (fn () => "SatedComm.addToDone: "^(aidToString aid))
-        val _ = done := AidSet.insert (!done) aid
-        val _ = Option.app (fn peerAid =>
-          if not (isAidLocal peerAid) then
-            msgSend (SATED {recipient = aidToPid peerAid,
-                            remoteAid = aid,
-                            matchAid = peerAid})
-          else ()) peer
-        val _ = maybeWakeupThread aid
-        val _ = maybeProcessPending (getNextAid aid)
-        val _ = Option.app maybeProcessPending peer
-      in
-        ()
-      end
-
-    and maybeProcessPending aid =
-    let
-      fun processKind kind =
-        case kind of
-            {peer = NONE} => addSatedAct aid
-          | {peer = SOME matchAid} =>
-              addSatedComm {aid = aid, matchAid = matchAid}
-    in
-      case AidDict.find (!spnm) aid of
-           NONE => (case AidDict.find (!apm) aid of
-                         NONE => ()
-                       | SOME kind => (apm := AidDict.remove (!apm) aid;
-                                       processKind kind))
-         | SOME kind =>
-             (spnm := AidDict.remove (!spnm) aid;
-              processKind kind)
-    end
-
-    and addToSPNM {aid, peer} =
-    let
-      val _ = debug (fn () => "SatedComm.addToSPNM: "^(aidToString aid))
-      val _ = spnm := AidDict.insert (!spnm) aid {peer = peer}
-    in
-      ()
-    end
-
-    and forceAddSatedAct peer aid =
-      if AidSet.member (!done) aid then ()
-      else addToFinal {aid = aid, peer = peer}
-
-    and addSatedAct aid =
-      if AidSet.member (!done) (getPrevAid aid) then
-        addToFinal {aid = aid, peer = NONE}
-      else if AidDict.member (!apm) (getPrevAid aid) then
-        addToAPM {aid = aid, peer = NONE}
-      else
-        addToSPNM {aid = aid, peer = NONE}
-
-    and addSatedComm {aid, matchAid = peerAid} =
-      if AidSet.member (!done) (getPrevAid aid) then
-        (if AidDict.member (!apm) peerAid orelse
-            AidSet.member (!done) peerAid then
-           addToFinal {aid = aid, peer = SOME peerAid}
-         else addToAPM {aid = aid, peer = SOME peerAid})
-      else if AidDict.member (!apm) (getPrevAid aid) then
-        addToAPM {aid = aid, peer = SOME peerAid}
-      else addToSPNM {aid = aid, peer = SOME peerAid}
-
-    fun handleSatedMessage {remoteAid, matchAid} =
-      forceAddSatedAct (SOME remoteAid) matchAid
-
-    (* Rebind for local usage *)
-    val forceAddSatedAct = forceAddSatedAct NONE
-
-  end (* structure SatedComm *)
-
-
-  fun resumeBlockedRecv {sendActAid, recvActAid, recvWaitNode} value =
-  let
-    val tidInt = aidToTidInt recvActAid
-    val _ = POHelper.sendToArbitrator (getPrevNode recvWaitNode)
-    val _ = POHelper.sendToArbitrator recvWaitNode
-    val _ = SatedComm.addSatedComm {aid = recvActAid, matchAid = sendActAid}
-    val _ = SatedComm.addSatedAct (getNextAid recvActAid)
-  in
-    resumeThread tidInt value
-  end
-
-  fun satiateSend {sendActAid, recvActAid, sendWaitNode} =
-  let
-    val _ = POHelper.sendToArbitrator (getPrevNode sendWaitNode)
-    val _ = POHelper.sendToArbitrator sendWaitNode
-    val _ = SatedComm.addSatedComm {aid = sendActAid, matchAid = recvActAid}
-    val _ = SatedComm.addSatedAct (getNextAid sendActAid)
-  in
-    ()
-  end
-
-  fun satiateRecv {sendActAid, recvActAid, recvWaitNode} value =
-  let
-    val _ = POHelper.sendToArbitrator (getPrevNode recvWaitNode)
-    val _ = POHelper.sendToArbitrator recvWaitNode
-    val _ = SatedComm.addSatedComm {aid = recvActAid, matchAid = sendActAid}
-    val _ = SatedComm.addSatedAct (getNextAid recvActAid)
-  in
-    ()
-  end
-
 
   (* -------------------------------------------------------------------- *)
   (* Server *)
@@ -605,8 +438,9 @@ struct
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
-              val _ = resumeBlockedRecv {recvWaitNode = recvWaitNode, sendActAid = sendActAid, recvActAid = recvActAid} value
-              val _ = satiateSend {sendWaitNode = sendWaitNode, sendActAid = sendActAid, recvActAid = recvActAid}
+              (* Resume blocked recv *)
+              val tidInt = aidToTidInt recvActAid
+              val _ = resumeThread tidInt value
             in
               ()
             end
@@ -660,15 +494,9 @@ struct
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
-              val _ = satiateSend {sendWaitNode = sendWaitNode, sendActAid = sendActAid, recvActAid = recvActAid}
               val () = case callerKind of
-                          Daemon => resumeBlockedRecv {recvWaitNode = recvWaitNode, sendActAid = sendActAid, recvActAid = recvActAid} value
-                        | Client =>
-                            let
-                              val _ = satiateRecv {sendActAid = sendActAid, recvActAid = recvActAid, recvWaitNode = recvWaitNode} value
-                            in
-                              S.atomicEnd ()
-                            end
+                          Daemon => resumeThread (aidToTidInt recvActAid) value
+                        | Client => S.atomicEnd ()
             in
               value
             end
@@ -683,10 +511,10 @@ struct
   fun processRollbackMsg rollbackAids dfsStartAct =
     let
       val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct)
-      val _ = PendingComm.cleanup pendingLocalSends rollbackAids
-      val _ = PendingComm.cleanup pendingRemoteSends rollbackAids
-      val _ = PendingComm.cleanup pendingLocalRecvs rollbackAids
-      val _ = PendingComm.cleanup pendingRemoteRecvs rollbackAids
+      val () = PendingComm.cleanup pendingLocalSends rollbackAids
+      val () = PendingComm.cleanup pendingRemoteSends rollbackAids
+      val () = PendingComm.cleanup pendingLocalRecvs rollbackAids
+      val () = PendingComm.cleanup pendingRemoteRecvs rollbackAids
       val _ = rollbackBlockedThreads rollbackAids
       val _ = rollbackReadyThreads rollbackAids
     in
@@ -743,8 +571,10 @@ struct
               | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
                   let
                     val _ = setMatchAid recvWaitNode sendActAid
+                    val tidInt = aidToTidInt recvActAid
+                    val _ = resumeThread tidInt value
                   in
-                    resumeBlockedRecv {recvWaitNode = recvWaitNode, sendActAid = sendActAid, recvActAid = recvActAid} value
+                    ()
                   end
               | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
                     ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
@@ -762,15 +592,11 @@ struct
                  let
                    val _ = setMatchAid sendWaitNode recvActAid
                  in
-                   satiateSend {sendWaitNode = sendWaitNode, sendActAid = sendActAid, recvActAid = recvActAid}
+                   ()
                  end
              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
                    ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
           end
-      | SATED (m as {recipient = ProcessId pidInt, remoteAid, matchAid}) =>
-          if not (pidInt = !processId) then ()
-          else
-            SatedComm.handleSatedMessage {remoteAid = remoteAid, matchAid = matchAid}
       | AR_RES_SUCC {dfsStartAct} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
@@ -843,7 +669,7 @@ struct
     ()
   end
 
-  fun saveCont () = POHelper.saveCont (fn () => SatedComm.forceAddSatedAct (insertRollbackNode ()))
+  fun saveCont () = POHelper.saveCont (fn () => ignore(insertRollbackNode ()))
 
   fun runDML (f, to) =
     let
@@ -862,8 +688,7 @@ struct
                     clientDaemon ()
                   end)
         val _ = addToAllThreads ()
-        val comRbAid = insertCommitNode ()
-        val _ = SatedComm.forceAddSatedAct comRbAid
+        val _ = insertCommitNode ()
         val _ = saveCont ()
         fun safeBody () = (removeFromAllThreads (f ())) handle e => (removeFromAllThreads ();
                                                                case e of
@@ -894,10 +719,16 @@ struct
     val _ = processLocalSend Client
               {channel = c, sendActAid = actAid,
                sendWaitNode = waitNode, value = m}
-    val _ = S.atomicEnd ()
-    val _ = if inNonSpecExecMode () then
-              SatedComm.waitTillSated (getLastAid ())
-            else ()
+    val _ = if inNonSpecExecMode () andalso not (POHelper.isLastNodeMatched ()) then
+              let
+                val {read = wait, write = wakeup} = IVar.new ()
+                val _ = POHelper.doOnUpdateLastNode wakeup
+                val _ = S.atomicEnd ()
+              in
+                wait ()
+              end
+            else S.atomicEnd ()
+    val _ = Assert.assertNonAtomic' ("send")
   in
     ()
   end
@@ -912,9 +743,6 @@ struct
                 {channel = c, recvActAid = actAid,
                  recvWaitNode = waitNode}
     val result = MLton.deserialize serM
-    val _ = if inNonSpecExecMode () then
-              SatedComm.waitTillSated (getLastAid ())
-            else ()
   in
     result
   end
@@ -924,20 +752,18 @@ struct
 
   fun commit () =
   let
-    val aid = getLastAid ()
-    val _ = SatedComm.waitTillSated aid
-
-    (* All previous actions were stated. start the commit protocol *)
     val finalAction = POHelper.getFinalAction ()
     val {read, write} = IVar.new ()
     val _ = CML.spawn (fn () => processCommit {action = finalAction, pushResult = write})
     val _ = case read () of
                  AR_RES_SUCC _ => ()
-               | AR_RES_FAIL {rollbackAids, ...} =>
+               | AR_RES_FAIL {rollbackAids, dfsStartAct} =>
                    let
-                     val _ = S.atomicBegin ()
-                     val _ = processRollbackMsg rollbackAids
-                     val _ = S.atomicEnd ()
+                     val _ = debug (fn () => "Commit Failure: size(rollbackAids)="^
+                                   (Int.toString (PTRDict.size (rollbackAids))))
+                     val () = S.atomicBegin ()
+                     val () = processRollbackMsg rollbackAids dfsStartAct
+                     val () = S.atomicEnd ()
                    in
                      restoreCont ()
                    end
@@ -948,8 +774,7 @@ struct
     (* --- Racy code --- *)
     val _ = CML.tidCommit (S.getCurThreadId ())
     (* --- End racy code --- *)
-    val comAid = insertCommitNode ()
-    val _ = SatedComm.forceAddSatedAct comAid
+    val _ = insertCommitNode ()
     val _ = saveCont ()
     val _ = Assert.assertNonAtomic' ("DmlDecentralized.commit")
   in
@@ -962,14 +787,11 @@ struct
       val tid = S.newTid ()
       val tidInt = C.tidToInt tid
       val {spawnAid, spawnNode}= handleSpawn {childTid = ThreadId tidInt}
-      val _ = POHelper.sendToArbitrator spawnNode
-      val _ = S.doAtomic (fn () => SatedComm.addSatedAct spawnAid)
       fun prolog () =
         let
           val _ = S.atomicBegin ()
           val _ = addToAllThreads ()
-          val beginAct = handleInit {parentAid = spawnAid}
-          val _ = SatedComm.forceAddSatedAct beginAct
+          val _ = handleInit {parentAid = spawnAid}
           val _ = S.atomicEnd ()
         in
           saveCont ()
