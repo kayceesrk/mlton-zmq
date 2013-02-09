@@ -374,6 +374,70 @@ struct
   end
 
   (* -------------------------------------------------------------------- *)
+  (* Message filter *)
+  (* -------------------------------------------------------------------- *)
+
+  structure MessageFilter =
+  struct
+    structure Assert = LocalAssert(val assert = true)
+    structure Debug = LocalDebug(val debug = false)
+
+    fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
+
+    structure PTOrdered :> ORDERED
+      where type t = {pid: process_id, tid: thread_id} =
+      struct
+        type t = {pid: process_id, tid: thread_id}
+
+        val eq = MLton.equal
+        val _ = eq
+
+        fun compare ({pid = ProcessId pidInt1, tid = ThreadId tidInt1},
+                     {pid = ProcessId pidInt2, tid = ThreadId tidInt2}) =
+          case Int.compare (pidInt1, pidInt2) of
+               EQUAL => Int.compare (tidInt1, tidInt2)
+             | lg => lg
+      end
+
+    structure PTDict = SplayDict (structure Key = PTOrdered)
+
+    val filterRef = ref PTDict.empty
+
+    fun addToFilter rollbackAids =
+      let
+        val _ = Assert.assertAtomic' ("MessageFilter.addFilter", NONE)
+        val newFilter = ListMLton.fold (PTRDict.domain rollbackAids, PTDict.empty,
+          fn ({pid, tid, rid}, newFilter) => PTDict.insert newFilter {pid = pid, tid = tid} rid)
+        val oldFilter = !filterRef
+        val newFilter = PTDict.union oldFilter newFilter (fn (_,i,j) => if i>j then i else j)
+      in
+        filterRef := newFilter
+      end
+
+    fun isAllowed (aid as ACTION_ID {pid, tid, rid, ...}) =
+      case PTDict.find (!filterRef) {pid = pid, tid = tid} of
+           NONE =>
+           let
+             val _ = debug (fn () => "MessageFilter: blocking aid="^(aidToString aid))
+           in
+             true
+           end
+         | SOME rid' =>
+             if rid <= rid' then false
+             else (* if rid > rid', then we remove the entry from filter *)
+               let
+                 val ProcessId pidInt = pid
+                 val ThreadId tidInt = tid
+                 val _ = debug (fn () => "MessageFilter: removing filter (pid="^(Int.toString pidInt)
+                                        ^",tid="^(Int.toString tidInt)^")")
+                 val _ = filterRef := PTDict.remove (!filterRef) {pid = pid, tid = tid}
+               in
+                 true
+               end
+  end
+
+
+  (* -------------------------------------------------------------------- *)
   (* Server *)
   (* -------------------------------------------------------------------- *)
 
@@ -525,6 +589,8 @@ struct
       val failList = MatchedComm.cleanup matchedRecvs rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value = _} =>
                 processLocalRecv Daemon {channel = channel, recvActAid = actAid, recvWaitNode = waitNode})
+      (* Add message filter *)
+      val _ = MessageFilter.addToFilter rollbackAids
       (* rollback threads *)
       val _ = rollbackBlockedThreads rollbackAids
       val _ = rollbackReadyThreads rollbackAids
@@ -539,79 +605,76 @@ struct
   in
     case msg of
         S_ACT {channel = c, sendActAid, value} =>
-        let
-          val _ = Assert.assert ([], fn () => "DmlDecentralized.processMsg: remote S_ACT",
-                                 fn () => not (isAidLocal sendActAid))
-        in
-          (case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
-              NONE => (* No matching receives *)
-                PendingComm.addAid pendingRemoteSends c sendActAid value
-            | SOME (recvActAid, {recvWaitNode}) => (* matching recv *)
-                let
-                  val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
-                in
-                  MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
-                    remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
-                end)
-        end
-      | R_ACT {channel = c, recvActAid} =>
-        let
-          val _ = Assert.assert ([], fn () => "DmlDecentralized.processMsg: remote R_ACT",
-                                 fn () => not (isAidLocal recvActAid))
-        in
-          (case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
-              NONE => (* No matching sends *)
-                PendingComm.addAid pendingRemoteRecvs c recvActAid ()
-            | SOME (sendActAid, {sendWaitNode, value}) => (* matching send *)
-               let
-                 val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
-               in
-                MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
-                  remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
-               end)
-        end
-      | S_JOIN {channel = c, sendActAid, recvActAid} =>
-          let
-            val _ = PendingComm.removeAid pendingLocalSends c sendActAid
-            val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
-            val _ = PendingComm.removeAid pendingLocalRecvs c recvActAid
-            val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
-          in
-            case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
-                MatchedComm.NOOP => ()
-              | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
+          if MessageFilter.isAllowed sendActAid then
+            (case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
+                NONE => (* No matching receives *)
+                  PendingComm.addAid pendingRemoteSends c sendActAid value
+              | SOME (recvActAid, {recvWaitNode}) => (* matching recv *)
                   let
-                    val _ = setMatchAid recvWaitNode sendActAid
-                    val tidInt = aidToTidInt recvActAid
-                    val _ = resumeThread tidInt value
+                    val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+                  in
+                    MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
+                      remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
+                  end)
+          else ()
+      | R_ACT {channel = c, recvActAid} =>
+          if MessageFilter.isAllowed recvActAid then
+            (case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
+                NONE => (* No matching sends *)
+                  PendingComm.addAid pendingRemoteRecvs c recvActAid ()
+              | SOME (sendActAid, {sendWaitNode, value}) => (* matching send *)
+                let
+                  val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+                in
+                  MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
+                    remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
+                end)
+          else ()
+      | S_JOIN {channel = c, sendActAid, recvActAid} =>
+          if MessageFilter.isAllowed sendActAid then
+            let
+              val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
+              val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
+            in
+              case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
+                  MatchedComm.NOOP => ()
+                | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
+                    let
+                      val _ = setMatchAid recvWaitNode sendActAid
+                      val tidInt = aidToTidInt recvActAid
+                      val _ = resumeThread tidInt value
+                    in
+                      ()
+                    end
+                | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
+                      ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
+            end
+          else ()
+      | R_JOIN {channel = c, recvActAid, sendActAid} =>
+          if MessageFilter.isAllowed recvActAid then
+            let
+              val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
+              val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
+            in
+              case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
+                MatchedComm.NOOP => ()
+              | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
+                  let
+                    val _ = setMatchAid sendWaitNode recvActAid
                   in
                     ()
                   end
-              | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
-                    ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
-          end
-      | R_JOIN {channel = c, recvActAid, sendActAid} =>
-          let
-            val _ = PendingComm.removeAid pendingLocalSends c sendActAid
-            val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
-            val _ = PendingComm.removeAid pendingLocalRecvs c recvActAid
-            val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
-          in
-            case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
-               MatchedComm.NOOP => ()
-             | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
-                 let
-                   val _ = setMatchAid sendWaitNode recvActAid
-                 in
-                   ()
-                 end
-             | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
-                   ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
-          end
+              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
+                    ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
+            end
+          else ()
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
-      | AR_REQ_ADD {action, prevAction} => processAdd {action = action, prevAction = prevAction}
+      | AR_REQ_ADD {action as ACTION{aid, ...}, prevAction} =>
+          if MessageFilter.isAllowed aid then
+            processAdd {action = action, prevAction = prevAction}
+          else ()
       | _ => ()
   end
 
