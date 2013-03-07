@@ -9,7 +9,6 @@
 
 signature DML =
 sig
-  include ARBITRATOR
   type 'a chan
 
   (* ------------------------------------------------------*)
@@ -30,10 +29,12 @@ sig
   val channel : string -> 'a chan
   val send  : 'a chan * 'a -> unit
   val recv  : 'a chan -> 'a
+
+  val getThreadId : unit -> {pid: int, tid: int}
   val spawn : (unit -> unit) -> unit
   val yield : unit -> unit
-  val commit : unit -> unit
 
+  val commit : unit -> unit
   val exitDaemon : unit -> unit
 
   (* ------------------------------------------------------*)

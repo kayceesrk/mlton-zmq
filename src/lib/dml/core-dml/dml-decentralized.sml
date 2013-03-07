@@ -870,6 +870,14 @@ struct
       ()
     end
 
+  fun getThreadId () =
+  let
+    val pidInt = !processId
+    val tidInt = S.tidInt ()
+  in
+    {pid = pidInt, tid = tidInt}
+  end
+
 end
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)
