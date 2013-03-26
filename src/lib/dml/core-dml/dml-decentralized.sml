@@ -778,7 +778,6 @@ struct
 
   fun channel s = CHANNEL (ChannelId s)
 
-
   fun send (CHANNEL c, m) =
   let
     val _ = S.atomicBegin ()

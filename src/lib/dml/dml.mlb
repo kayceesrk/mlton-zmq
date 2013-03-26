@@ -23,6 +23,8 @@ in
 			(* core-dml/dml-centralized-dep-graph.sml *)
 			core-dml/dml-decentralized.sml
 			core-dml/dml.sml
+			core-dml/bchan.sig
+			core-dml/bchan.sml
 	 in
 			structure Dml
 	 end
