@@ -7,16 +7,16 @@
  * See the file MLton-LICENSE for details.
  *)
 
- signature BChan : BCHAN =
- sig
-   open Dml
+structure BChan : BCHAN =
+struct
+  open Dml
 
-   (* BCHAN of (value chan list * ack chan list) *)
-   datatype ’a bchan = BCHAN of (’a chan list * unit chan list)
+  (* BCHAN of (value chan list * ack chan list) *)
+  datatype 'a bchan = BCHAN of ('a chan list * unit chan list)
 
-  fun newBChan n =
-    BCHAN (List.tabulate(n, fn _ => channel ()),
-           List.tabulate(n, fn _ => channel ()))
+  fun newBChan (n, s) =
+    BCHAN (List.tabulate(n, fn _ => channel (s^"_V_"^(Int.toString n))),
+           List.tabulate(n, fn _ => channel (s^"_A_"^(Int.toString n))))
 
   fun bsend (BCHAN (vcList, acList), v, id) =
   let
@@ -27,7 +27,7 @@
     val my_ac = List.nth (acList, id)
     val _ = map (fn ac =>
       if (MLton.equal (ac, my_ac)) then ()
-      else send(ac,v)) acList
+      else recv ac) acList
   in
     ()
   end
@@ -39,4 +39,4 @@
   in
     v
   end
- end
+end

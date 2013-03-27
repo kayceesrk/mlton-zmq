@@ -11,7 +11,7 @@
  sig
    type 'a bchan
 
-   val newBChan : int -> 'a bchan
+   val newBChan : int * string -> 'a bchan
    val bsend : 'a bchan * 'a * int -> unit
    val brecv : 'a bchan * int -> 'a
  end
