@@ -17,9 +17,7 @@ let
 
   fun loop n =
     if n = 0 then
-      (recv pongChan;
-       recv pongChan;
-       exitDaemon ())
+      (commit (); exitDaemon ())
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
           recv pongChan;
           recv pongChan;
@@ -36,15 +34,10 @@ let
   val pongChan : int chan = channel "ponger"
 
   fun loop n =
-    if n = ~1 then
-      (commit ();
-       exitDaemon ())
+    if n = 0 then
+      (commit (); exitDaemon ())
     else
-      let
-        val () = send (pongChan, n)
-      in
-        loop (n-1)
-      end
+      (send (pongChan, n);loop (n-1))
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
                    processId = pid, numPeers = 3}

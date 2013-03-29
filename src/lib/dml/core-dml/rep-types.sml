@@ -62,6 +62,7 @@ struct
                            EQUAL => Int.compare (rid1, rid2)
                          | lg => lg)
           | lg => lg)
+
   end
 
   structure PTRDict = SplayDict (structure Key = PTROrdered)

@@ -181,17 +181,16 @@ struct
       val {actAid, waitNode, value, channel = _} = AidDict.lookup (!aidDictRef) remoteAid
       val result =
         if MLton.equal (actAid, withAid) then
-          let
-            val _ = debug' ("SUCCESS")
-          in
-            SUCCESS {value = value, waitNode = waitNode}
-          end
+          (debug' ("SUCCESS");
+           SUCCESS {value = value, waitNode = waitNode})
+        else if MLton.equal (aidToPtr actAid, aidToPtr withAid) andalso
+                MLton.equal (ActionIdOrdered.compare (actAid, withAid), GREATER) then
+           (* Seen stale message? *)
+           (debug' ("Stale?");
+            raise AidDict.Absent)
         else
-          let
-            val _ = debug' ("FAILURE")
-          in
-            FAILURE {actAid = actAid, waitNode = waitNode, value = value}
-          end
+          (debug' ("FAILURE");
+          FAILURE {actAid = actAid, waitNode = waitNode, value = value})
       val _ = aidDictRef := AidDict.remove (!aidDictRef) remoteAid
     in
       result
@@ -709,8 +708,9 @@ struct
     val _ = ZMQ.sockConnect (sink, sink_str)
     val _ = ZMQ.sockSetSubscribe (source, Vector.tabulate (0, fn _ => 0wx0))
     val _ = proxy := PROXY {context = SOME context, source = SOME source, sink = SOME sink}
-
     val _ = processId := pid
+
+    val debug' = fn s => if false then debug' s else ()
 
     val _ = debug' ("DmlDecentralized.connect.join(1)")
     fun join n =
