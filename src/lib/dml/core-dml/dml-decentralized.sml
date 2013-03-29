@@ -641,6 +641,7 @@ struct
                 | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
                     let
                       val _ = setMatchAid recvWaitNode sendActAid
+                      (* XXX KC -- TODO start *)
                       val tidInt = aidToTidInt recvActAid
                       val _ = resumeThread tidInt value
                     in
@@ -648,6 +649,7 @@ struct
                     end
                 | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
                       ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
+                      (* XXX KC -- TODO end *)
             end
           else ()
       | R_JOIN {channel = c, recvActAid, sendActAid} =>
