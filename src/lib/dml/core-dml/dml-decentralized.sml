@@ -111,10 +111,11 @@ struct
       fun getOne () =
       let
         val _ = AidDict.app (fn (k, _) =>
+                  (debug' ("PendingComm.deque: "^(aidToString k));
                   if (aidToTidInt k = aidToTidInt againstAid) andalso
                      (aidToPidInt k = aidToPidInt againstAid)
                   then () (* dont match actions from the same thread *)
-                  else raise FIRST k) aidDict
+                  else raise FIRST k)) aidDict
       in
         raise AidDict.Absent
       end handle FIRST k => k
@@ -597,6 +598,26 @@ struct
       ()
     end
 
+  fun updateRemoteChannels (ACTION {aid, act}, prev) =
+    case prev of
+         SOME (ACTION {act = SEND_ACT _, aid = sendActAid}) =>
+           (case act of
+              SEND_WAIT {cid, matchAid = SOME recvActAid} =>
+                (debug' ("updateRemoteChannels(1): removing send"^(aidToString sendActAid));
+                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
+                 debug' ("updateRemoteChannels(2): removing recv"^(aidToString recvActAid));
+                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid)
+              | _ => raise Fail "updateRemoteChannels(1)")
+       | SOME (ACTION {act = RECV_ACT _, aid = recvActAid}) =>
+           (case act of
+              RECV_WAIT {cid, matchAid = SOME sendActAid} =>
+                (debug' ("updateRemoteChannels(2): removing send"^(aidToString sendActAid));
+                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
+                 debug' ("updateRemoteChannels(2): removing recv"^(aidToString recvActAid));
+                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid)
+              | _ => raise Fail "updateRemoteChannels(2)")
+       | _ => ()
+
 
   fun processMsg msg =
   let
@@ -631,50 +652,41 @@ struct
           else ()
       | S_JOIN {channel = c, sendActAid, recvActAid} =>
           if MessageFilter.isAllowed sendActAid then
-            let
-              val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
-              val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
-            in
-              case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
-                  MatchedComm.NOOP => ()
-                | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
-                    let
-                      val _ = setMatchAid recvWaitNode sendActAid
-                      (* XXX KC -- TODO start *)
-                      val tidInt = aidToTidInt recvActAid
-                      val _ = resumeThread tidInt value
-                    in
-                      ()
-                    end
-                | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
-                      ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
-                      (* XXX KC -- TODO end *)
-            end
-          else ()
-      | R_JOIN {channel = c, recvActAid, sendActAid} =>
-          if MessageFilter.isAllowed recvActAid then
-            let
-              val _ = PendingComm.removeAid pendingRemoteSends c sendActAid
-              val _ = PendingComm.removeAid pendingRemoteRecvs c recvActAid
-            in
-              case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
+            case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
                 MatchedComm.NOOP => ()
-              | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
+              | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
                   let
-                    val _ = setMatchAid sendWaitNode recvActAid
+                    val _ = setMatchAid recvWaitNode sendActAid
+                    (* XXX KC -- TODO start *)
+                    val tidInt = aidToTidInt recvActAid
+                    val _ = resumeThread tidInt value
                   in
                     ()
                   end
-              | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
-                    ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
-            end
+              | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
+                    ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
+                    (* XXX KC -- TODO end *)
+          else ()
+      | R_JOIN {channel = c, recvActAid, sendActAid} =>
+          if MessageFilter.isAllowed recvActAid then
+            case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
+              MatchedComm.NOOP => ()
+            | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
+                let
+                  val _ = setMatchAid sendWaitNode recvActAid
+                in
+                  ()
+                end
+            | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
+                  ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
           else ()
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
       | AR_REQ_ADD {action as ACTION{aid, ...}, prevAction} =>
           if MessageFilter.isAllowed aid then
-            processAdd {action = action, prevAction = prevAction}
+            (updateRemoteChannels (action, prevAction);
+             processAdd {action = action, prevAction = prevAction})
           else ()
       | _ => ()
   end

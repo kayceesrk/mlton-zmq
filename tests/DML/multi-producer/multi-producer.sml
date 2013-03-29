@@ -11,7 +11,7 @@ open Dml
 
 fun proxy () = startProxy {frontend = "tcp://*:5556", backend = "tcp://*:5557"}
 
-fun ponger () =
+fun ponger np =
 let
   val pongChan : int chan = channel "ponger"
 
@@ -20,16 +20,15 @@ let
       (commit (); exitDaemon ())
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
           recv pongChan;
-          recv pongChan;
           loop (n-1))
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
-                   processId = 1, numPeers = 3}
+                   processId = 1, numPeers = np}
 in
-  ignore (runDML (fn () => loop 3, NONE))
+  ignore (runDML (fn () => loop ((np-1) * 100), NONE))
 end
 
-fun pinger pid =
+fun pinger pid np =
 let
   val pongChan : int chan = channel "ponger"
 
@@ -40,15 +39,16 @@ let
       (send (pongChan, n);loop (n-1))
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
-                   processId = pid, numPeers = 3}
+                   processId = pid, numPeers = np}
 in
-  ignore (runDML (fn () => loop 3, NONE))
+  ignore (runDML (fn () => loop 100, NONE))
 end
 
+val np = 3
 
-val args::_ = CommandLine.arguments ()
-val _ = if args = "proxy" then proxy ()
-        else if args = "ponger" then ponger ()
-        else if args = "pinger2" then pinger 2
-        else if args = "pinger3" then pinger 3
+val kind::_ = CommandLine.arguments ()
+val _ = if kind = "proxy" then proxy ()
+        else if kind = "ponger" then ponger np
+        else if kind = "pinger2" then pinger 2 np
+        else if kind = "pinger3" then pinger 3 np
         else raise Fail "Unknown argument: Valid arguments are proxy | ponger | pinger(2/3)"
