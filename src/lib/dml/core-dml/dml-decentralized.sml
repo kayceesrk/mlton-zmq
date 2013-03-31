@@ -187,10 +187,6 @@ struct
         if MLton.equal (actAid, withAid) then
           (debug' ("SUCCESS");
            SUCCESS {value = value, waitNode = waitNode})
-        (* else if MLton.equal (aidToPtr actAid, aidToPtr withAid) andalso
-                MLton.equal (ActionIdOrdered.compare (actAid, withAid), GREATER) then
-           (debug' ("Stale? actAid: "^(aidToString actAid)^" withAid: "^(aidToString withAid));
-            raise AidDict.Absent) *)
         else
           (debug' ("FAILURE");
           FAILURE {actAid = actAid, waitNode = waitNode, value = value})
@@ -257,7 +253,7 @@ struct
 
   fun resumeThread tidInt (value : w8vec) =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", SOME 1)
+    val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", NONE)
     val t = IntDict.lookup (!blockedThreads) tidInt
     val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
     val rt = S.prepVal (t, value)
@@ -348,7 +344,7 @@ struct
       val r = ref EMPTY
       fun write v =
       let
-        val _ = Assert.assertNonAtomic' ("IVar.write")
+        val _ = debug' ("IVar.write(1)")
         val _ = S.atomicBegin ()
         val _ = debug (fn () => ("IVar.write: "^(kToString (!r))))
         val _ = case (!r) of
@@ -362,6 +358,7 @@ struct
       fun read () =
       let
         val _ = Assert.assertNonAtomic' ("IVar.read(1)")
+        val _ = debug' ("IVar.read(1)")
         val _ = S.atomicBegin ()
         val _ = debug (fn () => ("IVar.read: "^(kToString (!r))))
         val v = case (!r) of
@@ -373,7 +370,14 @@ struct
                      in
                        read ()
                      end
-                   | THREAD _ => raise Fail "IVar.read: some thread waiting!"
+                   | THREAD _ =>
+                     let (* KC: If the blocked thread was rolledback, this branch is possible *)
+                       val tidInt = S.tidInt ()
+                       val _ = r := THREAD (ThreadId tidInt)
+                       val _ = blockCurrentThread ()
+                     in
+                       read ()
+                     end
                    | VALUE v => (S.atomicEnd (); v)
         val _ = Assert.assertNonAtomic' ("IVar.read(2)")
       in
