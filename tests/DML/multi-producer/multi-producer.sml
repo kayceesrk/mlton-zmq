@@ -25,7 +25,7 @@ let
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
                    processId = 1, numPeers = np}
 in
-  ignore (runDML (fn () => loop ((np-1) * 100), NONE))
+  ignore (runDML (fn () => loop ((np-1) * 10), NONE))
 end
 
 fun pinger pid np =
@@ -41,7 +41,7 @@ let
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
                    processId = pid, numPeers = np}
 in
-  ignore (runDML (fn () => loop 100, NONE))
+  ignore (runDML (fn () => loop 10, NONE))
 end
 
 val np = 3

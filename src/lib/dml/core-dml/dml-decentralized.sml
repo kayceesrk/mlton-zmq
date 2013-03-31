@@ -647,8 +647,15 @@ struct
                   in
                     ()
                   end
-              | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
-                    ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
+              | MatchedComm.FAILURE {actAid = recvActAid2, waitNode = recvWaitNode, ...} =>
+                let
+                  val _ = if MLton.equal (aidToPtr recvActAid, aidToPtr recvActAid2) andalso
+                             MLton.equal (ActionIdOrdered.compare (recvActAid2, recvActAid), LESS) then
+                               msgSend (R_JOIN {channel = c, recvActAid = recvActAid, sendActAid = dummyAid})
+                          else ()
+                in
+                    ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
+                end
           else ())
       | R_JOIN {channel = c, recvActAid, sendActAid} =>
           (PendingComm.removeAid pendingRemoteRecvs c recvActAid;
@@ -663,12 +670,13 @@ struct
                 end
             | MatchedComm.FAILURE {actAid = sendActAid2, waitNode = sendWaitNode, value} =>
                 let
-                  val _ = if MLton.equal (aidToPtr sendActAid2, aidToPtr sendActAid) andalso
+                  val _ = if MLton.equal (aidToPtr sendActAid, aidToPtr sendActAid2) andalso
                              MLton.equal (ActionIdOrdered.compare (sendActAid2, sendActAid), LESS) then
-                               print ("XXXX\n")
+                               msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = dummyAid})
                           else ()
                 in
-                  ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid2, sendWaitNode = sendWaitNode, value = value})
+                  ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid2,
+                                                   sendWaitNode = sendWaitNode, value = value})
                 end
           else ())
       | AR_RES_SUCC {dfsStartAct = _} => ()
