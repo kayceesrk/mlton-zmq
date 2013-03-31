@@ -601,7 +601,29 @@ struct
       ()
     end
 
-  fun processMsg msg =
+  fun updateRemoteChannels (ACTION {act, ...}, prev) =
+    case prev of
+         SOME (ACTION {act = SEND_ACT _, aid = sendActAid}) =>
+           (case act of
+              SEND_WAIT {cid, matchAid = SOME recvActAid} =>
+                (debug' ("updateRemoteChannels(1): removing send "^(aidToString sendActAid));
+                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
+                 debug' ("updateRemoteChannels(2): removing recv "^(aidToString recvActAid));
+                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid;
+                 processMsg (S_JOIN {channel = cid, sendActAid = sendActAid, recvActAid = recvActAid}))
+              | _ => raise Fail "updateRemoteChannels(1)")
+       | SOME (ACTION {act = RECV_ACT _, aid = recvActAid}) =>
+           (case act of
+              RECV_WAIT {cid, matchAid = SOME sendActAid} =>
+                (debug' ("updateRemoteChannels(2): removing send "^(aidToString sendActAid));
+                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
+                 debug' ("updateRemoteChannels(2): removing recv "^(aidToString recvActAid));
+                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid;
+                 processMsg (R_JOIN {channel = cid, sendActAid = sendActAid, recvActAid = recvActAid}))
+              | _ => raise Fail "updateRemoteChannels(2)")
+       | _ => ()
+
+  and processMsg msg =
   let
     val _ = Assert.assertAtomic' ("DmlDecentralized.processMsg", SOME 1)
   in
@@ -635,7 +657,6 @@ struct
                 end)
           else ()
       | S_JOIN {channel = c, sendActAid, recvActAid} =>
-          (PendingComm.removeAid pendingRemoteSends c sendActAid;
           if MessageFilter.isAllowed sendActAid then
             case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
                 MatchedComm.NOOP => ()
@@ -656,9 +677,8 @@ struct
                 in
                     ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
                 end
-          else ())
+          else ()
       | R_JOIN {channel = c, recvActAid, sendActAid} =>
-          (PendingComm.removeAid pendingRemoteRecvs c recvActAid;
           if MessageFilter.isAllowed recvActAid then
             case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
               MatchedComm.NOOP => ()
@@ -678,13 +698,14 @@ struct
                   ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid2,
                                                    sendWaitNode = sendWaitNode, value = value})
                 end
-          else ())
+          else ()
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
       | AR_REQ_ADD {action as ACTION{aid, ...}, prevAction} =>
           if MessageFilter.isAllowed aid then
-             processAdd {action = action, prevAction = prevAction}
+            (updateRemoteChannels (action, prevAction);
+             processAdd {action = action, prevAction = prevAction})
           else ()
       | _ => ()
   end
