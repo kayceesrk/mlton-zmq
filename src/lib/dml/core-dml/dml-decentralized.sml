@@ -37,6 +37,7 @@ sig
   val cleanup : 'a t -> int RepTypes.PTRDict.dict ->
                 {channel: RepTypes.channel_id, actAid: ActionManager.action_id,
                  waitNode: POHelper.node, value: 'a} list
+  val contains : 'a t -> ActionManager.action_id -> bool
 end
 
 signature IVAR =
@@ -164,6 +165,8 @@ struct
     | NOOP
 
     fun empty () = ref (AidDict.empty)
+
+    fun contains aidDictRef aid = AidDict.member (!aidDictRef) aid
 
     fun add aidDictRef {channel, actAid, remoteMatchAid, waitNode} value =
     let
@@ -598,34 +601,14 @@ struct
       ()
     end
 
-  fun updateRemoteChannels (ACTION {aid, act}, prev) =
-    case prev of
-         SOME (ACTION {act = SEND_ACT _, aid = sendActAid}) =>
-           (case act of
-              SEND_WAIT {cid, matchAid = SOME recvActAid} =>
-                (debug' ("updateRemoteChannels(1): removing send"^(aidToString sendActAid));
-                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
-                 debug' ("updateRemoteChannels(2): removing recv"^(aidToString recvActAid));
-                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid)
-              | _ => raise Fail "updateRemoteChannels(1)")
-       | SOME (ACTION {act = RECV_ACT _, aid = recvActAid}) =>
-           (case act of
-              RECV_WAIT {cid, matchAid = SOME sendActAid} =>
-                (debug' ("updateRemoteChannels(2): removing send"^(aidToString sendActAid));
-                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
-                 debug' ("updateRemoteChannels(2): removing recv"^(aidToString recvActAid));
-                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid)
-              | _ => raise Fail "updateRemoteChannels(2)")
-       | _ => ()
-
-
   fun processMsg msg =
   let
     val _ = Assert.assertAtomic' ("DmlDecentralized.processMsg", SOME 1)
   in
     case msg of
         S_ACT {channel = c, sendActAid, value} =>
-          if MessageFilter.isAllowed sendActAid then
+          if MessageFilter.isAllowed sendActAid andalso
+             (not (MatchedComm.contains matchedRecvs sendActAid)) then
             (case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
                 NONE => (* No matching receives *)
                   PendingComm.addAid pendingRemoteSends c sendActAid value
@@ -638,7 +621,8 @@ struct
                   end)
           else ()
       | R_ACT {channel = c, recvActAid} =>
-          if MessageFilter.isAllowed recvActAid then
+          if MessageFilter.isAllowed recvActAid andalso
+             (not (MatchedComm.contains matchedSends recvActAid)) then
             (case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
                 NONE => (* No matching sends *)
                   PendingComm.addAid pendingRemoteRecvs c recvActAid ()
@@ -651,13 +635,13 @@ struct
                 end)
           else ()
       | S_JOIN {channel = c, sendActAid, recvActAid} =>
+          (PendingComm.removeAid pendingRemoteSends c sendActAid;
           if MessageFilter.isAllowed sendActAid then
             case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
                 MatchedComm.NOOP => ()
               | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
                   let
                     val _ = setMatchAid recvWaitNode sendActAid
-                    (* XXX KC -- TODO start *)
                     val tidInt = aidToTidInt recvActAid
                     val _ = resumeThread tidInt value
                   in
@@ -665,9 +649,9 @@ struct
                   end
               | MatchedComm.FAILURE {actAid = recvActAid, waitNode = recvWaitNode, ...} =>
                     ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid, recvWaitNode = recvWaitNode})
-                    (* XXX KC -- TODO end *)
-          else ()
+          else ())
       | R_JOIN {channel = c, recvActAid, sendActAid} =>
+          (PendingComm.removeAid pendingRemoteRecvs c recvActAid;
           if MessageFilter.isAllowed recvActAid then
             case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
               MatchedComm.NOOP => ()
@@ -677,16 +661,22 @@ struct
                 in
                   ()
                 end
-            | MatchedComm.FAILURE {actAid = sendActAid, waitNode = sendWaitNode, value} =>
-                  ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid, sendWaitNode = sendWaitNode, value = value})
-          else ()
+            | MatchedComm.FAILURE {actAid = sendActAid2, waitNode = sendWaitNode, value} =>
+                let
+                  val _ = if MLton.equal (aidToPtr sendActAid2, aidToPtr sendActAid) andalso
+                             MLton.equal (ActionIdOrdered.compare (sendActAid2, sendActAid), LESS) then
+                               print ("XXXX\n")
+                          else ()
+                in
+                  ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid2, sendWaitNode = sendWaitNode, value = value})
+                end
+          else ())
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
       | AR_REQ_ADD {action as ACTION{aid, ...}, prevAction} =>
           if MessageFilter.isAllowed aid then
-            (updateRemoteChannels (action, prevAction);
-             processAdd {action = action, prevAction = prevAction})
+             processAdd {action = action, prevAction = prevAction}
           else ()
       | _ => ()
   end
@@ -792,6 +782,21 @@ struct
 
   fun channel s = CHANNEL (ChannelId s)
 
+  (* Wait till last action is matched (added to the graph) *)
+  fun syncMode (atomicState) =
+    (if inNonSpecExecMode () andalso not (POHelper.isLastNodeMatched ()) then
+       let
+         val _ = if MLton.equal (atomicState, NONE) then S.atomicBegin () else ()
+         val {read = wait, write = wakeup} = IVar.new ()
+         val _ = POHelper.doOnUpdateLastNode wakeup
+         val _ = S.atomicEnd ()
+       in
+         wait ()
+       end
+     else if MLton.equal (atomicState, SOME 1) then S.atomicEnd () else ();
+     Assert.assertNonAtomic' ("syncMode(2)"))
+
+
   fun send (CHANNEL c, m) =
   let
     val _ = S.atomicBegin ()
@@ -801,16 +806,7 @@ struct
     val _ = processLocalSend Client
               {channel = c, sendActAid = actAid,
                sendWaitNode = waitNode, value = m}
-    val _ = if inNonSpecExecMode () andalso not (POHelper.isLastNodeMatched ()) then
-              let
-                val {read = wait, write = wakeup} = IVar.new ()
-                val _ = POHelper.doOnUpdateLastNode wakeup
-                val _ = S.atomicEnd ()
-              in
-                wait ()
-              end
-            else S.atomicEnd ()
-    val _ = Assert.assertNonAtomic' ("send")
+    val _ = syncMode (SOME 1)
   in
     ()
   end
@@ -825,6 +821,7 @@ struct
                 {channel = c, recvActAid = actAid,
                  recvWaitNode = waitNode}
     val result = MLton.deserialize serM
+    val _ = syncMode (NONE)
   in
     result
   end

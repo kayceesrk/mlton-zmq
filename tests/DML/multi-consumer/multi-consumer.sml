@@ -21,8 +21,10 @@ let
        send (pingChan, ~1);
        print ("Sending 2nd ~1\n");
        send (pingChan, ~1);
+       commit ();
        exitDaemon ())
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
+          send (pingChan, n);
           send (pingChan, n);
           loop (n-1))
 

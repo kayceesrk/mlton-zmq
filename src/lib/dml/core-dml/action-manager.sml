@@ -29,6 +29,8 @@ struct
     ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid = rid, aid = aid}
   end
 
+  val dummyAid = ACTION_ID {pid = ProcessId ~1, tid = ThreadId ~1, rid = ~1, aid = ~1}
+
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
   fun aidToActNum (ACTION_ID {aid, ...}) = aid

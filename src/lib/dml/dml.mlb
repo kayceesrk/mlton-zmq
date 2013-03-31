@@ -27,5 +27,6 @@ in
 			core-dml/bchan.sml
 	 in
 			structure Dml
+			structure BChan
 	 end
 end

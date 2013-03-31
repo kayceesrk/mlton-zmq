@@ -14,6 +14,7 @@ sig
   type ptr = RepTypes.ptr
 
 
+  val dummyAid    : action_id
   val newAid      : unit -> action_id
   (* val aidToPid    : action_id -> RepTypes.process_id *)
   val aidToPidInt : action_id -> int

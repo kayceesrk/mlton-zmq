@@ -223,6 +223,9 @@ struct
     | _ => true
   end
 
+  fun getEarliestAction (NODE {array, ...}) =
+    getActionFromArrayAtIndex (array,0)
+
   (********************************************************************
    * Continuation Management
    *******************************************************************)

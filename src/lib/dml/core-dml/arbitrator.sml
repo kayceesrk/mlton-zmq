@@ -254,4 +254,11 @@ struct
              end
          | _ => ()
     end
+
+  fun markForAbort action =
+  let
+    val node = NL.node action
+  in
+    mustRollbackOnVisit node := true
+  end
 end

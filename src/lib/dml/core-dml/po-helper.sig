@@ -30,4 +30,9 @@ sig
   val inNonSpecExecMode : unit -> bool
   val saveCont    : (unit -> unit) -> unit
   val restoreCont : unit -> unit
+
+  (* Given any node, getEarliestAction returns the earliest action in the
+   * thread to which the given node belongs to. The earliest action is a
+   * begin, commit or rollback action. *)
+  val getEarliestAction : node -> RepTypes.action
 end
