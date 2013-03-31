@@ -187,11 +187,6 @@ struct
         if MLton.equal (actAid, withAid) then
           (debug' ("SUCCESS");
            SUCCESS {value = value, waitNode = waitNode})
-        else if MLton.equal (aidToPtr actAid, aidToPtr withAid) andalso
-                MLton.equal (ActionIdOrdered.compare (actAid, withAid), GREATER) then
-           (* Seen stale message? *)
-           (debug' ("Stale?");
-            raise AidDict.Absent)
         else
           (debug' ("FAILURE");
           FAILURE {actAid = actAid, waitNode = waitNode, value = value})
