@@ -255,7 +255,7 @@ struct
 
   fun resumeThread tidInt (value : w8vec) =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", SOME 1)
+    val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", NONE)
     val t = IntDict.lookup (!blockedThreads) tidInt
     val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
     val rt = S.prepVal (t, value)
