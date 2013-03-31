@@ -55,13 +55,11 @@ struct
   fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =
     pidInt = (!processId)
 
-  (*
   fun getPrevAid (ACTION_ID {pid, tid, rid, aid}) =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - 1}
 
   fun getNextAid (ACTION_ID {pid, tid, rid, aid}) =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1}
-  *)
 
   fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
 end

@@ -34,5 +34,7 @@ sig
   (* Given any node, getEarliestAction returns the earliest action in the
    * thread to which the given node belongs to. The earliest action is a
    * begin, commit or rollback action. *)
-  val getEarliestAction : node -> RepTypes.action
+  val getEarliestAction : node -> action
+
+  val isLastAidOnThread : 'a CML.Scheduler.thread * action_id -> bool
 end

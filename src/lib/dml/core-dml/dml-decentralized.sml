@@ -187,11 +187,10 @@ struct
         if MLton.equal (actAid, withAid) then
           (debug' ("SUCCESS");
            SUCCESS {value = value, waitNode = waitNode})
-        else if MLton.equal (aidToPtr actAid, aidToPtr withAid) andalso
+        (* else if MLton.equal (aidToPtr actAid, aidToPtr withAid) andalso
                 MLton.equal (ActionIdOrdered.compare (actAid, withAid), GREATER) then
-           (* Seen stale message? *)
-           (debug' ("Stale?");
-            raise AidDict.Absent)
+           (debug' ("Stale? actAid: "^(aidToString actAid)^" withAid: "^(aidToString withAid));
+            raise AidDict.Absent) *)
         else
           (debug' ("FAILURE");
           FAILURE {actAid = actAid, waitNode = waitNode, value = value})
@@ -224,8 +223,6 @@ struct
 
 
   end
-
-
 
   (* -------------------------------------------------------------------- *)
   (* state *)
@@ -262,6 +259,17 @@ struct
   let
     val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", SOME 1)
     val t = IntDict.lookup (!blockedThreads) tidInt
+    val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
+    val rt = S.prepVal (t, value)
+  in
+    S.ready rt
+  end handle IntDict.Absent => ()
+
+  fun resumeThreadIfLastAidIs aid tidInt (value : w8vec) =
+  let
+    val _ = Assert.assertAtomic' ("DmlDecentralized.unblockthread", SOME 1)
+    val t = IntDict.lookup (!blockedThreads) tidInt
+    val _ = if not (isLastAidOnThread (t, aid)) then raise IntDict.Absent else ()
     val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
     val rt = S.prepVal (t, value)
   in
@@ -462,23 +470,23 @@ struct
 
   datatype caller_kind = Client | Daemon
 
-  fun processLocalSend callerKind {channel = c, sendActAid, sendWaitNode, value} =
+  fun processSend callerKind {channel = c, sendActAid, sendWaitNode, value} =
   let
     val _ = callerKind
-    val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(1)", SOME 1)
-    val _ = debug' ("DmlDecentralized.processLocalSend(1)")
+    val _ = Assert.assertAtomic' ("DmlDecentralized.processSend(1)", SOME 1)
+    val _ = debug' ("DmlDecentralized.processSend(1)")
     val _ =
       case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
           NONE => (* No matching receives, check remote *)
             let
-              val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(2)", SOME 1)
-              val _ = debug' ("DmlDecentralized.processLocalSend(2)")
+              val _ = Assert.assertAtomic' ("DmlDecentralized.processSend(2)", SOME 1)
+              val _ = debug' ("DmlDecentralized.processSend(2)")
             in
               case PendingComm.deque pendingRemoteRecvs c {againstAid = sendActAid} of
                     NONE => (* No matching remote recv either *)
                       let
-                        val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(3)", SOME 1)
-                        val _ = debug' ("DmlDecentralized.processLocalSend(3)")
+                        val _ = Assert.assertAtomic' ("DmlDecentralized.processSend(3)", SOME 1)
+                        val _ = debug' ("DmlDecentralized.processSend(3)")
                         val _ = msgSend (S_ACT {channel = c, sendActAid = sendActAid, value = value})
                         val _ = PendingComm.addAid pendingLocalSends c sendActAid
                           {sendWaitNode = sendWaitNode, value = value}
@@ -487,8 +495,8 @@ struct
                       end
                   | SOME (recvActAid, ()) => (* matching remote recv *)
                       let
-                        val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(4)", SOME 1)
-                        val _ = debug' ("DmlDecentralized.processLocalSend(4)")
+                        val _ = Assert.assertAtomic' ("DmlDecentralized.processSend(4)", SOME 1)
+                        val _ = debug' ("DmlDecentralized.processSend(4)")
                         val _ = msgSend (S_ACT {channel = c, sendActAid = sendActAid, value = value})
                         val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
@@ -499,38 +507,37 @@ struct
             end
         | SOME (recvActAid, {recvWaitNode}) => (* matching local recv *)
             let
-              val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(5)", SOME 1)
-              val _ = debug' ("DmlDecentralized.processLocalSend(5)")
+              val _ = Assert.assertAtomic' ("DmlDecentralized.processSend(5)", SOME 1)
+              val _ = debug' ("DmlDecentralized.processSend(5)")
               val _ = setMatchAid sendWaitNode recvActAid
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               (* Resume blocked recv *)
-              val tidInt = aidToTidInt recvActAid
-              val _ = resumeThread tidInt value
+              val _ = resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
             in
               ()
             end
-    val _ = debug' ("DmlDecentralized.processLocalSend(6)")
-    val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalSend(6)", SOME 1)
+    val _ = debug' ("DmlDecentralized.processSend(6)")
+    val _ = Assert.assertAtomic' ("DmlDecentralized.processSend(6)", SOME 1)
   in
     ()
   end
 
-  fun processLocalRecv callerKind {channel = c, recvActAid, recvWaitNode} =
+  fun processRecv callerKind {channel = c, recvActAid, recvWaitNode} =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.processLocalRecv(1)", SOME 1)
-    val _ = debug' ("DmlDecentralized.processLocalRecv(1)")
+    val _ = Assert.assertAtomic' ("DmlDecentralized.processRecv(1)", SOME 1)
+    val _ = debug' ("DmlDecentralized.processRecv(1)")
     val value =
       case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
           NONE => (* No local matching sends, check remote *)
             let
-              val _ = debug' ("DmlDecentralized.processLocalRecv(2)")
+              val _ = debug' ("DmlDecentralized.processRecv(2)")
             in
               case PendingComm.deque pendingRemoteSends c {againstAid = recvActAid} of
                     NONE => (* No matching remote send either *)
                       let
-                        val _ = debug' ("DmlDecentralized.processLocalRecv(3)")
+                        val _ = debug' ("DmlDecentralized.processRecv(3)")
                         val _ = msgSend (R_ACT {channel = c, recvActAid = recvActAid})
                         val _ = PendingComm.addAid pendingLocalRecvs c recvActAid
                           {recvWaitNode = recvWaitNode}
@@ -542,35 +549,35 @@ struct
                       end
                   | SOME (sendActAid, value) => (* matching remote send *)
                       let
-                        val _ = debug' ("DmlDecentralized.processLocalRecv(4)")
+                        val _ = debug' ("DmlDecentralized.processRecv(4)")
                         val _ = msgSend (R_ACT {channel = c, recvActAid = recvActAid})
                         val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
                                   remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
-                        val value = case callerKind of
-                                    Client => blockCurrentThread ()
-                                  | Daemon => value
+                        val _ = case callerKind of
+                                  Client => S.atomicEnd ()
+                                | Daemon => ()
                       in
                         value
                       end
             end
         | SOME (sendActAid, {sendWaitNode, value}) => (* matching local send *)
             let
-              val _ = debug' ("DmlDecentralized.processLocalRecv(5)")
+              val _ = debug' ("DmlDecentralized.processRecv(5)")
               val _ = setMatchAid sendWaitNode recvActAid
               val _ = setMatchAid recvWaitNode sendActAid
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val () = case callerKind of
-                          Daemon => resumeThread (aidToTidInt recvActAid) value
+                          Daemon => resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
                         | Client => S.atomicEnd ()
             in
               value
             end
-    val _ = debug' ("DmlDecentralized.processLocalRecv(6)")
+    val _ = debug' ("DmlDecentralized.processRecv(6)")
     val _ = case callerKind of
-                 Client => Assert.assertNonAtomic' ("DmlDecentralized.processLocalRecv(2)")
-               | Daemon => Assert.assertAtomic' ("DmlDecentralized.processLocalRecv(2)", SOME 1)
+                 Client => Assert.assertNonAtomic' ("DmlDecentralized.processRecv(2)")
+               | Daemon => Assert.assertAtomic' ("DmlDecentralized.processRecv(2)", SOME 1)
   in
     value
   end
@@ -587,11 +594,11 @@ struct
       (* Cleanup matched acts *)
       val failList = MatchedComm.cleanup matchedSends rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value} =>
-                processLocalSend Daemon {channel = channel, sendActAid = actAid,
+                processSend Daemon {channel = channel, sendActAid = actAid,
                 sendWaitNode = waitNode, value = value})
       val failList = MatchedComm.cleanup matchedRecvs rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value = _} =>
-                processLocalRecv Daemon {channel = channel, recvActAid = actAid, recvWaitNode = waitNode})
+                processRecv Daemon {channel = channel, recvActAid = actAid, recvWaitNode = waitNode})
       (* Add message filter *)
       val _ = MessageFilter.addToFilter rollbackAids
       (* rollback threads *)
@@ -664,7 +671,8 @@ struct
                   let
                     val _ = setMatchAid recvWaitNode sendActAid
                     val tidInt = aidToTidInt recvActAid
-                    val _ = resumeThread tidInt value
+                    val recvWaitAid = getNextAid recvActAid
+                    val _ = resumeThreadIfLastAidIs recvWaitAid tidInt value
                   in
                     ()
                   end
@@ -675,7 +683,7 @@ struct
                                msgSend (R_JOIN {channel = c, recvActAid = recvActAid, sendActAid = dummyAid})
                           else ()
                 in
-                    ignore (processLocalRecv Daemon {channel = c, recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
+                    ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
                 end
           else ()
       | R_JOIN {channel = c, recvActAid, sendActAid} =>
@@ -695,7 +703,7 @@ struct
                                msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = dummyAid})
                           else ()
                 in
-                  ignore (processLocalSend Daemon {channel = c, sendActAid = sendActAid2,
+                  ignore (processSend Daemon {channel = c, sendActAid = sendActAid2,
                                                    sendWaitNode = sendWaitNode, value = value})
                 end
           else ()
@@ -832,7 +840,7 @@ struct
     val _ = debug' ("DmlDecentralized.send(1)")
     val {actAid, waitNode} = handleSend {cid = c}
     val m = MLton.serialize (m)
-    val _ = processLocalSend Client
+    val _ = processSend Client
               {channel = c, sendActAid = actAid,
                sendWaitNode = waitNode, value = m}
     val _ = syncMode (SOME 1)
@@ -846,7 +854,7 @@ struct
     val _ = S.atomicBegin ()
     val _ = debug' ("DmlDecentralized.recv(1)")
     val {actAid, waitNode} = handleRecv {cid = c}
-    val serM = processLocalRecv Client
+    val serM = processRecv Client
                 {channel = c, recvActAid = actAid,
                  recvWaitNode = waitNode}
     val result = MLton.deserialize serM

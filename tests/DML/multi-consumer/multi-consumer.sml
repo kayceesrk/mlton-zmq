@@ -24,14 +24,14 @@ let
        commit ();
        exitDaemon ())
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
-          send (pingChan, n);
-          send (pingChan, n);
+          send (pingChan, 2*n);
+          send (pingChan, 2*n-1);
           loop (n-1))
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
                    processId = 1, numPeers = 3}
 in
-  ignore (runDML (fn () => loop 20, NONE))
+  ignore (runDML (fn () => loop 2, NONE))
 end
 
 fun ponger pid =
@@ -39,7 +39,7 @@ let
   val pingChan : int chan = channel "pinger"
 
   fun loop n =
-    if n = ~1 then exitDaemon ()
+    if n = ~1 then (commit (); exitDaemon ())
     else
       let
         val v = recv pingChan

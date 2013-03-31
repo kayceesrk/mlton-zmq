@@ -23,10 +23,8 @@ sig
   val aidToString : action_id -> string
   val aidToActNum : action_id -> int
   val isAidLocal  : action_id -> bool
-  (*
   val getPrevAid  : action_id -> action_id
   val getNextAid  : action_id -> action_id
-  *)
   val aidToPtr    : action_id -> ptr
 
   val actionToString : action -> string
