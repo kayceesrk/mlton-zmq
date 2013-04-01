@@ -19,6 +19,9 @@ struct
   fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
     concat [Int.toString pid, ".", Int.toString tid, ".", Int.toString rid, ".", Int.toString aid]
 
+  fun ptrToString ({pid = ProcessId pid, tid = ThreadId tid, rid}) =
+    concat [Int.toString pid, ":", Int.toString tid, ":", Int.toString rid]
+
   fun newAid () =
   let
     val pid = !processId

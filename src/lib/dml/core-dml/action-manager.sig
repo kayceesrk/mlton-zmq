@@ -26,6 +26,7 @@ sig
   val getPrevAid  : action_id -> action_id
   val getNextAid  : action_id -> action_id
   val aidToPtr    : action_id -> ptr
+  val ptrToString : ptr -> string
 
   val actionToString : action -> string
 end

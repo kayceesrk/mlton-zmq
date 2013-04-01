@@ -588,6 +588,8 @@ struct
 
   fun processRollbackMsg rollbackAids dfsStartAct =
     let
+      val _ = debug' ("processRollbackMsg")
+      val _ = PTRDict.app (fn (k,_) => debug' (ptrToString k)) rollbackAids
       (* Cleanup dependence graph *)
       val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct)
       (* Clean up pending acts *)
@@ -687,7 +689,11 @@ struct
                                msgSend (R_JOIN {channel = c, recvActAid = recvActAid, sendActAid = dummyAid})
                           else ()
                 in
-                    ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
+                  if not (isLastNode recvWaitNode) then
+                    markForAbort (nodeToAction recvWaitNode)
+                  else
+                    ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
+                                                recvWaitNode = recvWaitNode})
                 end
           else ()
       | R_JOIN {channel = c, recvActAid, sendActAid} =>

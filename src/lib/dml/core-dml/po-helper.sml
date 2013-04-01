@@ -24,7 +24,7 @@ struct
 
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-  (* fun debug' msg = debug (fn () => msg) *)
+  fun debug' msg = debug (fn () => msg)
 
   (********************************************************************
    * Datatypes
@@ -235,6 +235,18 @@ struct
   in
     MLton.equal (aid, lastAid)
   end
+
+  fun isLastNode (NODE{array, index}) =
+    (debug' ("isLastNode: arrayLength="^(Int.toString (RA.length array))^" index="^(Int.toString index));
+     RA.length array - 1 = index)
+
+  fun nodeToAction (NODE{array, index}) = getActionFromArrayAtIndex (array, index)
+
+  fun markAllForAbort (NODE {array, ...}) =
+    ignore (RA.map (array, fn e =>
+      case e of
+           NodeExn (act, _) => Arbitrator.markForAbort act
+         | _ => raise Fail "markAllForAbort: impossible"))
 
   (********************************************************************
    * Continuation Management
