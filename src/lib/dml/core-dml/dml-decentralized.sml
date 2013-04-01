@@ -935,6 +935,20 @@ struct
     {pid = pidInt, tid = tidInt}
   end
 
+  fun touchLastComm () =
+  let
+    val _ = S.atomicBegin ()
+  in
+    if not (POHelper.isLastNodeMatched ()) then
+      let
+        val {read = wait, write = wakeup} = IVar.new ()
+        val _ = POHelper.doOnUpdateLastNode wakeup
+        val _ = S.atomicEnd ()
+      in
+        wait ()
+      end
+    else S.atomicEnd ()
+  end
 end
 
 (* TODO -- Messaegs will be dropped if HWM is reached!! *)

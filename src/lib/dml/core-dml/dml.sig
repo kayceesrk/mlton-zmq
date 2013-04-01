@@ -34,7 +34,21 @@ sig
   val spawn : (unit -> unit) -> unit
   val yield : unit -> unit
 
+  (* Try to commit all previous non speculative communication actions. This
+   * operation can ofcourse fail, in which case the program fragment (which
+   * inclues all interacted threads) will be rolledback and re-executed
+   * non-speculatively. *)
   val commit : unit -> unit
+
+  (* Block the current thread until the previous action has been sated. It is
+   * important to note that this only ensure that the last communication is
+   * paired up, and does not assure the absence of divergent behavior from
+   * synchronous execution. *)
+
+  val touchLastComm : unit -> unit
+
+  (* Quits the communication manager and arbitrator for the calling instance.
+   * This ensure that the instance cleanly quits. *)
   val exitDaemon : unit -> unit
 
   (* ------------------------------------------------------*)

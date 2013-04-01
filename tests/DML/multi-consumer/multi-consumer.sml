@@ -43,6 +43,8 @@ let
     else
       let
         val v = recv pingChan
+        (* KC: uncommenting next line removes mis-speculations *)
+        (* val _ = touchLastComm () *)
         val _ = print (concat ["Got value: ", Int.toString v, "\n"])
       in
         loop v

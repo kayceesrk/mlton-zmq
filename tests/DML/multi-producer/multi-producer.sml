@@ -20,6 +20,8 @@ let
       (commit (); exitDaemon ())
     else (print (concat ["Iteration: ", Int.toString n, "\n"]);
           recv pongChan;
+          (* KC: uncommenting next line removes mis-speculations *)
+          (* touchLastComm(); *)
           loop (n-1))
 
   val _ = connect {sink = "tcp://localhost:5556", source = "tcp://localhost:5557",
