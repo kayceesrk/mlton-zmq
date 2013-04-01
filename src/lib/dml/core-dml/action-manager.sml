@@ -65,4 +65,6 @@ struct
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1}
 
   fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
+
+  fun actionToAid (ACTION {aid, ...}) = aid
 end

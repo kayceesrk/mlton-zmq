@@ -223,9 +223,6 @@ struct
     | _ => true
   end
 
-  fun getEarliestAction (NODE {array, ...}) =
-    getActionFromArrayAtIndex (array,0)
-
   fun isLastAidOnThread (t, aid) =
   let
     val tid = S.getThreadId t
@@ -241,12 +238,6 @@ struct
      RA.length array - 1 = index)
 
   fun nodeToAction (NODE{array, index}) = getActionFromArrayAtIndex (array, index)
-
-  fun markAllForAbort (NODE {array, ...}) =
-    ignore (RA.map (array, fn e =>
-      case e of
-           NodeExn (act, _) => Arbitrator.markForAbort act
-         | _ => raise Fail "markAllForAbort: impossible"))
 
   (********************************************************************
    * Continuation Management

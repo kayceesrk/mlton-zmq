@@ -259,12 +259,4 @@ struct
          | _ => ()
     end
 
-  fun markForAbort action =
-  let
-    val _ = debug' ("markForAbort: "^(actionToString action))
-    val node = NL.node action
-    val _ = mustRollbackOnVisit node := true
-  in
-    NW.resumeThreads node
-  end
 end

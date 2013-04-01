@@ -690,7 +690,7 @@ struct
                           else ()
                 in
                   if not (isLastNode recvWaitNode) then
-                    markForAbort (nodeToAction recvWaitNode)
+                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode))
                   else
                     ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
                                                 recvWaitNode = recvWaitNode})

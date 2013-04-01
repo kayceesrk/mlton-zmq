@@ -28,5 +28,6 @@ sig
   val aidToPtr    : action_id -> ptr
   val ptrToString : ptr -> string
 
+  val actionToAid : action -> action_id
   val actionToString : action -> string
 end

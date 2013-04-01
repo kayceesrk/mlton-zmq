@@ -31,15 +31,7 @@ sig
   val saveCont    : (unit -> unit) -> unit
   val restoreCont : unit -> unit
 
-  (* Given any node, getEarliestAction returns the earliest action in the
-   * thread to which the given node belongs to. The earliest action is a
-   * begin, commit or rollback action. *)
-  val getEarliestAction : node -> action
-
   val isLastAidOnThread : 'a CML.Scheduler.thread * action_id -> bool
   val isLastNode        : node -> bool
   val nodeToAction      : node -> action
-
-  (* Marks all nodes in the thread containing the given node for abort *)
-  val markAllForAbort : node -> unit
 end
