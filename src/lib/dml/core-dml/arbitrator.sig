@@ -11,5 +11,4 @@ sig
   val processAdd    : {action: RepTypes.action, prevAction: RepTypes.action option} -> unit
   val processCommit : {action: RepTypes.action, pushResult: RepTypes.msg -> unit} -> unit
   val markCycleDepGraph : RepTypes.action -> unit
-  val markForAbort : RepTypes.action -> unit
 end

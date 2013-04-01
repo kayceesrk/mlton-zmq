@@ -24,7 +24,7 @@ struct
 
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-  (* fun debug' msg = debug (fn () => msg) *)
+  fun debug' msg = debug (fn () => msg)
 
   (********************************************************************
    * Datatypes
@@ -223,8 +223,21 @@ struct
     | _ => true
   end
 
-  fun getEarliestAction (NODE {array, ...}) =
-    getActionFromArrayAtIndex (array,0)
+  fun isLastAidOnThread (t, aid) =
+  let
+    val tid = S.getThreadId t
+    val actions = CML.tidToActions tid
+    val lastIndex = RA.length actions - 1
+    val ACTION {aid = lastAid, ...} = getActionFromArrayAtIndex (actions, lastIndex)
+  in
+    MLton.equal (aid, lastAid)
+  end
+
+  fun isLastNode (NODE{array, index}) =
+    (debug' ("isLastNode: arrayLength="^(Int.toString (RA.length array))^" index="^(Int.toString index));
+     RA.length array - 1 = index)
+
+  fun nodeToAction (NODE{array, index}) = getActionFromArrayAtIndex (array, index)
 
   (********************************************************************
    * Continuation Management

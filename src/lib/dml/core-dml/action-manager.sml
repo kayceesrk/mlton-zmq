@@ -19,6 +19,9 @@ struct
   fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
     concat [Int.toString pid, ".", Int.toString tid, ".", Int.toString rid, ".", Int.toString aid]
 
+  fun ptrToString ({pid = ProcessId pid, tid = ThreadId tid, rid}) =
+    concat [Int.toString pid, ":", Int.toString tid, ":", Int.toString rid]
+
   fun newAid () =
   let
     val pid = !processId
@@ -55,13 +58,13 @@ struct
   fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =
     pidInt = (!processId)
 
-  (*
   fun getPrevAid (ACTION_ID {pid, tid, rid, aid}) =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - 1}
 
   fun getNextAid (ACTION_ID {pid, tid, rid, aid}) =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1}
-  *)
 
   fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
+
+  fun actionToAid (ACTION {aid, ...}) = aid
 end

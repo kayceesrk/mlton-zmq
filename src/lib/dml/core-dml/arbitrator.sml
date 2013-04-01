@@ -35,7 +35,7 @@ struct
   val graph = G.new ()
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-  (* fun debug' msg = debug (fn () => msg) *)
+  fun debug' msg = debug (fn () => msg)
 
   structure NodeLocator =
   struct
@@ -82,7 +82,8 @@ struct
     end
 
     fun waitTillSated node =
-      if numSuccessors node < numSuccessorsExpected node then
+      if numSuccessors node < numSuccessorsExpected node andalso
+         not ((!(isCommitted node)) orelse (!(mustRollbackOnVisit node))) then
         let
           val _ = S.atomicSwitchToNext (fn t =>
             let
@@ -126,7 +127,10 @@ struct
 
     val w = {startNode = fn n =>
                let
-                 val _ = if not (!(isCommitted n))
+                 val _ = debug' ("processCommit.startNode: "^(actionToString (nodeGetAct n)))
+                 val committed = !(isCommitted n)
+                 val isMarkedAsRolledBack = !(mustRollbackOnVisit n)
+                 val _ = if not (committed orelse isMarkedAsRolledBack)
                          then NW.waitTillSated n
                          else ()
                in
@@ -255,10 +259,4 @@ struct
          | _ => ()
     end
 
-  fun markForAbort action =
-  let
-    val node = NL.node action
-  in
-    mustRollbackOnVisit node := true
-  end
 end
