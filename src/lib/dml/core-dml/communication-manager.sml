@@ -41,7 +41,7 @@ struct
 
   fun msgSend (msg : msg) =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.msgSend", NONE)
+    val _ = Assert.assertAtomic' ("DmlCore.msgSend", NONE)
     val PROXY {sink, ...} = !proxy
     val _ = ZMQ.send (valOf sink, ROOTED_MSG {msg = msg, sender = ProcessId (!processId)})
     val _ = debug (fn () => "Sent: "^(msgToString msg))
@@ -60,7 +60,7 @@ struct
 
   fun msgRecv () : msg option =
   let
-    val _ = Assert.assertAtomic' ("DmlDecentralized.msgRecv", NONE)
+    val _ = Assert.assertAtomic' ("DmlCore.msgRecv", NONE)
     val PROXY {source, ...} = !proxy
   in
     case ZMQ.recvNB (valOf source) of

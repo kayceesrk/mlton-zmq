@@ -102,7 +102,7 @@ struct
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
-    * dml-decentralized.sml where call to handleInit is made.) *)
+    * dml-core.sml where call to handleInit is made.) *)
     val _ = sendToArbitrator node
     val _ = S.atomicEnd ()
   in
@@ -119,7 +119,7 @@ struct
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
-    * dml-decentralized.sml where call to insertCommitNode is made.) *)
+    * dml-core.sml where call to insertCommitNode is made.) *)
     val _ = sendToArbitrator node
     val _ = S.atomicEnd ()
   in
@@ -135,7 +135,7 @@ struct
     val node = NODE {array = actions, index = RA.length actions - 1}
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedrbm using forceAddSatedrbm (See
-    * dml-decentralized.sml where call to insertRollbackNode is made.) *)
+    * dml-core.sml where call to insertRollbackNode is made.) *)
     val _ = sendToArbitrator node
   in
     rbAid

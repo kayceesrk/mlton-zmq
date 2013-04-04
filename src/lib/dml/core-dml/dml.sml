@@ -7,4 +7,4 @@
  * See the file MLton-LICENSE for details.
  *)
 
-structure Dml : DML = DmlDecentralized
+structure Dml : DML = DmlCore
