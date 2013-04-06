@@ -31,20 +31,27 @@ struct
    *******************************************************************)
 
   datatype node = NODE of {array: exn ResizableArray.t, index: int}
-  exception NodeExn of (action * (unit -> unit) option)
+  exception NodeExn of {action: action,
+                        callback: (unit -> unit) option,
+                        value: w8vec option}
 
   fun getActionFromArrayAtIndex (array, index) =
     case RA.sub (array, index) of
-         NodeExn (act, _) => act
+         NodeExn {action,...} => action
        | _ => raise Fail "getActionFromArrayAtIndex"
 
-  fun updateActionArray (array, index, act) =
+  fun getValueFromArrayAtIndex (array, index) =
+    case RA.sub (array, index) of
+         NodeExn {value,...} => value
+       | _ => raise Fail "getActionFromArrayAtIndex"
+
+  fun updateActionArray (array, index, act, value) =
   let
     val _ =  case RA.sub (array, index) of
-                 NodeExn (_, SOME f) => f ()
+                 NodeExn {callback = SOME f, ...} => f ()
                | _ => ()
   in
-    RA.update (array, index, NodeExn (act, NONE))
+    RA.update (array, index, NodeExn {action = act, callback = NONE, value = SOME value})
   end
 
   fun doOnUpdateLastNode wakeup =
@@ -53,12 +60,13 @@ struct
     val array = S.tidActions ()
     val lastIndex = RA.length array - 1
     val act = getActionFromArrayAtIndex (array, lastIndex)
+    val v = getValueFromArrayAtIndex (array, lastIndex)
   in
-    RA.update (array, lastIndex, NodeExn (act, SOME wakeup))
+    RA.update (array, lastIndex, NodeExn {action = act, callback = SOME wakeup, value = v})
   end
 
   fun addToActionsEnd (array, act) =
-    RA.addToEnd (array, NodeExn (act, NONE))
+    RA.addToEnd (array, NodeExn {action = act, callback = NONE, value = NONE})
 
 
   (********************************************************************
@@ -186,14 +194,14 @@ struct
   end
 
 
-  fun setMatchAid (n as NODE {array, index}) (matchAid: action_id) =
+  fun setMatchAid (n as NODE {array, index}) (matchAid: action_id) (value: w8vec) =
   let
     val (ACTION {aid, act}) = getActionFromArrayAtIndex (array, index)
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
                     | _ => raise Fail "ActionManager.setMatchAid"
-    val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct})
+    val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct}, value)
     val _ = sendToArbitrator (getPrevNode n)
     val _ = sendToArbitrator n
   in

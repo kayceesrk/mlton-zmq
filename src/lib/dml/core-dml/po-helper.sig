@@ -19,7 +19,7 @@ sig
   val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
   val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
 
-  val setMatchAid : node -> action_id -> unit
+  val setMatchAid : node -> action_id -> RepTypes.w8vec -> unit
   val getPrevNode : node -> node
 
   val sendToArbitrator : node -> unit

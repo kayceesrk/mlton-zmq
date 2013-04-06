@@ -117,7 +117,6 @@ struct
   let
     val _ = S.atomicBegin ()
     val _ = debug (fn () => "Arbitrator.processCommit: "^(actionToString action))
-    val maxVisit = ref (PTRDict.empty)
     val foundCycle = ref false
     val startNode = NL.node action
     val visitedNodes = ref []
@@ -151,15 +150,6 @@ struct
                  val _ = if MLton.equal (hd(!stack), n) then ignore (ListMLton.pop stack) else ()
                  val _ = amVisiting n := false
 
-                 (* Insert into maxVisit *)
-                 val ACTION{aid, ...} = nodeGetAct n
-                 val ptrId = aidToPtr aid
-                 val actNum = aidToActNum aid
-                 fun insert () = maxVisit := PTRDict.insert (!maxVisit) ptrId actNum
-                 val _ = case PTRDict.find (!maxVisit) ptrId of
-                              NONE => insert ()
-                            | SOME actNum' => if actNum > actNum' then insert () else ()
-
                  (* Remove outoing edges *)
                  val _ = ListMLton.map (N.successors (graph, n),
                       fn e => G.removeEdge (graph, {from = n, to = E.to (graph, e)}))
@@ -181,8 +171,10 @@ struct
       if !foundCycle then
         let
           val _ = ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
-          val res = AR_RES_FAIL {rollbackAids = !maxVisit, dfsStartAct = action}
           val _ = AidSet.app (fn a => debug' ("SafeAct: "^(aidToString a))) (!safeActions)
+          val rollbackAids = AidSet.foldl (fn (aid, acc) =>
+            PTRDict.insert acc (aidToPtr aid) (aidToActNum aid)) PTRDict.empty (!safeActions)
+          val res = AR_RES_FAIL {rollbackAids = rollbackAids, dfsStartAct = action}
           val _ = msgSend res
         in
           res

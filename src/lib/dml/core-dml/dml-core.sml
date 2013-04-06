@@ -513,8 +513,8 @@ struct
             let
               val _ = Assert.assertAtomic' ("DmlCore.processSend(5)", SOME 1)
               val _ = debug' ("DmlCore.processSend(5)")
-              val _ = setMatchAid sendWaitNode recvActAid
-              val _ = setMatchAid recvWaitNode sendActAid
+              val _ = setMatchAid sendWaitNode recvActAid value
+              val _ = setMatchAid recvWaitNode sendActAid emptyW8Vec
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               (* Resume blocked recv *)
@@ -568,8 +568,8 @@ struct
         | SOME (sendActAid, {sendWaitNode, value}) => (* matching local send *)
             let
               val _ = debug' ("DmlCore.processRecv(5)")
-              val _ = setMatchAid sendWaitNode recvActAid
-              val _ = setMatchAid recvWaitNode sendActAid
+              val _ = setMatchAid sendWaitNode recvActAid value
+              val _ = setMatchAid recvWaitNode sendActAid emptyW8Vec
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val () = case callerKind of
@@ -589,7 +589,7 @@ struct
   fun processRollbackMsg rollbackAids dfsStartAct =
     let
       val _ = debug' ("processRollbackMsg")
-      val _ = PTRDict.app (fn (k,_) => debug' (ptrToString k)) rollbackAids
+      val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^"::"^(Int.toString a))) rollbackAids
       (* Cleanup dependence graph *)
       val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct)
       (* Clean up pending acts *)
@@ -675,7 +675,7 @@ struct
                 MatchedComm.NOOP => ()
               | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
                   let
-                    val _ = setMatchAid recvWaitNode sendActAid
+                    val _ = setMatchAid recvWaitNode sendActAid value
                     val tidInt = aidToTidInt recvActAid
                     val recvWaitAid = getNextAid recvActAid
                     val _ = resumeThreadIfLastAidIs recvWaitAid tidInt value
@@ -690,7 +690,11 @@ struct
                           else ()
                 in
                   if not (isLastNode recvWaitNode) then
-                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode))
+                     (* Create a self-cycle for this node, which will cause it
+                      * to fail on commit. Also, value is set to emptyW8Vec,
+                      * which will (and should) never be deserialized to the
+                      * type of recv result. *)
+                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec
                   else
                     ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
                                                 recvWaitNode = recvWaitNode})
@@ -702,7 +706,7 @@ struct
               MatchedComm.NOOP => ()
             | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
                 let
-                  val _ = setMatchAid sendWaitNode recvActAid
+                  val _ = setMatchAid sendWaitNode recvActAid emptyW8Vec
                 in
                   ()
                 end
