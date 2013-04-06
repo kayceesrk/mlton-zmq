@@ -122,6 +122,10 @@ struct
     val startNode = NL.node action
     val visitedNodes = ref []
 
+    (* For log-based rollback recovery *)
+    val safeActions = ref AidSet.empty
+    val stack = ref []
+
     val {get = amVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
 
@@ -137,11 +141,14 @@ struct
                 if !(mustRollbackOnVisit n) then
                   foundCycle := true
                 else
-                  (ListMLton.push (visitedNodes, n);
+                  (ListMLton.push (stack, n);
+                   safeActions := AidSet.insert (!safeActions) (actionToAid (nodeGetAct n));
+                   ListMLton.push (visitedNodes, n);
                    amVisiting n := true)
                end,
              finishNode = fn n =>
                let
+                 val _ = if MLton.equal (hd(!stack), n) then ignore (ListMLton.pop stack) else ()
                  val _ = amVisiting n := false
 
                  (* Insert into maxVisit *)
@@ -161,7 +168,9 @@ struct
                end,
              handleTreeEdge = D.ignore,
              handleNonTreeEdge = fn e => if !(amVisiting (E.to (graph, e))) then
-                                           foundCycle := true
+                                           (foundCycle := true;
+                                            safeActions := ListMLton.fold (!stack, !safeActions,
+                                              fn (n,acc) => AidSet.remove acc (actionToAid (nodeGetAct n))))
                                          else (),
              startTree = D.ignore,
              finishTree = D.ignore,
@@ -173,6 +182,7 @@ struct
         let
           val _ = ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
           val res = AR_RES_FAIL {rollbackAids = !maxVisit, dfsStartAct = action}
+          val _ = AidSet.app (fn a => debug' ("SafeAct: "^(aidToString a))) (!safeActions)
           val _ = msgSend res
         in
           res

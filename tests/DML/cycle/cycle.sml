@@ -15,12 +15,13 @@ fun client () =
 let
   val c1 = channel "c1"
   val c2 = channel "c2"
+  val c_init = channel "c_init"
 
   fun receiver () =
   let
-    val _ = recv (c2)
-    val _ = recv (c1)
-    val _ = recv (c1)
+    val _ = recv c_init
+    val _ = recv c2
+    val _ = recv c1
   in
     commit ()
   end
@@ -28,6 +29,7 @@ let
   fun core () =
   let
     val _ = spawn (receiver)
+    val _ = send (c_init, 0)
     val _ = send (c1, 0)
     val _ = send (c2, 0)
     val _ = commit ()

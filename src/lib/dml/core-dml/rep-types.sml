@@ -46,6 +46,7 @@ struct
   end
 
   structure AidDict = SplayDict (structure Key = ActionIdOrdered)
+  structure AidSet = SplaySet (structure Elem = ActionIdOrdered)
 
   type ptr = {pid: process_id, tid: thread_id, rid: int}
 
