@@ -12,7 +12,7 @@ struct
   structure S = CML.Scheduler
   structure RA = ResizableArray
   open RepTypes
-  open ActionManager
+  open ActionHelper
   open CommunicationManager
 
   (********************************************************************
@@ -31,9 +31,17 @@ struct
    *******************************************************************)
 
   datatype node = NODE of {array: exn ResizableArray.t, index: int}
+
+  datatype comm_result = UNCACHED of {waitNode: node, actAid: action_id}
+                       | CACHED of RepTypes.w8vec
+
   exception NodeExn of {action: action,
                         callback: (unit -> unit) option,
                         value: w8vec option}
+
+  exception CacheItem of {actNum: int,  (* recvWait or sendWait's action number *)
+                          value: w8vec} (* emptyW8Vec for send *)
+
 
   fun getActionFromArrayAtIndex (array, index) =
     case RA.sub (array, index) of
@@ -161,51 +169,103 @@ struct
     {spawnAid = spawnAid, spawnNode = spawnNode}
   end
 
-  fun handleSend {cid: channel_id} =
-  let
-    val actions = S.tidActions ()
-    (* act *)
-    val actAid = newAid ()
-    val actAct = ACTION {aid = actAid, act = SEND_ACT {cid = cid}}
-    val _ = addToActionsEnd (actions, actAct)
-    (* wait *)
-    val waitAid = newAid ()
-    val waitAct = ACTION {aid = waitAid, act = SEND_WAIT {cid = cid, matchAid = NONE}}
-    val _ = addToActionsEnd (actions, waitAct)
-    val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
-  in
-    {waitNode = waitNode, actAid = actAid}
-  end
-
-  fun handleRecv {cid: channel_id} =
-  let
-    val actions = S.tidActions ()
-    (* act *)
-    val actAid = newAid ()
-    val actAct = ACTION {aid = actAid, act = RECV_ACT {cid = cid}}
-    val _ = addToActionsEnd (actions, actAct)
-    (* wait *)
-    val waitAid = newAid ()
-    val waitAct = ACTION {aid = waitAid, act = RECV_WAIT {cid = cid, matchAid = NONE}}
-    val _ = addToActionsEnd (actions, waitAct)
-    val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
-  in
-    {waitNode = waitNode, actAid = actAid}
-  end
-
-
   fun setMatchAid (n as NODE {array, index}) (matchAid: action_id) (value: w8vec) =
   let
     val (ACTION {aid, act}) = getActionFromArrayAtIndex (array, index)
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
-                    | _ => raise Fail "ActionManager.setMatchAid"
+                    | _ => raise Fail "ActionHelper.setMatchAid"
     val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct}, value)
     val _ = sendToArbitrator (getPrevNode n)
     val _ = sendToArbitrator n
   in
     ()
+  end
+
+
+  fun handleSend {cid: channel_id} =
+  let
+    val cache = S.tidCache ()
+    fun handleSendUncached {cid: channel_id} =
+    let
+      val actions = S.tidActions ()
+      (* act *)
+      val actAid = newAid ()
+      val actAct = ACTION {aid = actAid, act = SEND_ACT {cid = cid}}
+      val _ = addToActionsEnd (actions, actAct)
+      (* wait *)
+      val waitAid = newAid ()
+      val waitAct = ACTION {aid = waitAid, act = SEND_WAIT {cid = cid, matchAid = NONE}}
+      val _ = addToActionsEnd (actions, waitAct)
+      val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
+    in
+      UNCACHED {waitNode = waitNode, actAid = actAid}
+    end
+
+    fun handleSendCached {cid: channel_id} =
+    case !cache of
+        CacheItem{actNum,value}::ctl =>
+        let
+          val _ = debug' ("handleSendCached")
+          val (waitNode, actAid) = case handleSendUncached {cid = cid} of
+              UNCACHED {waitNode, actAid} => (waitNode, actAid)
+            | _ => raise Fail "handleSendCached: impossible!"
+          val _ = Assert.assert ([], fn () => "handleSendCached: actNum mis-match!",
+            fn () => actNum - 1 = aidToActNum actAid)
+          val _ = setMatchAid waitNode actAid value
+          val _ = cache := ctl
+        in
+          CACHED value
+        end
+      | _ => raise Fail "handleSendCached: empty"
+  in
+    if length (!cache) > 0 then
+      handleSendCached {cid = cid}
+    else
+      handleSendUncached {cid = cid}
+  end
+
+  fun handleRecv {cid: channel_id} =
+  let
+    val cache = S.tidCache ()
+    fun handleRecvUncached {cid: channel_id} =
+    let
+      val actions = S.tidActions ()
+      (* act *)
+      val actAid = newAid ()
+      val actAct = ACTION {aid = actAid, act = RECV_ACT {cid = cid}}
+      val _ = addToActionsEnd (actions, actAct)
+      (* wait *)
+      val waitAid = newAid ()
+      val waitAct = ACTION {aid = waitAid, act = RECV_WAIT {cid = cid, matchAid = NONE}}
+      val _ = addToActionsEnd (actions, waitAct)
+      val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
+    in
+      UNCACHED {waitNode = waitNode, actAid = actAid}
+    end
+
+    fun handleRecvCached {cid: channel_id} =
+    case !cache of
+          CacheItem{actNum,value}::ctl =>
+          let
+            val _ = debug' ("handleRecvCached")
+            val (waitNode, actAid) = case handleRecvUncached {cid = cid} of
+                UNCACHED {waitNode, actAid} => (waitNode, actAid)
+              | _ => raise Fail "handleRecvCached: impossible!"
+            val _ = Assert.assert ([], fn () => "handleRecvCached: actNum mis-match!",
+            fn () => actNum - 1 = aidToActNum actAid)
+            val _ = setMatchAid waitNode actAid value
+            val _ = cache := ctl
+          in
+            CACHED value
+          end
+        | _ => raise Fail "handleRecvCached: empty"
+  in
+    if length (!cache) > 0 then
+      handleRecvCached {cid = cid}
+    else
+      handleRecvUncached {cid = cid}
   end
 
   fun inNonSpecExecMode () =
@@ -253,15 +313,33 @@ struct
 
   fun saveCont f =
   let
-    val _ = debug (fn () => "ActionManager.saveCont")
+    val _ = debug (fn () => "ActionHelper.saveCont")
   in
     S.saveCont (f)
   end
 
-  fun restoreCont () =
+  fun restoreCont actionNum =
   let
-    val _ = debug (fn () => "ActionManager.restoreCont")
+    val _ = debug (fn () => "ActionHelper.restoreCont")
+    val actions = CML.tidToActions (S.getCurThreadId ())
+
+    fun getCacheItem anum idx =
+      CacheItem {actNum = anum, value = valOf (getValueFromArrayAtIndex (actions, idx))}
+
+    val ACTION {aid, ...} = getActionFromArrayAtIndex (actions, 0)
+    val anumOfFirstAction = aidToActNum aid
+
+    fun loop idx acc =
+      if (idx + anumOfFirstAction) < actionNum then
+        case getActionFromArrayAtIndex (actions, idx) of
+          ACTION {aid, act = SEND_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
+        | ACTION {aid, act = RECV_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
+        | _ => loop (idx+1) acc
+      else acc
+
+    val cache = rev (loop 0 [])
+    val _ = debug (fn () => "ActionHelper.restoreCont: cacheLength="^(Int.toString (length cache)))
   in
-    S.restoreCont ()
+    S.restoreCont cache
   end handle CML.Kill => S.switchToNext (fn _ => ())
 end

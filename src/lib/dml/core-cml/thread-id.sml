@@ -29,6 +29,7 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun tidToInt (TID {id, ...}) = id
       fun tidToRev (TID {revisionId,...}) = !revisionId
       fun tidToActions (TID {actions, ...}) = !actions
+      fun tidToCache (TID {cache, ...}) = cache
       fun tidNextActionNum (TID {actionNum,...}) =
       let
         val res = !actionNum + 1
@@ -37,11 +38,12 @@ structure ThreadID : THREAD_ID_EXTRA =
         res
       end
 
-      fun tidCommit (TID {revisionId, actionNum, actions, ...}) =
+      fun tidCommit (TID {revisionId, actionNum, actions, cache, ...}) =
       let
         val _ = revisionId := !revisionId + 1
         val _ = actionNum := !actionNum + 1
         val _ = actions := (ResizableArray.empty ())
+        val _ = cache := []
       in
         ()
       end
@@ -59,11 +61,12 @@ structure ThreadID : THREAD_ID_EXTRA =
             cont := (fn () => (ignore (comp ()); MLton.Cont.throw (k, ())))
           end)
 
-      fun tidRestoreCont (TID {cont, revisionId, actions, ...}) =
+      fun tidRestoreCont (TID {cont, revisionId, actions, cache, ...}, newCache) =
       let
         (* XXX racy *)
         val _ = revisionId := !revisionId + 1
         val _ = actions := (ResizableArray.empty ())
+        val _ = cache := newCache
       in
         (!cont) ()
       end
@@ -76,6 +79,7 @@ structure ThreadID : THREAD_ID_EXTRA =
               exnHandler = ref (!defaultExnHandler),
               props = ref [],
               actions = ref (ResizableArray.empty ()),
+              cache = ref [],
               cont = ref (fn _ => raise Kill),
               revisionId =  ref 0,
               actionNum = ref 0,

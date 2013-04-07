@@ -29,9 +29,10 @@ sig
   val tidRev : unit -> int
   val tidNextActionNum : unit -> int
   val tidActions : unit -> exn ResizableArray.t
+  val tidCache : unit -> exn list ref
 
   val saveCont : (unit -> unit) (* action to do before restore *) -> unit
-  val restoreCont : unit -> unit
+  val restoreCont : exn list -> unit
 
   val ready : rdy_thread -> unit
   val next : unit -> rdy_thread

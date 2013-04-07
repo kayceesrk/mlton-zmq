@@ -2,7 +2,7 @@
 structure CommunicationManager : COMM_MANAGER =
 struct
   open RepTypes
-  open ActionManager
+  open ActionHelper
   structure S = CML.Scheduler
 
   (********************************************************************

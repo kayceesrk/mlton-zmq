@@ -7,7 +7,7 @@
  *)
 
 
-structure ActionManager : ACTION_MANAGER =
+structure ActionHelper : ACTION_HELPER =
 struct
   structure S = CML.Scheduler
   open RepTypes

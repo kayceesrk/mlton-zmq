@@ -6,7 +6,7 @@
  *
  *)
 
-signature ACTION_MANAGER =
+signature ACTION_HELPER =
 sig
 
   type action_id = RepTypes.action_id

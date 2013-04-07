@@ -6,12 +6,12 @@ in
    local
       $(SML_LIB)/basis/basis.mlb
       $(SML_LIB)/basis/mlton.mlb
-			cml.mlb
 			cmlib/cmlib.mlb
+			cml.mlb
       util/util.mlb
 			core-dml/rep-types.sml
-			core-dml/action-manager.sig
-			core-dml/action-manager.sml
+			core-dml/action-helper.sig
+			core-dml/action-helper.sml
 			core-dml/communication-manager.sig
 			core-dml/communication-manager.sml
 			core-dml/arbitrator.sig

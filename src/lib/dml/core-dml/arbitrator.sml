@@ -16,7 +16,7 @@ struct
   structure D = G.DfsParam
 
   open RepTypes
-  open ActionManager
+  open ActionHelper
   open CommunicationManager
 
   structure Assert = LocalAssert(val assert = true)
@@ -171,7 +171,7 @@ struct
       if !foundCycle then
         let
           val _ = ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
-          val _ = AidSet.app (fn a => debug' ("SafeAct: "^(aidToString a))) (!safeActions)
+          val _ = AidSet.app (fn aid => debug' ("safeAid: "^(aidToString aid))) (!safeActions)
           val rollbackAids = AidSet.foldl (fn (aid, acc) =>
             PTRDict.insert acc (aidToPtr aid) (aidToActNum aid)) PTRDict.empty (!safeActions)
           val res = AR_RES_FAIL {rollbackAids = rollbackAids, dfsStartAct = action}

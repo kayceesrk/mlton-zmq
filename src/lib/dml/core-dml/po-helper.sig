@@ -12,26 +12,37 @@ sig
   type action = RepTypes.action
   type node
 
+  datatype comm_result = UNCACHED of {waitNode: node, actAid: action_id}
+                       | CACHED of RepTypes.w8vec
+
+  (* ---------------------
+   * Inserting new actions
+   * ---------------------
+   *)
+
   val insertCommitNode : unit -> action_id
   val insertRollbackNode : unit -> action_id
   val handleInit  : {parentAid: action_id} -> action_id
   val handleSpawn : {childTid : RepTypes.thread_id} -> {spawnAid: action_id, spawnNode: node}
-  val handleSend  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
-  val handleRecv  : {cid : RepTypes.channel_id} -> {waitNode: node, actAid: action_id}
+  val handleSend  : {cid : RepTypes.channel_id} -> comm_result
+  val handleRecv  : {cid : RepTypes.channel_id} -> comm_result
+
+  (* ---------------------- *)
 
   val setMatchAid : node -> action_id -> RepTypes.w8vec -> unit
   val getPrevNode : node -> node
+  val isLastNode  : node -> bool
+  val nodeToAction: node -> action
 
-  val sendToArbitrator : node -> unit
-  val getFinalAction   : unit -> RepTypes.action
+  val getFinalAction     : unit -> RepTypes.action
   val doOnUpdateLastNode : (unit -> unit) -> unit
   val isLastNodeMatched  : unit -> bool
+  val isLastAidOnThread  : 'a CML.Scheduler.thread * action_id -> bool
 
-  val inNonSpecExecMode : unit -> bool
   val saveCont    : (unit -> unit) -> unit
-  val restoreCont : unit -> unit
-
-  val isLastAidOnThread : 'a CML.Scheduler.thread * action_id -> bool
-  val isLastNode        : node -> bool
-  val nodeToAction      : node -> action
+  (* Takes as input the last valid action number that is not part of a cycle.
+   * This is used to create a cache for log-based recovery when the thread
+   * resumes *)
+  val restoreCont : int -> unit
+  val inNonSpecExecMode : unit -> bool
 end

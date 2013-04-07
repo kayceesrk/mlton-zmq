@@ -11,9 +11,9 @@ signature PENDING_COMM =
 sig
   type 'a t
   val empty     : unit -> 'a t
-  val addAid    : 'a t -> RepTypes.channel_id -> ActionManager.action_id -> 'a -> unit
-  val removeAid : 'a t -> RepTypes.channel_id -> ActionManager.action_id -> unit
-  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionManager.action_id} -> (ActionManager.action_id * 'a) option
+  val addAid    : 'a t -> RepTypes.channel_id -> ActionHelper.action_id -> 'a -> unit
+  val removeAid : 'a t -> RepTypes.channel_id -> ActionHelper.action_id -> unit
+  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionHelper.action_id} -> (ActionHelper.action_id * 'a) option
   val cleanup   : 'a t -> int RepTypes.PTRDict.dict -> unit
 end
 
@@ -22,22 +22,22 @@ sig
   type 'a t
   datatype 'a join_result =
     SUCCESS of {value : 'a, waitNode: POHelper.node}
-  | FAILURE of {actAid : ActionManager.action_id,
+  | FAILURE of {actAid : ActionHelper.action_id,
                 waitNode : POHelper.node,
                 value : 'a}
   | NOOP
 
   val empty : unit -> 'a t
   val add   : 'a t -> {channel: RepTypes.channel_id,
-                       actAid: ActionManager.action_id,
-                       remoteMatchAid: ActionManager.action_id,
+                       actAid: ActionHelper.action_id,
+                       remoteMatchAid: ActionHelper.action_id,
                        waitNode: POHelper.node} -> 'a -> unit
-  val join  : 'a t -> {remoteAid: ActionManager.action_id,
-                       withAid: ActionManager.action_id} -> 'a join_result
+  val join  : 'a t -> {remoteAid: ActionHelper.action_id,
+                       withAid: ActionHelper.action_id} -> 'a join_result
   val cleanup : 'a t -> int RepTypes.PTRDict.dict ->
-                {channel: RepTypes.channel_id, actAid: ActionManager.action_id,
+                {channel: RepTypes.channel_id, actAid: ActionHelper.action_id,
                  waitNode: POHelper.node, value: 'a} list
-  val contains : 'a t -> ActionManager.action_id -> bool
+  val contains : 'a t -> ActionHelper.action_id -> bool
 end
 
 signature IVAR =
@@ -51,7 +51,7 @@ struct
   structure Debug = LocalDebug(val debug = true)
 
   open RepTypes
-  open ActionManager
+  open ActionHelper
   open CommunicationManager
   open POHelper
   open Arbitrator
@@ -159,7 +159,7 @@ struct
 
     datatype 'a join_result =
       SUCCESS of {value : 'a, waitNode: POHelper.node}
-    | FAILURE of {actAid : ActionManager.action_id,
+    | FAILURE of {actAid : ActionHelper.action_id,
                   waitNode : POHelper.node,
                   value : 'a}
     | NOOP
@@ -275,9 +275,9 @@ struct
   fun rollbackBlockedThreads ptrDict =
   let
     val _ = Assert.assertAtomic' ("DmlCore.rollbackBlockedThreads", SOME 1)
-    fun rollbackBlockedThread t =
+    fun rollbackBlockedThread t actNum =
       let
-        val prolog = fn () => (POHelper.restoreCont (); emptyW8Vec)
+        val prolog = fn () => (POHelper.restoreCont actNum; emptyW8Vec)
         val rt = S.prep (S.prepend (t, prolog))
         val _ = S.ready rt
       in
@@ -292,7 +292,7 @@ struct
         in
           case PTRDict.find ptrDict {pid = pid, tid = tid, rid = rid} of
                 NONE => IntDict.insert newBTDict tidInt t
-              | SOME _ => (rollbackBlockedThread t; newBTDict)
+              | SOME actNum => (rollbackBlockedThread t actNum; newBTDict)
         end) IntDict.empty (!blockedThreads)
   in
     blockedThreads := newBTDict
@@ -309,7 +309,8 @@ struct
       in
         case PTRDict.find ptrDict {pid = pid, tid = tid, rid = rid} of
              NONE => rthrd
-           | SOME _ => S.RTHRD (cmlTid, MLton.Thread.prepare (MLton.Thread.new (restoreCont), ()))
+           | SOME actNum => S.RTHRD (cmlTid, MLton.Thread.prepare
+              (MLton.Thread.new (fn () => restoreCont actNum), ()))
       end
   in
     S.modify restoreSCore
@@ -589,7 +590,7 @@ struct
   fun processRollbackMsg rollbackAids dfsStartAct =
     let
       val _ = debug' ("processRollbackMsg")
-      val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^"::"^(Int.toString a))) rollbackAids
+      val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^":"^(Int.toString a))) rollbackAids
       (* Cleanup dependence graph *)
       val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct)
       (* Clean up pending acts *)
@@ -852,33 +853,42 @@ struct
   let
     val _ = S.atomicBegin ()
     val _ = debug' ("DmlCore.send(1)")
-    val {actAid, waitNode} = handleSend {cid = c}
-    val m = MLton.serialize (m)
-    val _ = processSend Client
-              {channel = c, sendActAid = actAid,
-               sendWaitNode = waitNode, value = m}
-    val _ = syncMode (SOME 1)
   in
-    ()
+    case handleSend {cid = c} of
+      UNCACHED {actAid, waitNode} =>
+        let
+          val m = MLton.serialize (m)
+          val _ = processSend Client
+            {channel = c, sendActAid = actAid,
+            sendWaitNode = waitNode, value = m}
+        in
+          syncMode (SOME 1)
+        end
+    | CACHED _ => S.atomicEnd ()
   end
-
 
   fun recv (CHANNEL c) =
   let
     val _ = S.atomicBegin ()
     val _ = debug' ("DmlCore.recv(1)")
-    val {actAid, waitNode} = handleRecv {cid = c}
-    val serM = processRecv Client
-                {channel = c, recvActAid = actAid,
-                 recvWaitNode = waitNode}
-    val result = MLton.deserialize serM
-    val _ = syncMode (NONE)
   in
-    result
+    case handleRecv {cid = c} of
+      UNCACHED {actAid, waitNode} =>
+        let
+          val serM = processRecv Client
+            {channel = c, recvActAid = actAid,
+             recvWaitNode = waitNode}
+          val result = MLton.deserialize serM
+          val _ = syncMode (NONE)
+        in
+          result
+        end
+    | CACHED value =>
+         (S.atomicEnd ();
+          MLton.deserialize value)
   end
 
   val exitDaemon = fn () => exitDaemon := true
-
 
   fun commit () =
   let
@@ -895,7 +905,7 @@ struct
                      val () = processRollbackMsg rollbackAids dfsStartAct
                      val () = S.atomicEnd ()
                    in
-                     restoreCont ()
+                     restoreCont (PTRDict.lookup rollbackAids (aidToPtr (actionToAid finalAction)))
                    end
                | _ => raise Fail "DmlCore.commit: unexpected message"
 

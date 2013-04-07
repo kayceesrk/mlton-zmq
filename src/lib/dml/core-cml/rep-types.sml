@@ -26,6 +26,8 @@ structure RepTypes =
             props: exn list ref,
             (* state for rollback *)
             actions: exn ResizableArray.t ref,
+            (* cache *)
+            cache: exn list ref,
             (* saved continuation *)
             cont: (unit -> unit) ref,
             (* revision number of the thread; incremented on rollback. *)
