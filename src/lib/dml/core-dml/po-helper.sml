@@ -298,7 +298,7 @@ struct
     val lastIndex = RA.length actions - 1
     val ACTION {aid = lastAid, ...} = getActionFromArrayAtIndex (actions, lastIndex)
   in
-    MLton.equal (aid, lastAid)
+    ActionIdOrdered.eq (aid, lastAid)
   end
 
   fun isLastNode (NODE{array, index}) =

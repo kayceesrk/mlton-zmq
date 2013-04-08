@@ -19,7 +19,7 @@ struct
   open ActionHelper
   open CommunicationManager
 
-  structure Assert = LocalAssert(val assert = true)
+  (* structure Assert = LocalAssert(val assert = true) *)
   structure Debug = LocalDebug(val debug = true)
 
 
@@ -207,35 +207,6 @@ struct
   in
     ()
   end
-
-  fun markCycleDepGraph dfsStartAct = ()
-  (* let
-    val _ = S.atomicBegin ()
-    val _ = debug (fn () => concat ["Arbitrator.markCycleDepGraph: ", actionToString dfsStartAct])
-    val _ = Assert.assertAtomic' ("Arbitrator.markCycleDepGraph", NONE)
-    val startNode = NL.node dfsStartAct
-    val w = {startNode = fn n =>
-              let
-                val isCommitted = !(isCommitted n)
-                val isMarkedAsRolledBack = !(mustRollbackOnVisit n)
-                val _ = if not (isCommitted orelse isMarkedAsRolledBack)
-                        then NW.waitTillSated n
-                        else ()
-              in
-                (mustRollbackOnVisit n) := true
-              end,
-             finishNode = fn n =>
-               ignore (ListMLton.map (N.successors (graph, n),
-                 fn e => G.removeEdge (graph, {from = n, to = E.to (graph, e)}))),
-             handleTreeEdge = D.ignore, handleNonTreeEdge = D.ignore,
-             startTree = D.ignore, finishTree = D.ignore, finishDfs = fn () => ()}
-    val _ = G.dfsNodes (graph, [startNode], w)
-    val _ = S.atomicEnd ()
-  in
-    ()
-  end *)
-
-
 
   fun processAdd {action, prevAction} =
     let

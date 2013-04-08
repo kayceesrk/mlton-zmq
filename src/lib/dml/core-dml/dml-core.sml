@@ -184,7 +184,7 @@ struct
               else ()
       val {actAid, waitNode, value, channel = _} = AidDict.lookup (!aidDictRef) remoteAid
       val result =
-        if MLton.equal (actAid, withAid) then
+        if ActionIdOrdered.eq (actAid, withAid) then
           (debug' ("SUCCESS");
            SUCCESS {value = value, waitNode = waitNode})
         else
@@ -477,9 +477,9 @@ struct
 
   fun processSend callerKind {channel = c, sendActAid, sendWaitNode, value} =
   let
-    val _ = callerKind
     val _ = Assert.assertAtomic' ("DmlCore.processSend(1)", SOME 1)
     val _ = debug' ("DmlCore.processSend(1)")
+    val sendActAid = aidIncVersion sendActAid
     val _ =
       case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
           NONE => (* No matching receives, check remote *)
@@ -533,6 +533,7 @@ struct
   let
     val _ = Assert.assertAtomic' ("DmlCore.processRecv(1)", SOME 1)
     val _ = debug' ("DmlCore.processRecv(1)")
+    val recvActAid = aidIncVersion recvActAid
     val value =
       case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
           NONE => (* No local matching sends, check remote *)
@@ -591,8 +592,6 @@ struct
     let
       val _ = debug' ("processRollbackMsg")
       val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^":"^(Int.toString a))) rollbackAids
-      (* Cleanup dependence graph *)
-      (* val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct) *)
       (* Clean up pending acts *)
       val () = PendingComm.cleanup pendingLocalSends rollbackAids
       val () = PendingComm.cleanup pendingRemoteSends rollbackAids
@@ -695,7 +694,8 @@ struct
                       * to fail on commit. Also, value is set to emptyW8Vec,
                       * which will (and should) never be deserialized to the
                       * type of recv result. *)
-                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec
+                     (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
+                      setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
                   else
                     ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
                                                 recvWaitNode = recvWaitNode})
@@ -719,7 +719,7 @@ struct
                           else ()
                 in
                   ignore (processSend Daemon {channel = c, sendActAid = sendActAid2,
-                                                   sendWaitNode = sendWaitNode, value = value})
+                                              sendWaitNode = sendWaitNode, value = value})
                 end
           else ()
       | AR_RES_SUCC {dfsStartAct = _} => ()
