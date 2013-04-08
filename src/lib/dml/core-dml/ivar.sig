@@ -7,13 +7,7 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature COMMUNICATION_MANAGER =
+signature IVAR =
 sig
-  type msg = RepTypes.msg
-
-  val msgToString : msg -> string
-  val msgSend     : msg -> unit
-  val msgSendSafe : msg -> unit
-  val msgRecv     : unit -> msg option
-  val msgRecvSafe : unit -> msg option
+  val new : unit -> {read: unit -> 'a, write: 'a -> unit}
 end

@@ -1,11 +1,11 @@
-(* action-manager.sml
+(* Copyright (C) 2013 KC Sivaramakrishnan.
+ * Copyright (C) 1999-2008 Henry Cejtin, KC Sivaramakrishnan, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * 2013 KC Sivaramakrishnan
- *
- * Action helper
- *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
  *)
-
 
 structure GraphManager : GRAPH_MANAGER =
 struct
@@ -78,16 +78,16 @@ struct
 
 
   (********************************************************************
-   * Arbitrator interfacing
+   * CycleDetector interfacing
    *******************************************************************)
 
-  fun sendToArbitrator (NODE {array, index}) =
+  fun sendToCycleDetector (NODE {array, index}) =
   let
     val prevAction =
       if index = 0 then NONE
       else SOME (getActionFromArrayAtIndex (array, index - 1))
     val action = getActionFromArrayAtIndex (array, index)
-    val _ = Arbitrator.processAdd {action = action, prevAction = prevAction}
+    val _ = CycleDetector.processAdd {action = action, prevAction = prevAction}
   in
     msgSendSafe (AR_REQ_ADD {action = action, prevAction = prevAction})
   end
@@ -119,7 +119,7 @@ struct
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
     * dml-core.sml where call to handleInit is made.) *)
-    val _ = sendToArbitrator node
+    val _ = sendToCycleDetector node
     val _ = S.atomicEnd ()
   in
     beginAid
@@ -136,7 +136,7 @@ struct
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedComm using forceAddSatedComm (See
     * dml-core.sml where call to insertCommitNode is made.) *)
-    val _ = sendToArbitrator node
+    val _ = sendToCycleDetector node
     val _ = S.atomicEnd ()
   in
     comAid
@@ -152,7 +152,7 @@ struct
     (* initial action can be immediately added arbitrator since it will be
     * immediately added to finalSatedrbm using forceAddSatedrbm (See
     * dml-core.sml where call to insertRollbackNode is made.) *)
-    val _ = sendToArbitrator node
+    val _ = sendToCycleDetector node
   in
     rbAid
   end
@@ -164,7 +164,7 @@ struct
     val spawnAct = ACTION {aid = spawnAid, act = SPAWN {childTid = childTid}}
     val _ = addToActionsEnd (actions, spawnAct)
     val spawnNode = NODE {array = actions, index = RA.length actions - 1}
-    val _ = sendToArbitrator spawnNode
+    val _ = sendToCycleDetector spawnNode
   in
     {spawnAid = spawnAid, spawnNode = spawnNode}
   end
@@ -177,8 +177,8 @@ struct
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
                     | _ => raise Fail "ActionHelper.setMatchAid"
     val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct}, value)
-    val _ = sendToArbitrator (getPrevNode n)
-    val _ = sendToArbitrator n
+    val _ = sendToCycleDetector (getPrevNode n)
+    val _ = sendToCycleDetector n
   in
     ()
   end

@@ -87,7 +87,7 @@ struct
                | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
                | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN   of {pid: process_id}
-               (* Arbitrator Communication *)
+               (* CycleDetector Communication *)
                | AR_REQ_ADD of {action: action, prevAction: action option}
                | AR_RES_SUCC of {dfsStartAct: action}
                | AR_RES_FAIL of {rollbackAids: int PTRDict.dict, dfsStartAct: action}
@@ -96,4 +96,6 @@ struct
 
   val proxy = ref (PROXY {context = NONE, source = NONE, sink = NONE})
   val processId = ref ~1
+
+  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 end

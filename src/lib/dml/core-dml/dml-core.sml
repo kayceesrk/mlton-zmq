@@ -1,4 +1,5 @@
 (* Copyright (C) 2013 KC Sivaramakrishnan.
+:q
  * Copyright (C) 1999-2008 Henry Cejtin, KC Sivaramakrishnan, Suresh
  *    Jagannathan, and Stephen Weeks.
  * Copyright (C) 1997-2000 NEC Research Institute.
@@ -6,12 +7,6 @@
  * MLton is released under a BSD-style license.
  * See the file MLton-LICENSE for details.
  *)
-
-
-signature IVAR =
-sig
-  val new : unit -> {read: unit -> 'a, write: 'a -> unit}
-end
 
 structure DmlCore : DML_INTERNAL =
 struct
@@ -22,13 +17,14 @@ struct
   open ActionHelper
   open CommunicationHelper
   open GraphManager
-  open Arbitrator
+  open CycleDetector
 
   structure IntDict = IntSplayDict
   structure S = CML.Scheduler
   structure C = CML
   structure ISS = IntSplaySet
   structure ZMQ = MLton.ZMQ
+  structure SH = SchedulerHelper
 
   (* -------------------------------------------------------------------- *)
   (* Debug helper functions *)
@@ -42,7 +38,6 @@ struct
   (* -------------------------------------------------------------------- *)
 
   datatype 'a chan = CHANNEL of channel_id
-  val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
 
   (* -------------------------------------------------------------------- *)
   (* state *)
@@ -56,163 +51,12 @@ struct
   val matchedSends : w8vec MatchedComm.t = MatchedComm.empty ()
   val matchedRecvs : w8vec MatchedComm.t = MatchedComm.empty ()
 
-  val blockedThreads : w8vec S.thread IntDict.dict ref = ref (IntDict.empty)
 
   (* State for join and exit*)
   val peers = ref (ISS.empty)
   val exitDaemon = ref false
 
-  (* Commit function *)
-  val commitRef = ref (fn () => ())
 
-  (* -------------------------------------------------------------------- *)
-  (* Scheduler Helper Functions *)
-  (* -------------------------------------------------------------------- *)
-
-  fun blockCurrentThread () =
-  let
-    val _ = Assert.assertAtomic' ("DmlDecentalized.blockCurrentThread", SOME 1)
-    val tidInt = S.tidInt ()
-  in
-    S.atomicSwitchToNext (fn t => blockedThreads := IntDict.insert (!blockedThreads) tidInt t)
-  end
-
-  fun resumeThread tidInt (value : w8vec) =
-  let
-    val _ = Assert.assertAtomic' ("DmlCore.unblockthread", NONE)
-    val t = IntDict.lookup (!blockedThreads) tidInt
-    val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
-    val rt = S.prepVal (t, value)
-  in
-    S.ready rt
-  end handle IntDict.Absent => ()
-
-  fun resumeThreadIfLastAidIs aid tidInt (value : w8vec) =
-  let
-    val _ = Assert.assertAtomic' ("DmlCore.unblockthread", SOME 1)
-    val t = IntDict.lookup (!blockedThreads) tidInt
-    val _ = if not (isLastAidOnThread (t, aid)) then raise IntDict.Absent else ()
-    val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
-    val rt = S.prepVal (t, value)
-  in
-    S.ready rt
-  end handle IntDict.Absent => ()
-
-  fun rollbackBlockedThreads ptrDict =
-  let
-    val _ = Assert.assertAtomic' ("DmlCore.rollbackBlockedThreads", SOME 1)
-    fun rollbackBlockedThread t actNum =
-      let
-        val prolog = fn () => (GraphManager.restoreCont actNum; emptyW8Vec)
-        val rt = S.prep (S.prepend (t, prolog))
-        val _ = S.ready rt
-      in
-        ()
-      end
-    val newBTDict =
-      IntDict.foldl (fn (tidInt, t as S.THRD (tid, _), newBTDict) =>
-        let
-          val pid = ProcessId (!processId)
-          val rid = CML.tidToRev tid
-          val tid = ThreadId tidInt
-        in
-          case PTRDict.find ptrDict {pid = pid, tid = tid, rid = rid} of
-                NONE => IntDict.insert newBTDict tidInt t
-              | SOME actNum => (rollbackBlockedThread t actNum; newBTDict)
-        end) IntDict.empty (!blockedThreads)
-  in
-    blockedThreads := newBTDict
-  end
-
-  fun rollbackReadyThreads ptrDict =
-  let
-    val _ = Assert.assertAtomic' ("DmlCore.rollbackReadyThreads", SOME 1)
-    fun restoreSCore (rthrd as S.RTHRD (cmlTid, _)) =
-      let
-        val pid = ProcessId (!processId)
-        val rid = CML.tidToRev cmlTid
-        val tid = ThreadId (CML.tidToInt cmlTid)
-      in
-        case PTRDict.find ptrDict {pid = pid, tid = tid, rid = rid} of
-             NONE => rthrd
-           | SOME actNum => S.RTHRD (cmlTid, MLton.Thread.prepare
-              (MLton.Thread.new (fn () => restoreCont actNum), ()))
-      end
-  in
-    S.modify restoreSCore
-  end
-
-  (* -------------------------------------------------------------------- *)
-  (* Simple IVar *)
-  (* -------------------------------------------------------------------- *)
-
-
-  structure IVar : IVAR =
-  struct
-    structure Assert = LocalAssert(val assert = true)
-    structure Debug = LocalDebug(val debug = false)
-
-    fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-    (* fun debug' msg = debug (fn () => msg) *)
-
-    datatype 'a k = THREAD of thread_id
-                  | VALUE of 'a
-                  | EMPTY
-
-    fun kToString (k) =
-      case k of
-           THREAD (ThreadId tidInt) => concat ["Thread(", Int.toString tidInt, ")"]
-         | EMPTY => "EMPTY"
-         | VALUE _ => "VALUE"
-
-    fun new () =
-    let
-      val r = ref EMPTY
-      fun write v =
-      let
-        val _ = debug' ("IVar.write(1)")
-        val _ = S.atomicBegin ()
-        val _ = debug (fn () => ("IVar.write: "^(kToString (!r))))
-        val _ = case (!r) of
-                     EMPTY => r := VALUE v
-                   | THREAD (ThreadId tidInt) => (r := VALUE v; resumeThread tidInt emptyW8Vec)
-                   | VALUE _ => raise Fail "IVar.read: Filled with value!"
-        val _ = S.atomicEnd ()
-      in
-        ()
-      end
-      fun read () =
-      let
-        val _ = Assert.assertNonAtomic' ("IVar.read(1)")
-        val _ = debug' ("IVar.read(1)")
-        val _ = S.atomicBegin ()
-        val _ = debug (fn () => ("IVar.read: "^(kToString (!r))))
-        val v = case (!r) of
-                     EMPTY =>
-                     let
-                       val tidInt = S.tidInt ()
-                       val _ = r := THREAD (ThreadId tidInt)
-                       val _ = blockCurrentThread ()
-                     in
-                       read ()
-                     end
-                   | THREAD _ =>
-                     let (* KC: If the blocked thread was rolledback, this branch is possible *)
-                       val tidInt = S.tidInt ()
-                       val _ = r := THREAD (ThreadId tidInt)
-                       val _ = blockCurrentThread ()
-                     in
-                       read ()
-                     end
-                   | VALUE v => (S.atomicEnd (); v)
-        val _ = Assert.assertNonAtomic' ("IVar.read(2)")
-      in
-        v
-      end
-    in
-      {read = read, write = write}
-    end
-  end
 
   (* -------------------------------------------------------------------- *)
   (* Proxy Server *)
@@ -280,7 +124,7 @@ struct
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               (* Resume blocked recv *)
-              val _ = resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
+              val _ = SH.resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
             in
               ()
             end
@@ -309,7 +153,7 @@ struct
                         val _ = PendingComm.addAid pendingLocalRecvs c recvActAid
                           {recvWaitNode = recvWaitNode}
                         val value = case callerKind of
-                                    Client => blockCurrentThread ()
+                                    Client => SH.blockCurrentThread ()
                                   | Daemon => emptyW8Vec
                       in
                         value
@@ -336,7 +180,7 @@ struct
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val () = case callerKind of
-                          Daemon => resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
+                          Daemon => SH.resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
                         | Client => S.atomicEnd ()
             in
               value
@@ -371,49 +215,12 @@ struct
       (* Add message filter *)
       val _ = MessageFilter.addToFilter rollbackAids
       (* rollback threads *)
-      val _ = rollbackBlockedThreads rollbackAids
-      val _ = rollbackReadyThreads rollbackAids
+      val _ = SH.rollbackBlockedThreads rollbackAids
+      val _ = SH.rollbackReadyThreads rollbackAids
     in
       ()
     end
 
-  fun forceCommit (node) =
-  let
-    val _ = debug' ("forceCommit")
-    val _ = Assert.assertAtomic'("forceCommit(1)", NONE)
-    val aid = (actionToAid o nodeToAction) node
-    val _ = debug' ("forceCommit: "^(aidToString aid))
-    val tidInt = aidToTidInt aid
-
-    fun handleBlockedThread () =
-    let
-      val t = IntDict.lookup (!blockedThreads) tidInt
-      val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
-      fun prolog () = ((!commitRef) (); emptyW8Vec)
-      val rt = S.prep (S.prepend (t, prolog))
-    in
-      S.ready rt
-    end handle IntDict.Absent => handleReadyThread ()
-
-    and handleReadyThread () =
-    let
-      fun core (rthrd as S.RTHRD (cmlTid, _)) =
-      let
-        val pid = ProcessId (!processId)
-        val rid = CML.tidToRev cmlTid
-        val tid = ThreadId (CML.tidToInt cmlTid)
-      in
-        if MLton.equal (aidToPtr aid, {pid = pid, tid = tid, rid = rid}) then
-          S.RTHRD (cmlTid, MLton.Thread.prepare (MLton.Thread.new (!commitRef), ()))
-        else rthrd
-      end
-    in
-      S.modify core
-    end
-
-  in
-    handleBlockedThread ()
-  end
 
   fun updateRemoteChannels (ACTION {act, ...}, prev) =
     case prev of
@@ -449,7 +256,7 @@ struct
                 val _ = setMatchAid recvWaitNode sendActAid value
                 val tidInt = aidToTidInt recvActAid
                 val recvWaitAid = getNextAid recvActAid
-                val _ = resumeThreadIfLastAidIs recvWaitAid tidInt value
+                val _ = SH.resumeThreadIfLastAidIs recvWaitAid tidInt value
               in
                 ()
               end
@@ -467,7 +274,7 @@ struct
                     * type of recv result. *)
                     (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
                     debug' ("SUCCESS'");
-                    forceCommit (recvWaitNode);
+                    SH.forceCommit (recvWaitNode);
                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
               else
                 ignore (processRecv {callerKind = Daemon, channel = c,
@@ -735,7 +542,7 @@ struct
     ()
   end
 
-  val _ = commitRef := commit
+  val _ = SchedulerHelper.commitRef := commit
 
   fun spawn f =
     let

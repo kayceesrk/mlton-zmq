@@ -7,13 +7,8 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature COMMUNICATION_MANAGER =
+signature CYCLE_DETECTOR =
 sig
-  type msg = RepTypes.msg
-
-  val msgToString : msg -> string
-  val msgSend     : msg -> unit
-  val msgSendSafe : msg -> unit
-  val msgRecv     : unit -> msg option
-  val msgRecvSafe : unit -> msg option
+  val processAdd    : {action: RepTypes.action, prevAction: RepTypes.action option} -> unit
+  val processCommit : {action: RepTypes.action, pushResult: RepTypes.msg -> unit} -> unit
 end

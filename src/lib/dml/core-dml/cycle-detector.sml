@@ -1,12 +1,13 @@
-(* arbitrator.sig
+(* Copyright (C) 2013 KC Sivaramakrishnan.
+ * Copyright (C) 1999-2008 Henry Cejtin, KC Sivaramakrishnan, Suresh
+ *    Jagannathan, and Stephen Weeks.
+ * Copyright (C) 1997-2000 NEC Research Institute.
  *
- * 2013 KC Sivaramakrishnan
- *
- * Stabilizer graph management.
- *
+ * MLton is released under a BSD-style license.
+ * See the file MLton-LICENSE for details.
  *)
 
-structure Arbitrator : ARBITRATOR =
+structure CycleDetector : CYCLE_DETECTOR =
 struct
 
   structure G = DirectedSubGraph
@@ -116,7 +117,7 @@ struct
   fun processCommit {action, pushResult} =
   let
     val _ = S.atomicBegin ()
-    val _ = debug (fn () => "Arbitrator.processCommit: "^(actionToString action))
+    val _ = debug (fn () => "CycleDetector.processCommit: "^(actionToString action))
     val foundCycle = ref false
     val startNode = NL.node action
 
@@ -217,7 +218,7 @@ struct
         NW.resumeThreads from
       end
 
-      val _ = debug (fn () => "Arbitrator.processAdd: action="^(actionToString action)^" prevAction="^
+      val _ = debug (fn () => "CycleDetector.processAdd: action="^(actionToString action)^" prevAction="^
                    (case prevAction of NONE => "NONE" | SOME a => actionToString a))
       val curNode = NL.node action
       val _ = case prevAction of

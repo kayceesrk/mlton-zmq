@@ -14,8 +14,8 @@ in
 			core-dml/action-helper.sml
 			core-dml/communication-helper.sig
 			core-dml/communication-helper.sml
-			core-dml/arbitrator.sig
-			core-dml/arbitrator.sml
+			core-dml/cycle-detector.sig
+			core-dml/cycle-detector.sml
 			core-dml/graph-manager.sig
 			core-dml/graph-manager.sml
 			core-dml/pending-comm.sig
@@ -23,6 +23,9 @@ in
 			core-dml/matched-comm.sig
 			core-dml/matched-comm.sml
 			core-dml/message-filter.sml
+			core-dml/scheduler-helper.sml
+			core-dml/ivar.sig
+			core-dml/ivar.sml
 			core-dml/dml.sig
 			core-dml/dml-core.sml
 			core-dml/dml.sml
