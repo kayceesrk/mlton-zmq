@@ -23,8 +23,9 @@ let
        send (pingChan, ~1);
        commit ();
        exitDaemon ())
-    else (print (concat ["Iteration: ", Int.toString n, "\n"]);
+    else (print (concat ["sending : ", Int.toString (2*n), "\n"]);
           send (pingChan, 2*n);
+          print (concat ["sending : ", Int.toString (2*n-1), "\n"]);
           send (pingChan, 2*n-1);
           loop (n-1))
 
@@ -44,7 +45,7 @@ let
       let
         val v = recv pingChan
         (* KC: uncommenting next line removes mis-speculations *)
-        val _ = touchLastComm ()
+        (* val _ = touchLastComm () *)
         val _ = print (concat ["Got value: ", Int.toString v, "\n"])
       in
         loop v

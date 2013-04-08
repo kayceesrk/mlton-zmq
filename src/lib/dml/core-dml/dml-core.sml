@@ -33,6 +33,7 @@ sig
                        remoteMatchAid: ActionHelper.action_id,
                        waitNode: POHelper.node} -> 'a -> unit
   val join  : 'a t -> {remoteAid: ActionHelper.action_id,
+                       ignoreFailure: bool,
                        withAid: ActionHelper.action_id} -> 'a join_result
   val cleanup : 'a t -> int RepTypes.PTRDict.dict ->
                 {channel: RepTypes.channel_id, actAid: ActionHelper.action_id,
@@ -178,7 +179,7 @@ struct
                       actAid = actAid, waitNode = waitNode, value = value}
     end
 
-    fun join aidDictRef {remoteAid, withAid} =
+    fun join aidDictRef {remoteAid, withAid, ignoreFailure} =
     let
       val _ = if isAidLocal remoteAid then raise Fail "MatchedComm.join"
               else ()
@@ -187,6 +188,8 @@ struct
         if ActionIdOrdered.eq (actAid, withAid) then
           (debug' ("SUCCESS");
            SUCCESS {value = value, waitNode = waitNode})
+        else if ignoreFailure then
+          raise AidDict.Absent
         else
           (debug' ("FAILURE");
           FAILURE {actAid = actAid, waitNode = waitNode, value = value})
@@ -475,7 +478,7 @@ struct
 
   datatype caller_kind = Client | Daemon
 
-  fun processSend callerKind {channel = c, sendActAid, sendWaitNode, value} =
+  fun processSend {channel = c, sendActAid, sendWaitNode, value} =
   let
     val _ = Assert.assertAtomic' ("DmlCore.processSend(1)", SOME 1)
     val _ = debug' ("DmlCore.processSend(1)")
@@ -600,7 +603,7 @@ struct
       (* Cleanup matched acts *)
       val failList = MatchedComm.cleanup matchedSends rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value} =>
-                processSend Daemon {channel = channel, sendActAid = actAid,
+                processSend {channel = channel, sendActAid = actAid,
                 sendWaitNode = waitNode, value = value})
       val failList = MatchedComm.cleanup matchedRecvs rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value = _} =>
@@ -623,7 +626,8 @@ struct
                  PendingComm.removeAid pendingRemoteSends cid sendActAid;
                  debug' ("updateRemoteChannels(2): removing recv "^(aidToString recvActAid));
                  PendingComm.removeAid pendingRemoteRecvs cid recvActAid;
-                 processMsg (S_JOIN {channel = cid, sendActAid = sendActAid, recvActAid = recvActAid}))
+                 processSendJoin {channel = cid, sendActAid = sendActAid,
+                                  recvActAid = recvActAid, ignoreFailure = false})
               | _ => raise Fail "updateRemoteChannels(1)")
        | SOME (ACTION {act = RECV_ACT _, aid = recvActAid}) =>
            (case act of
@@ -632,9 +636,68 @@ struct
                  PendingComm.removeAid pendingRemoteSends cid sendActAid;
                  debug' ("updateRemoteChannels(2): removing recv "^(aidToString recvActAid));
                  PendingComm.removeAid pendingRemoteRecvs cid recvActAid;
-                 processMsg (R_JOIN {channel = cid, sendActAid = sendActAid, recvActAid = recvActAid}))
+                 processRecvJoin {channel = cid, sendActAid = sendActAid,
+                                  recvActAid = recvActAid, ignoreFailure = false})
               | _ => raise Fail "updateRemoteChannels(2)")
        | _ => ()
+
+  and processSendJoin {channel = c, sendActAid, recvActAid, ignoreFailure} =
+      (debug' ("processSendJoin: ["^(aidToString sendActAid)^","^(aidToString recvActAid)^"]");
+      if MessageFilter.isAllowed sendActAid then
+        case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid, ignoreFailure = ignoreFailure} of
+            MatchedComm.NOOP => ()
+          | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
+              let
+                val _ = setMatchAid recvWaitNode sendActAid value
+                val tidInt = aidToTidInt recvActAid
+                val recvWaitAid = getNextAid recvActAid
+                val _ = resumeThreadIfLastAidIs recvWaitAid tidInt value
+              in
+                ()
+              end
+          | MatchedComm.FAILURE {actAid = recvActAid2, waitNode = recvWaitNode, ...} =>
+            let
+              val _ = if MLton.equal (aidToPtr recvActAid, aidToPtr recvActAid2) andalso
+                          MLton.equal (ActionIdOrdered.compare (recvActAid2, recvActAid), LESS) then
+                            msgSend (R_JOIN {channel = c, recvActAid = recvActAid, sendActAid = dummyAid})
+                      else ()
+            in
+              if not (isLastNode recvWaitNode) then
+                    (* Create a self-cycle for this node, which will cause it
+                    * to fail on commit. Also, value is set to emptyW8Vec,
+                    * which will (and should) never be deserialized to the
+                    * type of recv result. *)
+                    (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
+                    debug' ("SUCCESS'");
+                    setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
+              else
+                ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
+                                            recvWaitNode = recvWaitNode})
+            end
+      else ())
+
+  and processRecvJoin {channel = c, sendActAid, recvActAid, ignoreFailure} =
+      (debug' ("processRecvJoin: ["^(aidToString sendActAid)^","^(aidToString recvActAid)^"]");
+      if MessageFilter.isAllowed recvActAid then
+        case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid, ignoreFailure = ignoreFailure} of
+          MatchedComm.NOOP => ()
+        | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
+            let
+              val _ = setMatchAid sendWaitNode recvActAid emptyW8Vec
+            in
+              ()
+            end
+        | MatchedComm.FAILURE {actAid = sendActAid2, waitNode = sendWaitNode, value} =>
+            let
+              val _ = if MLton.equal (aidToPtr sendActAid, aidToPtr sendActAid2) andalso
+                          MLton.equal (ActionIdOrdered.compare (sendActAid2, sendActAid), LESS) then
+                            msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = dummyAid})
+                      else ()
+            in
+              ignore (processSend {channel = c, sendActAid = sendActAid2,
+                                   sendWaitNode = sendWaitNode, value = value})
+            end
+      else ())
 
   and processMsg msg =
   let
@@ -669,60 +732,12 @@ struct
                     remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
                 end)
           else ()
-      | S_JOIN {channel = c, sendActAid, recvActAid} =>
-          if MessageFilter.isAllowed sendActAid then
-            case MatchedComm.join matchedRecvs {remoteAid = sendActAid, withAid = recvActAid} of
-                MatchedComm.NOOP => ()
-              | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
-                  let
-                    val _ = setMatchAid recvWaitNode sendActAid value
-                    val tidInt = aidToTidInt recvActAid
-                    val recvWaitAid = getNextAid recvActAid
-                    val _ = resumeThreadIfLastAidIs recvWaitAid tidInt value
-                  in
-                    ()
-                  end
-              | MatchedComm.FAILURE {actAid = recvActAid2, waitNode = recvWaitNode, ...} =>
-                let
-                  val _ = if MLton.equal (aidToPtr recvActAid, aidToPtr recvActAid2) andalso
-                             MLton.equal (ActionIdOrdered.compare (recvActAid2, recvActAid), LESS) then
-                               msgSend (R_JOIN {channel = c, recvActAid = recvActAid, sendActAid = dummyAid})
-                          else ()
-                in
-                  if not (isLastNode recvWaitNode) then
-                     (* Create a self-cycle for this node, which will cause it
-                      * to fail on commit. Also, value is set to emptyW8Vec,
-                      * which will (and should) never be deserialized to the
-                      * type of recv result. *)
-                     (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
-                      debug' ("SUCCESS'");
-                      setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
-                  else
-                    ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
-                                                recvWaitNode = recvWaitNode})
-                end
-          else ()
-      | R_JOIN {channel = c, recvActAid, sendActAid} =>
-          if MessageFilter.isAllowed recvActAid then
-            case MatchedComm.join matchedSends {remoteAid = recvActAid, withAid = sendActAid} of
-              MatchedComm.NOOP => ()
-            | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
-                let
-                  val _ = setMatchAid sendWaitNode recvActAid emptyW8Vec
-                in
-                  ()
-                end
-            | MatchedComm.FAILURE {actAid = sendActAid2, waitNode = sendWaitNode, value} =>
-                let
-                  val _ = if MLton.equal (aidToPtr sendActAid, aidToPtr sendActAid2) andalso
-                             MLton.equal (ActionIdOrdered.compare (sendActAid2, sendActAid), LESS) then
-                               msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = dummyAid})
-                          else ()
-                in
-                  ignore (processSend Daemon {channel = c, sendActAid = sendActAid2,
-                                              sendWaitNode = sendWaitNode, value = value})
-                end
-          else ()
+      | S_JOIN {channel, sendActAid, recvActAid} =>
+          processSendJoin {channel = channel, sendActAid = sendActAid,
+                           recvActAid = recvActAid, ignoreFailure = true}
+      | R_JOIN {channel, sendActAid, recvActAid} =>
+          processRecvJoin {channel = channel, sendActAid = sendActAid,
+                           recvActAid = recvActAid, ignoreFailure = true}
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
@@ -859,7 +874,7 @@ struct
       UNCACHED {actAid, waitNode} =>
         let
           val m = MLton.serialize (m)
-          val _ = processSend Client
+          val _ = processSend
             {channel = c, sendActAid = actAid,
             sendWaitNode = waitNode, value = m}
         in
