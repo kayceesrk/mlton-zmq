@@ -13,7 +13,8 @@ sig
   val empty     : unit -> 'a t
   val addAid    : 'a t -> RepTypes.channel_id -> ActionHelper.action_id -> 'a -> unit
   val removeAid : 'a t -> RepTypes.channel_id -> ActionHelper.action_id -> unit
-  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionHelper.action_id} -> (ActionHelper.action_id * 'a) option
+  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionHelper.action_id}
+                   -> (ActionHelper.action_id * 'a) option
   val cleanup   : 'a t -> int RepTypes.PTRDict.dict -> unit
 end
 
@@ -226,7 +227,6 @@ struct
   (* -------------------------------------------------------------------- *)
   (* state *)
   (* -------------------------------------------------------------------- *)
-
 
   val pendingLocalSends : {sendWaitNode : node, value : w8vec} PendingComm.t = PendingComm.empty ()
   val pendingLocalRecvs : {recvWaitNode : node} PendingComm.t = PendingComm.empty ()
@@ -535,7 +535,7 @@ struct
     ()
   end
 
-  fun processRecv callerKind {channel = c, recvActAid, recvWaitNode} =
+  fun processRecv {callerKind, channel = c, recvActAid, recvWaitNode} =
   let
     val _ = Assert.assertAtomic' ("DmlCore.processRecv(1)", SOME 1)
     val _ = debug' ("DmlCore.processRecv(1)")
@@ -596,6 +596,7 @@ struct
 
   fun processRollbackMsg rollbackAids dfsStartAct =
     let
+      val _ = dfsStartAct (* silence warning *)
       val _ = debug' ("processRollbackMsg")
       val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^":"^(Int.toString a))) rollbackAids
       (* Clean up pending acts *)
@@ -610,7 +611,8 @@ struct
                 sendWaitNode = waitNode, value = value})
       val failList = MatchedComm.cleanup matchedRecvs rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value = _} =>
-                processRecv Daemon {channel = channel, recvActAid = actAid, recvWaitNode = waitNode})
+                processRecv {callerKind = Daemon, channel = channel,
+                    recvActAid = actAid, recvWaitNode = waitNode})
       (* Add message filter *)
       val _ = MessageFilter.addToFilter rollbackAids
       (* rollback threads *)
@@ -713,8 +715,8 @@ struct
                     forceCommit (recvWaitNode);
                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
               else
-                ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
-                                            recvWaitNode = recvWaitNode})
+                ignore (processRecv {callerKind = Daemon, channel = c,
+                          recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
             end
       else ())
 
@@ -933,9 +935,8 @@ struct
     case handleRecv {cid = c} of
       UNCACHED {actAid, waitNode} =>
         let
-          val serM = processRecv Client
-            {channel = c, recvActAid = actAid,
-             recvWaitNode = waitNode}
+          val serM = processRecv {callerKind = Client, channel = c,
+                      recvActAid = actAid, recvWaitNode = waitNode}
           val result = MLton.deserialize serM
           val _ = syncMode (NONE)
         in

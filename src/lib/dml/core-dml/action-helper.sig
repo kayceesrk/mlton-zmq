@@ -16,7 +16,6 @@ sig
 
   val dummyAid    : action_id
   val newAid      : unit -> action_id
-  (* val aidToPid    : action_id -> RepTypes.process_id *)
   val aidToPidInt : action_id -> int
   val aidToTidInt : action_id -> int
   val aidToTid    : action_id -> RepTypes.thread_id
@@ -24,7 +23,7 @@ sig
   val aidToActNum : action_id -> int
   val aidIncVersion : action_id -> action_id
   val isAidLocal  : action_id -> bool
-  val getPrevAid  : action_id -> action_id
+  (* val getPrevAid  : action_id -> action_id *)
   val getNextAid  : action_id -> action_id
   val aidToPtr    : action_id -> ptr
   val ptrToString : ptr -> string
