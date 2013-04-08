@@ -242,6 +242,9 @@ struct
   val peers = ref (ISS.empty)
   val exitDaemon = ref false
 
+  (* Commit function *)
+  val commitRef = ref (fn () => ())
+
   (* -------------------------------------------------------------------- *)
   (* Scheduler Helper Functions *)
   (* -------------------------------------------------------------------- *)
@@ -617,6 +620,44 @@ struct
       ()
     end
 
+  fun forceCommit (node) =
+  let
+    val _ = debug' ("forceCommit")
+    val _ = Assert.assertAtomic'("forceCommit(1)", NONE)
+    val aid = (actionToAid o nodeToAction) node
+    val _ = debug' ("forceCommit: "^(aidToString aid))
+    val tidInt = aidToTidInt aid
+
+    fun handleBlockedThread () =
+    let
+      val t = IntDict.lookup (!blockedThreads) tidInt
+      val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
+      fun prolog () = ((!commitRef) (); emptyW8Vec)
+      val rt = S.prep (S.prepend (t, prolog))
+    in
+      S.ready rt
+    end handle IntDict.Absent => handleReadyThread ()
+
+    and handleReadyThread () =
+    let
+      fun core (rthrd as S.RTHRD (cmlTid, _)) =
+      let
+        val pid = ProcessId (!processId)
+        val rid = CML.tidToRev cmlTid
+        val tid = ThreadId (CML.tidToInt cmlTid)
+      in
+        if MLton.equal (aidToPtr aid, {pid = pid, tid = tid, rid = rid}) then
+          S.RTHRD (cmlTid, MLton.Thread.prepare (MLton.Thread.new (!commitRef), ()))
+        else rthrd
+      end
+    in
+      S.modify core
+    end
+
+  in
+    handleBlockedThread ()
+  end
+
   fun updateRemoteChannels (ACTION {act, ...}, prev) =
     case prev of
          SOME (ACTION {act = SEND_ACT _, aid = sendActAid}) =>
@@ -669,6 +710,7 @@ struct
                     * type of recv result. *)
                     (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
                     debug' ("SUCCESS'");
+                    forceCommit (recvWaitNode);
                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
               else
                 ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
@@ -936,6 +978,8 @@ struct
   in
     ()
   end
+
+  val _ = commitRef := commit
 
   fun spawn f =
     let

@@ -206,7 +206,7 @@ struct
     val _ = pushResult res
   in
     ()
-  end
+  end handle Empty => (debug' ("processCommit raised exception"); S.atomicEnd ())
 
   fun processAdd {action, prevAction} =
     let
