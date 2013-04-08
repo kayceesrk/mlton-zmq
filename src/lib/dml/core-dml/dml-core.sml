@@ -592,7 +592,7 @@ struct
       val _ = debug' ("processRollbackMsg")
       val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^":"^(Int.toString a))) rollbackAids
       (* Cleanup dependence graph *)
-      val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct)
+      (* val _ = CML.atomicSpawn (fn () => markCycleDepGraph dfsStartAct) *)
       (* Clean up pending acts *)
       val () = PendingComm.cleanup pendingLocalSends rollbackAids
       val () = PendingComm.cleanup pendingRemoteSends rollbackAids

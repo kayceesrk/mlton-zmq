@@ -119,11 +119,24 @@ struct
     val _ = debug (fn () => "Arbitrator.processCommit: "^(actionToString action))
     val foundCycle = ref false
     val startNode = NL.node action
-    val visitedNodes = ref []
 
     (* For log-based rollback recovery *)
-    val safeActions = ref AidSet.empty
+    val unsafeActions = ref AidSet.empty
     val stack = ref []
+
+    fun handleCycle () =
+    let
+      val _ = foundCycle := true
+      fun foo (n, acc) =
+      let
+        val _ = debug' ("handleCycle: n="^(aidToString (actionToAid (nodeGetAct n))))
+        val _ = mustRollbackOnVisit n := true
+      in
+        AidSet.insert acc (actionToAid (nodeGetAct n))
+      end
+    in
+      unsafeActions := ListMLton.fold (!stack, !unsafeActions, foo)
+    end
 
     val {get = amVisiting, destroy, ...} =
       Property.destGetSet (N.plist, Property.initFun (fn _ => ref false))
@@ -138,11 +151,10 @@ struct
                          else ()
                in
                 if !(mustRollbackOnVisit n) then
-                  foundCycle := true
+                  handleCycle ()
                 else
-                  (ListMLton.push (stack, n);
-                   safeActions := AidSet.insert (!safeActions) (actionToAid (nodeGetAct n));
-                   ListMLton.push (visitedNodes, n);
+                  (isCommitted n := true;
+                   ListMLton.push (stack, n);
                    amVisiting n := true)
                end,
              finishNode = fn n =>
@@ -156,12 +168,12 @@ struct
                in
                  ()
                end,
+             handleNonTreeEdge =
+              fn e => if !(amVisiting (E.to (graph, e))) orelse
+                         AidSet.member (!unsafeActions) (actionToAid (nodeGetAct (E.to (graph, e)))) then
+                        handleCycle ()
+                      else (),
              handleTreeEdge = D.ignore,
-             handleNonTreeEdge = fn e => if !(amVisiting (E.to (graph, e))) then
-                                           (foundCycle := true;
-                                            safeActions := ListMLton.fold (!stack, !safeActions,
-                                              fn (n,acc) => AidSet.remove acc (actionToAid (nodeGetAct n))))
-                                         else (),
              startTree = D.ignore,
              finishTree = D.ignore,
              finishDfs = destroy}
@@ -170,18 +182,21 @@ struct
     val res =
       if !foundCycle then
         let
-          val _ = ignore (ListMLton.map (!visitedNodes, fn n => mustRollbackOnVisit n := true));
-          val _ = AidSet.app (fn aid => debug' ("safeAid: "^(aidToString aid))) (!safeActions)
-          val rollbackAids = AidSet.foldl (fn (aid, acc) =>
-            PTRDict.insert acc (aidToPtr aid) (aidToActNum aid)) PTRDict.empty (!safeActions)
+          val _ = AidSet.app (fn aid => debug' ("unsafeAid: "^(aidToString aid))) (!unsafeActions)
+          val rollbackAids = AidSet.foldr (fn (aid, acc) =>
+            let
+              fun merge anum = if (aidToActNum aid) < anum then (aidToActNum aid) else anum
+            in
+              PTRDict.insertMerge acc (aidToPtr aid) (aidToActNum aid) merge
+            end) PTRDict.empty (!unsafeActions)
           val res = AR_RES_FAIL {rollbackAids = rollbackAids, dfsStartAct = action}
           val _ = msgSend res
+          (* val _ = Assert.assert ([], fn () => "done!", fn _ => false) *)
         in
           res
         end
       else
         let
-          val _ = ignore (ListMLton.map (!visitedNodes, fn n => isCommitted n := true));
           val res = AR_RES_SUCC {dfsStartAct = action}
           val _ = msgSend res
         in
@@ -193,8 +208,8 @@ struct
     ()
   end
 
-  fun markCycleDepGraph dfsStartAct =
-  let
+  fun markCycleDepGraph dfsStartAct = ()
+  (* let
     val _ = S.atomicBegin ()
     val _ = debug (fn () => concat ["Arbitrator.markCycleDepGraph: ", actionToString dfsStartAct])
     val _ = Assert.assertAtomic' ("Arbitrator.markCycleDepGraph", NONE)
@@ -218,7 +233,7 @@ struct
     val _ = S.atomicEnd ()
   in
     ()
-  end
+  end *)
 
 
 

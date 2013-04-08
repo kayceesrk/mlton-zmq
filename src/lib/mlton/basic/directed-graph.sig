@@ -6,9 +6,9 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature DIRECTED_GRAPH = 
+signature DIRECTED_GRAPH =
    sig
-      structure Node: 
+      structure Node:
          sig
             type 'a edge
             type 'a t
@@ -101,8 +101,8 @@ signature DIRECTED_GRAPH =
                      options: Dot.GraphOption.t list,
                      title: string})
          -> Layout.t
-      structure LoopForest: 
-         sig 
+      structure LoopForest:
+         sig
             type 'a t
 
             val dest: 'a t -> {loops: {headers: 'a Node.t vector,
