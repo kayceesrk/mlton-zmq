@@ -695,6 +695,7 @@ struct
                       * which will (and should) never be deserialized to the
                       * type of recv result. *)
                      (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
+                      debug' ("SUCCESS'");
                       setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
                   else
                     ignore (processRecv Daemon {channel = c, recvActAid = recvActAid2,
