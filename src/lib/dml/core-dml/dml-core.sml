@@ -51,12 +51,9 @@ struct
   val matchedSends : w8vec MatchedComm.t = MatchedComm.empty ()
   val matchedRecvs : w8vec MatchedComm.t = MatchedComm.empty ()
 
-
   (* State for join and exit*)
   val peers = ref (ISS.empty)
   val exitDaemon = ref false
-
-
 
   (* -------------------------------------------------------------------- *)
   (* Proxy Server *)
