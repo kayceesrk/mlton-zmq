@@ -6,7 +6,7 @@
  *
  *)
 
-signature COMM_MANAGER =
+signature COMMUNICATION_MANAGER =
 sig
   type msg = RepTypes.msg
 

@@ -7,13 +7,13 @@
  *)
 
 
-structure POHelper : PO_HELPER =
+structure GraphManager : GRAPH_MANAGER =
 struct
   structure S = CML.Scheduler
   structure RA = ResizableArray
   open RepTypes
   open ActionHelper
-  open CommunicationManager
+  open CommunicationHelper
 
   (********************************************************************
    * Debug
@@ -276,7 +276,7 @@ struct
          ACTION {act = COM, ...} => false
        | ACTION {act = BEGIN _, ...} => false
        | ACTION {act = RB, ...} => true
-       | _ => raise Fail "POHelper.inNonSpecExecMode: first action is not BEGIN, COM or RB"
+       | _ => raise Fail "GraphManager.inNonSpecExecMode: first action is not BEGIN, COM or RB"
   end
 
   fun isLastNodeMatched () =

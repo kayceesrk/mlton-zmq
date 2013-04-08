@@ -7,40 +7,6 @@
  * See the file MLton-LICENSE for details.
  *)
 
-signature PENDING_COMM =
-sig
-  type 'a t
-  val empty     : unit -> 'a t
-  val addAid    : 'a t -> RepTypes.channel_id -> ActionHelper.action_id -> 'a -> unit
-  val removeAid : 'a t -> RepTypes.channel_id -> ActionHelper.action_id -> unit
-  val deque     : 'a t -> RepTypes.channel_id -> {againstAid: ActionHelper.action_id}
-                   -> (ActionHelper.action_id * 'a) option
-  val cleanup   : 'a t -> int RepTypes.PTRDict.dict -> unit
-end
-
-signature MATCHED_COMM =
-sig
-  type 'a t
-  datatype 'a join_result =
-    SUCCESS of {value : 'a, waitNode: POHelper.node}
-  | FAILURE of {actAid : ActionHelper.action_id,
-                waitNode : POHelper.node,
-                value : 'a}
-  | NOOP
-
-  val empty : unit -> 'a t
-  val add   : 'a t -> {channel: RepTypes.channel_id,
-                       actAid: ActionHelper.action_id,
-                       remoteMatchAid: ActionHelper.action_id,
-                       waitNode: POHelper.node} -> 'a -> unit
-  val join  : 'a t -> {remoteAid: ActionHelper.action_id,
-                       ignoreFailure: bool,
-                       withAid: ActionHelper.action_id} -> 'a join_result
-  val cleanup : 'a t -> int RepTypes.PTRDict.dict ->
-                {channel: RepTypes.channel_id, actAid: ActionHelper.action_id,
-                 waitNode: POHelper.node, value: 'a} list
-  val contains : 'a t -> ActionHelper.action_id -> bool
-end
 
 signature IVAR =
 sig
@@ -54,12 +20,11 @@ struct
 
   open RepTypes
   open ActionHelper
-  open CommunicationManager
-  open POHelper
+  open CommunicationHelper
+  open GraphManager
   open Arbitrator
 
   structure IntDict = IntSplayDict
-  structure StrDict = StringSplayDict
   structure S = CML.Scheduler
   structure C = CML
   structure ISS = IntSplaySet
@@ -78,151 +43,6 @@ struct
 
   datatype 'a chan = CHANNEL of channel_id
   val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
-
-  (* -------------------------------------------------------------------- *)
-  (* Pending Communication Helper *)
-  (* -------------------------------------------------------------------- *)
-
-  structure PendingComm : PENDING_COMM =
-  struct
-    open StrDict
-
-    type 'a t = 'a AidDict.dict StrDict.dict ref
-
-    fun empty () = ref (StrDict.empty)
-
-    fun addAid strDictRef (ChannelId channel) aid value =
-    let
-      fun merge oldAidDict = AidDict.insert oldAidDict aid value
-    in
-      strDictRef := StrDict.insertMerge (!strDictRef) channel (AidDict.singleton aid value) merge
-    end
-
-    fun removeAid strDictRef (ChannelId channel) aid =
-    let
-      val aidDict = StrDict.lookup (!strDictRef) channel
-      val aidDict = AidDict.remove aidDict aid
-    in
-      strDictRef := StrDict.insert (!strDictRef) channel aidDict
-    end handle StrDict.Absent => ()
-
-    exception FIRST of action_id
-
-    fun deque strDictRef (ChannelId channel) {againstAid} =
-    let
-      val aidDict = StrDict.lookup (!strDictRef) channel
-      fun getOne () =
-      let
-        val _ = AidDict.app (fn (k, _) =>
-                  (debug' ("PendingComm.deque: "^(aidToString k));
-                  if (aidToTidInt k = aidToTidInt againstAid) andalso
-                     (aidToPidInt k = aidToPidInt againstAid)
-                  then () (* dont match actions from the same thread *)
-                  else raise FIRST k)) aidDict
-      in
-        raise AidDict.Absent
-      end handle FIRST k => k
-      val aid = getOne ()
-      val return = SOME (aid, AidDict.lookup aidDict aid)
-      val _ = removeAid strDictRef (ChannelId channel) aid
-    in
-      return
-    end handle AidDict.Absent => NONE
-             | StrDict.Absent => NONE
-
-    fun cleanup strDictRef rollbackAids =
-    let
-      val _ = debug (fn () => "PendingComm.cleanup: length="^(Int.toString (StrDict.size(!strDictRef))))
-      val _ = Assert.assertAtomic' ("PendingComm.cleanup", SOME 1)
-      val oldStrDict = !strDictRef
-      fun getNewAidDict oldAidDict =
-        let
-          val emptyAidDict = AidDict.empty
-        in
-          AidDict.foldl (fn (aid as ACTION_ID {pid, tid, rid, ...}, value, newAidDict) =>
-            case PTRDict.find rollbackAids {pid = pid, tid = tid, rid = rid} of
-                NONE => AidDict.insert newAidDict aid value
-              | SOME _ => newAidDict) emptyAidDict oldAidDict
-        end
-      val newStrDict = StrDict.map (fn aidDict => getNewAidDict aidDict) oldStrDict
-    in
-      strDictRef := newStrDict
-    end
-  end
-
-  (* -------------------------------------------------------------------- *)
-  (* Matched Communication Helper *)
-  (* -------------------------------------------------------------------- *)
-
-  structure MatchedComm : MATCHED_COMM =
-  struct
-    type 'a t = {channel : channel_id, actAid : action_id,
-                 waitNode : node, value : 'a} AidDict.dict ref
-
-    datatype 'a join_result =
-      SUCCESS of {value : 'a, waitNode: POHelper.node}
-    | FAILURE of {actAid : ActionHelper.action_id,
-                  waitNode : POHelper.node,
-                  value : 'a}
-    | NOOP
-
-    fun empty () = ref (AidDict.empty)
-
-    fun contains aidDictRef aid = AidDict.member (!aidDictRef) aid
-
-    fun add aidDictRef {channel, actAid, remoteMatchAid, waitNode} value =
-    let
-      val _ = if isAidLocal remoteMatchAid then raise Fail "MatchedComm.add(1)"
-              else if not (isAidLocal actAid) then raise Fail "MatchedComm.add(2)"
-              else ()
-    in
-      aidDictRef := AidDict.insert (!aidDictRef) remoteMatchAid {channel = channel,
-                      actAid = actAid, waitNode = waitNode, value = value}
-    end
-
-    fun join aidDictRef {remoteAid, withAid, ignoreFailure} =
-    let
-      val _ = if isAidLocal remoteAid then raise Fail "MatchedComm.join"
-              else ()
-      val {actAid, waitNode, value, channel = _} = AidDict.lookup (!aidDictRef) remoteAid
-      val result =
-        if ActionIdOrdered.eq (actAid, withAid) then
-          (debug' ("SUCCESS");
-           SUCCESS {value = value, waitNode = waitNode})
-        else if ignoreFailure then
-          raise AidDict.Absent
-        else
-          (debug' ("FAILURE");
-          FAILURE {actAid = actAid, waitNode = waitNode, value = value})
-      val _ = aidDictRef := AidDict.remove (!aidDictRef) remoteAid
-    in
-      result
-    end handle AidDict.Absent => (debug' ("NOOP"); NOOP)
-
-    fun cleanup aidDictRef rollbackAids =
-    let
-      val oldAidDict = !aidDictRef
-      val (newAidDict, failList) =
-        AidDict.foldl (fn (aid as ACTION_ID {pid, tid, rid, ...} (* key *),
-                          failValue as {actAid, waitNode = _ , value = _, channel = _} (* value *),
-                          (newAidDict, failList) (* acc *)) =>
-          case PTRDict.find rollbackAids {pid = pid, tid = tid, rid = rid} of
-               NONE => (AidDict.insert newAidDict aid failValue, failList)
-             | SOME _ =>
-                 let (* Make sure the blocked (local) thread, is not part of the rollback set *)
-                   val ACTION_ID {pid, tid, rid, ...} = actAid
-                 in
-                   case PTRDict.find rollbackAids {pid = pid, tid = tid, rid = rid} of
-                        NONE => (AidDict.insert newAidDict aid failValue, failList)
-                      | SOME _ => (newAidDict, failValue::failList)
-                 end) (AidDict.empty, []) oldAidDict
-      val _ = aidDictRef := newAidDict
-    in
-      failList
-    end
-
-
-  end
 
   (* -------------------------------------------------------------------- *)
   (* state *)
@@ -283,7 +103,7 @@ struct
     val _ = Assert.assertAtomic' ("DmlCore.rollbackBlockedThreads", SOME 1)
     fun rollbackBlockedThread t actNum =
       let
-        val prolog = fn () => (POHelper.restoreCont actNum; emptyW8Vec)
+        val prolog = fn () => (GraphManager.restoreCont actNum; emptyW8Vec)
         val rt = S.prep (S.prepend (t, prolog))
         val _ = S.ready rt
       in
@@ -322,9 +142,8 @@ struct
     S.modify restoreSCore
   end
 
-
   (* -------------------------------------------------------------------- *)
-  (* Simle IVar *)
+  (* Simple IVar *)
   (* -------------------------------------------------------------------- *)
 
 
@@ -396,71 +215,7 @@ struct
   end
 
   (* -------------------------------------------------------------------- *)
-  (* Message filter *)
-  (* -------------------------------------------------------------------- *)
-
-  structure MessageFilter =
-  struct
-    structure Assert = LocalAssert(val assert = true)
-    structure Debug = LocalDebug(val debug = false)
-
-    fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
-
-    structure PTOrdered :> ORDERED
-      where type t = {pid: process_id, tid: thread_id} =
-      struct
-        type t = {pid: process_id, tid: thread_id}
-
-        val eq = MLton.equal
-        val _ = eq
-
-        fun compare ({pid = ProcessId pidInt1, tid = ThreadId tidInt1},
-                     {pid = ProcessId pidInt2, tid = ThreadId tidInt2}) =
-          case Int.compare (pidInt1, pidInt2) of
-               EQUAL => Int.compare (tidInt1, tidInt2)
-             | lg => lg
-      end
-
-    structure PTDict = SplayDict (structure Key = PTOrdered)
-
-    val filterRef = ref PTDict.empty
-
-    fun addToFilter rollbackAids =
-      let
-        val _ = Assert.assertAtomic' ("MessageFilter.addFilter", NONE)
-        val newFilter = ListMLton.fold (PTRDict.domain rollbackAids, PTDict.empty,
-          fn ({pid, tid, rid}, newFilter) => PTDict.insert newFilter {pid = pid, tid = tid} rid)
-        val oldFilter = !filterRef
-        val newFilter = PTDict.union oldFilter newFilter (fn (_,i,j) => if i>j then i else j)
-      in
-        filterRef := newFilter
-      end
-
-    fun isAllowed (aid as ACTION_ID {pid, tid, rid, ...}) =
-      case PTDict.find (!filterRef) {pid = pid, tid = tid} of
-           NONE =>
-           let
-             val _ = debug (fn () => "MessageFilter: blocking aid="^(aidToString aid))
-           in
-             true
-           end
-         | SOME rid' =>
-             if rid <= rid' then false
-             else (* if rid > rid', then we remove the entry from filter *)
-               let
-                 val ProcessId pidInt = pid
-                 val ThreadId tidInt = tid
-                 val _ = debug (fn () => "MessageFilter: removing filter (pid="^(Int.toString pidInt)
-                                        ^",tid="^(Int.toString tidInt)^")")
-                 val _ = filterRef := PTDict.remove (!filterRef) {pid = pid, tid = tid}
-               in
-                 true
-               end
-  end
-
-
-  (* -------------------------------------------------------------------- *)
-  (* Server *)
+  (* Proxy Server *)
   (* -------------------------------------------------------------------- *)
 
   fun startProxy {frontend = fe_str, backend = be_str} =
@@ -859,7 +614,7 @@ struct
     ()
   end
 
-  fun saveCont () = POHelper.saveCont (fn () => ignore(insertRollbackNode ()))
+  fun saveCont () = GraphManager.saveCont (fn () => ignore(insertRollbackNode ()))
 
   fun runDML (f, to) =
     let
@@ -896,11 +651,11 @@ struct
 
   (* Wait till last action is matched (added to the graph) *)
   fun syncMode (atomicState) =
-    (if inNonSpecExecMode () andalso not (POHelper.isLastNodeMatched ()) then
+    (if inNonSpecExecMode () andalso not (GraphManager.isLastNodeMatched ()) then
        let
          val _ = if MLton.equal (atomicState, NONE) then S.atomicBegin () else ()
          val {read = wait, write = wakeup} = IVar.new ()
-         val _ = POHelper.doOnUpdateLastNode wakeup
+         val _ = GraphManager.doOnUpdateLastNode wakeup
          val _ = S.atomicEnd ()
        in
          wait ()
@@ -951,7 +706,7 @@ struct
 
   fun commit () =
   let
-    val finalAction = POHelper.getFinalAction ()
+    val finalAction = GraphManager.getFinalAction ()
     val {read, write} = IVar.new ()
     val _ = CML.spawn (fn () => processCommit {action = finalAction, pushResult = write})
     val _ = case read () of
@@ -1014,10 +769,10 @@ struct
   let
     val _ = S.atomicBegin ()
   in
-    if not (POHelper.isLastNodeMatched ()) then
+    if not (GraphManager.isLastNodeMatched ()) then
       let
         val {read = wait, write = wakeup} = IVar.new ()
-        val _ = POHelper.doOnUpdateLastNode wakeup
+        val _ = GraphManager.doOnUpdateLastNode wakeup
         val _ = S.atomicEnd ()
       in
         wait ()

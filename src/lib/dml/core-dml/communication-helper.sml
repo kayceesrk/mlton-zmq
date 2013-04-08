@@ -1,5 +1,5 @@
 
-structure CommunicationManager : COMM_MANAGER =
+structure CommunicationHelper : COMMUNICATION_MANAGER =
 struct
   open RepTypes
   open ActionHelper

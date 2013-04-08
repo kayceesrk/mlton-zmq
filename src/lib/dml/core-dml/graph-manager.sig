@@ -6,7 +6,7 @@
  *
  *)
 
-signature PO_HELPER =
+signature GRAPH_MANAGER =
 sig
   type action_id = RepTypes.action_id
   type action = RepTypes.action

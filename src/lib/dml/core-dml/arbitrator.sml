@@ -17,7 +17,7 @@ struct
 
   open RepTypes
   open ActionHelper
-  open CommunicationManager
+  open CommunicationHelper
 
   (* structure Assert = LocalAssert(val assert = true) *)
   structure Debug = LocalDebug(val debug = true)
