@@ -110,20 +110,25 @@ struct
 
   fun forceCommit (node) =
   let
-    val _ = debug' ("forceCommit")
-    val _ = Assert.assertAtomic'("forceCommit(1)", NONE)
     val aid = (actionToAid o GraphManager.nodeToAction) node
-    val _ = debug' ("forceCommit: "^(aidToString aid))
     val tidInt = aidToTidInt aid
+
+    val _ = Assert.assertAtomic'("forceCommit(1)", NONE)
+    val _ = debug' ("forceCommit: "^(aidToString aid))
+
+    exception DONE
+
     fun handleBlockedThread () =
     let
-      val t = IntDict.lookup (!blockedThreads) tidInt
+      val t as S.THRD (cmlTid, _) = IntDict.lookup (!blockedThreads) tidInt
       val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
       fun prolog () = ((!commitRef) (); emptyW8Vec)
       val rt = S.prep (S.prepend (t, prolog))
     in
       S.ready rt
     end handle IntDict.Absent => handleReadyThread ()
+             | DONE => ()
+
     and handleReadyThread () =
     let
       fun core (rthrd as S.RTHRD (cmlTid, _)) =
@@ -133,7 +138,7 @@ struct
         val tid = ThreadId (CML.tidToInt cmlTid)
       in
         if MLton.equal (aidToPtr aid, {pid = pid, tid = tid, rid = rid}) then
-          S.RTHRD (cmlTid, MLton.Thread.prepare (MLton.Thread.new (!commitRef), ()))
+           S.RTHRD (cmlTid, MLton.Thread.prepare (MLton.Thread.new (!commitRef), ()))
         else rthrd
       end
     in

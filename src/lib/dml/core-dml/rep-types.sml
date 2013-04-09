@@ -82,15 +82,17 @@ struct
 
   datatype action = ACTION of {aid: action_id, act: action_type}
 
-  datatype msg = S_ACT  of {channel: channel_id, sendActAid: action_id, value: w8vec}
-               | R_ACT  of {channel: channel_id, recvActAid: action_id}
-               | S_JOIN of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
-               | R_JOIN of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
-               | CONN   of {pid: process_id}
+  datatype msg = S_ACT    of {channel: channel_id, sendActAid: action_id, value: w8vec}
+               | R_ACT    of {channel: channel_id, recvActAid: action_id}
+               | S_JOIN   of {channel: channel_id, sendActAid: action_id, recvActAid: action_id}
+               | S_MATCH  of {channel: channel_id, sendActAid: action_id, recvActAid: action_id, value: w8vec}
+               | R_JOIN   of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
+               | R_MATCH  of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
+               | CONN     of {pid: process_id}
                (* CycleDetector Communication *)
-               | AR_REQ_ADD of {action: action, prevAction: action option}
-               | AR_RES_SUCC of {dfsStartAct: action}
-               | AR_RES_FAIL of {rollbackAids: int PTRDict.dict, dfsStartAct: action}
+               | AR_REQ_ADD   of {action: action, prevAction: action option}
+               | AR_RES_SUCC  of {dfsStartAct: action}
+               | AR_RES_FAIL  of {rollbackAids: int PTRDict.dict, dfsStartAct: action}
 
   datatype rooted_msg = ROOTED_MSG of {sender: process_id, msg: msg}
 

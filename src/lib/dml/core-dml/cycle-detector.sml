@@ -21,7 +21,7 @@ struct
   open CommunicationHelper
 
   (* structure Assert = LocalAssert(val assert = true) *)
-  structure Debug = LocalDebug(val debug = true)
+  structure Debug = LocalDebug(val debug = false)
 
 
   val {get = nodeGetAct, set = nodeSetAct, ...} =
@@ -57,6 +57,11 @@ struct
            SOME n => n
          | NONE => insertAndGetNewNode ()
     end
+
+    fun findNode aid =
+      AidDict.find (!dict) aid
+
+    (* XXX Cleanup *)
   end
   structure NL = NodeLocator
 
@@ -248,4 +253,12 @@ struct
          | _ => ()
     end
 
+  fun isMatched actAid =
+  let
+    val waitAid = getNextAid actAid
+  in
+    case NL.findNode waitAid of
+         NONE => false
+       | SOME n => NW.numSuccessorsExpected n <= NW.numSuccessors n
+  end
 end

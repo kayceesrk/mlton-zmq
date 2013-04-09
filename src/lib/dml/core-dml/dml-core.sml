@@ -104,8 +104,7 @@ struct
                       let
                         val _ = Assert.assertAtomic' ("DmlCore.processSend(4)", SOME 1)
                         val _ = debug' ("DmlCore.processSend(4)")
-                        val _ = msgSend (S_ACT {channel = c, sendActAid = sendActAid, value = value})
-                        val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+                        val _ = msgSend (S_MATCH {channel = c, sendActAid = sendActAid, recvActAid = recvActAid, value = value})
                         val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
                                   remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
                       in
@@ -158,8 +157,7 @@ struct
                   | SOME (sendActAid, value) => (* matching remote send *)
                       let
                         val _ = debug' ("DmlCore.processRecv(4)")
-                        val _ = msgSend (R_ACT {channel = c, recvActAid = recvActAid})
-                        val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+                        val _ = msgSend (R_MATCH {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
                                   remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
                         val _ = case callerKind of
@@ -225,9 +223,9 @@ struct
            (case act of
               SEND_WAIT {cid, matchAid = SOME recvActAid} =>
                 (debug' ("updateRemoteChannels(1): removing send "^(aidToString sendActAid));
-                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
+                 ignore (PendingComm.removeAid pendingRemoteSends cid sendActAid);
                  debug' ("updateRemoteChannels(2): removing recv "^(aidToString recvActAid));
-                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid;
+                 ignore (PendingComm.removeAid pendingRemoteRecvs cid recvActAid);
                  processSendJoin {channel = cid, sendActAid = sendActAid,
                                   recvActAid = recvActAid, ignoreFailure = false})
               | _ => raise Fail "updateRemoteChannels(1)")
@@ -235,9 +233,9 @@ struct
            (case act of
               RECV_WAIT {cid, matchAid = SOME sendActAid} =>
                 (debug' ("updateRemoteChannels(2): removing send "^(aidToString sendActAid));
-                 PendingComm.removeAid pendingRemoteSends cid sendActAid;
+                 ignore (PendingComm.removeAid pendingRemoteSends cid sendActAid);
                  debug' ("updateRemoteChannels(2): removing recv "^(aidToString recvActAid));
-                 PendingComm.removeAid pendingRemoteRecvs cid recvActAid;
+                 ignore (PendingComm.removeAid pendingRemoteRecvs cid recvActAid);
                  processRecvJoin {channel = cid, sendActAid = sendActAid,
                                   recvActAid = recvActAid, ignoreFailure = false})
               | _ => raise Fail "updateRemoteChannels(2)")
@@ -269,10 +267,9 @@ struct
                     * to fail on commit. Also, value is set to emptyW8Vec,
                     * which will (and should) never be deserialized to the
                     * type of recv result. *)
-                    (msgSend (R_JOIN {channel = c, recvActAid = recvActAid2, sendActAid = recvActAid2});
-                    debug' ("SUCCESS'");
-                    SH.forceCommit (recvWaitNode);
-                    setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec)
+                    (SH.forceCommit (recvWaitNode);
+                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec;
+                     debug' ("SUCCESS'"))
               else
                 ignore (processRecv {callerKind = Daemon, channel = c,
                           recvActAid = recvActAid2, recvWaitNode = recvWaitNode})
@@ -301,6 +298,48 @@ struct
                                    sendWaitNode = sendWaitNode, value = value})
             end
       else ())
+
+  and processSendMatch {channel = c, sendActAid (* remote *), recvActAid (* local *), value} =
+  (debug' ("processSendMatch: ["^(aidToString sendActAid)^","^(aidToString recvActAid)^"]");
+  if MessageFilter.isAllowed sendActAid andalso
+     (not (isMatched recvActAid)) then
+   if not (aidToPidInt recvActAid = (!processId)) then
+     processMsg (S_ACT {channel = c, sendActAid = sendActAid, value = value})
+   else if MatchedComm.contains matchedRecvs sendActAid then
+     processMsg (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+   else if not (PendingComm.contains pendingLocalRecvs c recvActAid) then
+     processMsg (S_ACT {channel = c, sendActAid = sendActAid, value = value})
+   else
+     let
+       val {recvWaitNode} = valOf (PendingComm.removeAid pendingLocalRecvs c recvActAid)
+       val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+       val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
+                 remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
+     in
+       ()
+     end
+   else ())
+
+  and processRecvMatch {channel = c, sendActAid (* local *), recvActAid (* remote *)} =
+  (debug' ("processRecvMatch: ["^(aidToString recvActAid)^","^(aidToString sendActAid)^"]");
+  if MessageFilter.isAllowed recvActAid andalso
+     (not (isMatched sendActAid)) then
+   if not (aidToPidInt sendActAid = (!processId)) then
+     processMsg (R_ACT {channel = c, recvActAid = recvActAid})
+   else if MatchedComm.contains matchedSends recvActAid then
+     processMsg (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+   else if not (PendingComm.contains pendingLocalSends c sendActAid) then
+     processMsg (R_ACT {channel = c, recvActAid = recvActAid})
+   else
+     let
+       val {sendWaitNode, value} = valOf (PendingComm.removeAid pendingLocalSends c sendActAid)
+       val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+       val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
+                 remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
+     in
+       ()
+     end
+   else ())
 
   and processMsg msg =
   let
@@ -341,6 +380,8 @@ struct
       | R_JOIN {channel, sendActAid, recvActAid} =>
           processRecvJoin {channel = channel, sendActAid = sendActAid,
                            recvActAid = recvActAid, ignoreFailure = true}
+      | R_MATCH m => processRecvMatch m
+      | S_MATCH m => processSendMatch m
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
@@ -454,8 +495,8 @@ struct
   fun channel s = CHANNEL (ChannelId s)
 
   (* Wait till last action is matched (added to the graph) *)
-  fun syncMode (atomicState) =
-    (if inNonSpecExecMode () andalso not (GraphManager.isLastNodeMatched ()) then
+  fun syncMode (atomicState, force) =
+    (if (inNonSpecExecMode () orelse force) andalso not (GraphManager.isLastNodeMatched ()) then
        let
          val _ = if MLton.equal (atomicState, NONE) then S.atomicBegin () else ()
          val {read = wait, write = wakeup} = IVar.new ()
@@ -481,7 +522,7 @@ struct
             {channel = c, sendActAid = actAid,
             sendWaitNode = waitNode, value = m}
         in
-          syncMode (SOME 1)
+          syncMode (SOME 1, false)
         end
     | CACHED _ => S.atomicEnd ()
   end
@@ -494,10 +535,13 @@ struct
     case handleRecv {cid = c} of
       UNCACHED {actAid, waitNode} =>
         let
-          val serM = processRecv {callerKind = Client, channel = c,
+          val _ = processRecv {callerKind = Client, channel = c,
                       recvActAid = actAid, recvWaitNode = waitNode}
+          val _ = syncMode (NONE, true)
+          val serM = case getValue waitNode of
+                       NONE => raise Fail "recv value"
+                     | SOME s => s
           val result = MLton.deserialize serM
-          val _ = syncMode (NONE)
         in
           result
         end

@@ -11,4 +11,5 @@ signature CYCLE_DETECTOR =
 sig
   val processAdd    : {action: RepTypes.action, prevAction: RepTypes.action option} -> unit
   val processCommit : {action: RepTypes.action, pushResult: RepTypes.msg -> unit} -> unit
+  val isMatched     : RepTypes.action_id -> bool
 end

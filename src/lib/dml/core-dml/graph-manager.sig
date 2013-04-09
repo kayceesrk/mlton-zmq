@@ -34,6 +34,7 @@ sig
   val getPrevNode : node -> node
   val isLastNode  : node -> bool
   val nodeToAction: node -> action
+  val getValue    : node -> RepTypes.w8vec option
 
   val getFinalAction     : unit -> RepTypes.action
   val doOnUpdateLastNode : (unit -> unit) -> unit

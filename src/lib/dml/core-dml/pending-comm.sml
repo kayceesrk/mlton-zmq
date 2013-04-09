@@ -40,10 +40,13 @@ struct
   fun removeAid strDictRef (ChannelId channel) aid =
   let
     val aidDict = StrDict.lookup (!strDictRef) channel
+    val result = AidDict.lookup aidDict aid
     val aidDict = AidDict.remove aidDict aid
+    val _ = strDictRef := StrDict.insert (!strDictRef) channel aidDict
   in
-    strDictRef := StrDict.insert (!strDictRef) channel aidDict
-  end handle StrDict.Absent => ()
+    SOME result
+  end handle StrDict.Absent => NONE
+           | AidDict.Absent => NONE
 
   exception FIRST of action_id
 
@@ -87,4 +90,11 @@ struct
   in
     strDictRef := newStrDict
   end
+
+  fun contains strDictRef (ChannelId channel) aid =
+  let
+    val aidDict = StrDict.lookup (!strDictRef) channel
+  in
+    AidDict.member aidDict aid
+  end handle StrDict.Absent => false
 end

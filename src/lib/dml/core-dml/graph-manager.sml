@@ -175,7 +175,8 @@ struct
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
-                    | _ => raise Fail "ActionHelper.setMatchAid"
+                    | _ => raise Fail ("GraphManager.setMatchAid: Action="^
+                                       (actionToString (ACTION {aid=aid,act=act})))
     val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct}, value)
     val _ = sendToCycleDetector (getPrevNode n)
     val _ = sendToCycleDetector n
@@ -307,6 +308,9 @@ struct
 
   fun nodeToAction (NODE{array, index}) = getActionFromArrayAtIndex (array, index)
 
+  fun getValue (NODE{array,index}) =
+    getValueFromArrayAtIndex (array, index)
+
   (********************************************************************
    * Continuation Management
    *******************************************************************)
@@ -342,4 +346,5 @@ struct
   in
     S.restoreCont cache
   end handle CML.Kill => S.switchToNext (fn _ => ())
+
 end

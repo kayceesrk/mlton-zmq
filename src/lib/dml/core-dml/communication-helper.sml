@@ -36,8 +36,12 @@ struct
            concat ["R_ACT[", cidStr, ",", aidToString recvActAid, "]"]
        | S_JOIN {channel = ChannelId cidStr, sendActAid, recvActAid} =>
            concat ["S_JOIN[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
+       | S_MATCH {channel = ChannelId cidStr, sendActAid, recvActAid, ...} =>
+           concat ["S_MATCH[", cidStr, ",", aidToString sendActAid, ",", aidToString recvActAid, "]"]
        | R_JOIN {channel = ChannelId cidStr, recvActAid, sendActAid} =>
            concat ["R_JOIN[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
+       | R_MATCH {channel = ChannelId cidStr, recvActAid, sendActAid} =>
+           concat ["R_MATCH[", cidStr, ",", aidToString recvActAid, ",", aidToString sendActAid, "]"]
        | CONN   {pid = ProcessId pidInt} =>
            concat ["CONN[", Int.toString pidInt, "]"]
        | AR_REQ_ADD  {action, prevAction} =>
