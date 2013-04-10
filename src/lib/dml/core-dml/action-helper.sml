@@ -16,9 +16,9 @@ struct
    * Action
    *******************************************************************)
 
-  fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid, vid}) =
-    concat [Int.toString pid, ".", Int.toString tid, ".", Int.toString rid, ".",
-            Int.toString aid, ".", Int.toString vid]
+  fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
+    concat [Int.toString pid, ".", Int.toString tid, ".",
+            Int.toString rid, ".", Int.toString aid]
 
   fun ptrToString ({pid = ProcessId pid, tid = ThreadId tid, rid}) =
     concat [Int.toString pid, ":", Int.toString tid, ":", Int.toString rid]
@@ -30,13 +30,10 @@ struct
     val aid = S.tidNextActionNum ()
     val rid = S.tidRev ()
   in
-    ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid = rid, aid = aid, vid = 0}
+    ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid = rid, aid = aid}
   end
 
-  fun aidIncVersion (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid, vid}) =
-    ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid = rid, aid = aid, vid = vid + 1}
-
-  val dummyAid = ACTION_ID {pid = ProcessId ~1, tid = ThreadId ~1, rid = ~1, aid = ~1, vid = ~1}
+  val dummyAid = ACTION_ID {pid = ProcessId ~1, tid = ThreadId ~1, rid = ~1, aid = ~1}
 
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
@@ -65,8 +62,8 @@ struct
   (* fun getPrevAid (ACTION_ID {pid, tid, rid, aid, vid}) =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - 1, vid = vid} *)
 
-  fun getNextAid (ACTION_ID {pid, tid, rid, aid, vid = vid}) =
-    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1, vid = vid}
+  fun getNextAid (ACTION_ID {pid, tid, rid, aid}) =
+    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1}
 
   fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
 

@@ -81,7 +81,6 @@ struct
   let
     val _ = Assert.assertAtomic' ("DmlCore.processSend(1)", SOME 1)
     val _ = debug' ("DmlCore.processSend(1)")
-    val sendActAid = aidIncVersion sendActAid
     val _ =
       case PendingComm.deque pendingLocalRecvs c {againstAid = sendActAid} of
           NONE => (* No matching receives, check remote *)
@@ -134,7 +133,6 @@ struct
   let
     val _ = Assert.assertAtomic' ("DmlCore.processRecv(1)", SOME 1)
     val _ = debug' ("DmlCore.processRecv(1)")
-    val recvActAid = aidIncVersion recvActAid
     val value =
       case PendingComm.deque pendingLocalSends c {againstAid = recvActAid} of
           NONE => (* No local matching sends, check remote *)
@@ -535,11 +533,11 @@ struct
     case handleRecv {cid = c} of
       UNCACHED {actAid, waitNode} =>
         let
-          val _ = processRecv {callerKind = Client, channel = c,
+          val serM = processRecv {callerKind = Client, channel = c,
                       recvActAid = actAid, recvWaitNode = waitNode}
           val _ = syncMode (NONE, true)
           val serM = case getValue waitNode of
-                       NONE => raise Fail "recv value"
+                       NONE => serM (* if synMode is not forced, this is needed *)
                      | SOME s => s
           val result = MLton.deserialize serM
         in
