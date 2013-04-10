@@ -51,6 +51,7 @@ struct
        | RECV_ACT {cid = ChannelId cstr} => concat ["RA(", cstr, ")"]
        | BEGIN {parentAid} => concat ["B(", aidToString parentAid, ")"]
        | SPAWN {childTid = ThreadId tid} => concat ["F(", Int.toString tid, ")"]
+       | NOOP => "NOOP"
        | COM => "COM"
        | RB => "RB"
 

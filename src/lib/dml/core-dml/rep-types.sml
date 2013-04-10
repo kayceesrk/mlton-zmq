@@ -76,6 +76,7 @@ struct
                        | RECV_ACT of {cid: channel_id}
                        | SPAWN of {childTid: thread_id}
                        | BEGIN of {parentAid: action_id}
+                       | NOOP
                        | COM (* This indicates the node that is inserted after commit or rollback *)
                        | RB
 

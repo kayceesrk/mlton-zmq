@@ -304,7 +304,7 @@ struct
    if not (aidToPidInt recvActAid = (!processId)) then
      processMsg (S_ACT {channel = c, sendActAid = sendActAid, value = value})
    else if MatchedComm.contains matchedRecvs sendActAid then
-     processMsg (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+     processSendJoin {channel = c, sendActAid = sendActAid, recvActAid = recvActAid, ignoreFailure = false}
    else if not (PendingComm.contains pendingLocalRecvs c recvActAid) then
      processMsg (S_ACT {channel = c, sendActAid = sendActAid, value = value})
    else
@@ -325,7 +325,7 @@ struct
    if not (aidToPidInt sendActAid = (!processId)) then
      processMsg (R_ACT {channel = c, recvActAid = recvActAid})
    else if MatchedComm.contains matchedSends recvActAid then
-     processMsg (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
+     processRecvJoin {channel = c, sendActAid = sendActAid, recvActAid = recvActAid, ignoreFailure = false}
    else if not (PendingComm.contains pendingLocalSends c sendActAid) then
      processMsg (R_ACT {channel = c, recvActAid = recvActAid})
    else
@@ -492,21 +492,6 @@ struct
 
   fun channel s = CHANNEL (ChannelId s)
 
-  (* Wait till last action is matched (added to the graph) *)
-  fun syncMode (atomicState, force) =
-    (if (inNonSpecExecMode () orelse force) andalso not (GraphManager.isLastNodeMatched ()) then
-       let
-         val _ = if MLton.equal (atomicState, NONE) then S.atomicBegin () else ()
-         val {read = wait, write = wakeup} = IVar.new ()
-         val _ = GraphManager.doOnUpdateLastNode wakeup
-         val _ = S.atomicEnd ()
-       in
-         wait ()
-       end
-     else if MLton.equal (atomicState, SOME 1) then S.atomicEnd () else ();
-     Assert.assertNonAtomic' ("syncMode(2)"))
-
-
   fun send (CHANNEL c, m) =
   let
     val _ = S.atomicBegin ()
@@ -520,7 +505,16 @@ struct
             {channel = c, sendActAid = actAid,
             sendWaitNode = waitNode, value = m}
         in
-          syncMode (SOME 1, false)
+          if inNonSpecExecMode () andalso
+              not (GraphManager.isLastNodeMatched ()) then
+            let
+              val {read = wait, write = wakeup} = IVar.new ()
+              val _ = GraphManager.doOnUpdateLastNode wakeup
+              val _ = S.atomicEnd ()
+            in
+              wait ()
+            end
+          else S.atomicEnd ()
         end
     | CACHED _ => S.atomicEnd ()
   end
@@ -529,15 +523,25 @@ struct
   let
     val _ = S.atomicBegin ()
     val _ = debug' ("DmlCore.recv(1)")
+    val nonSpec = true
   in
     case handleRecv {cid = c} of
       UNCACHED {actAid, waitNode} =>
         let
           val serM = processRecv {callerKind = Client, channel = c,
                       recvActAid = actAid, recvWaitNode = waitNode}
-          val _ = syncMode (NONE, true)
+          val _ = if (nonSpec orelse inNonSpecExecMode ()) andalso
+                    not (GraphManager.isLastNodeMatched ()) then
+                    let
+                      val {read = wait, write = wakeup} = IVar.new ()
+                      val _ = S.doAtomic (fn () => GraphManager.doOnUpdateLastNode wakeup)
+                    in
+                      wait ()
+                    end
+                  else ()
+          val _ = insertNoopNode ()
           val serM = case getValue waitNode of
-                       NONE => serM (* if synMode is not forced, this is needed *)
+                       NONE => serM (* For non-spec exec *)
                      | SOME s => s
           val result = MLton.deserialize serM
         in

@@ -125,6 +125,20 @@ struct
     beginAid
   end
 
+  fun insertNoopNode () =
+  let
+    val _ = S.atomicBegin ()
+    val actions = S.tidActions ()
+    val noopAid = newAid ()
+    val act = ACTION {aid = noopAid, act = NOOP}
+    val _ = addToActionsEnd (actions, act)
+    val node = NODE {array = actions, index = RA.length actions - 1}
+    val _ = sendToCycleDetector node
+    val _ = S.atomicEnd ()
+  in
+    noopAid
+  end
+
   fun insertCommitNode () =
   let
     val _ = S.atomicBegin ()

@@ -77,12 +77,13 @@ struct
       val ACTION {act, ...} = nodeGetAct node
     in
       case act of
-           SEND_WAIT _ => 2
-         | SEND_ACT _ => 1
-         | RECV_WAIT _ => 2
-         | RECV_ACT _ => 1
-         | SPAWN _ => 1
-         | BEGIN _ => 1 (* parent*)
+           SEND_WAIT _ => 2 (* parent, match *)
+         | SEND_ACT _ => 1  (* parent *)
+         | RECV_WAIT _ => 2 (* parent, match *)
+         | RECV_ACT _ => 1  (* parent *)
+         | SPAWN _ => 1     (* parent *)
+         | BEGIN _ => 1     (* parent *)
+         | NOOP => 1        (* parent *)
          | COM => 0
          | RB => 0
     end

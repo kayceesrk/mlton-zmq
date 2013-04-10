@@ -21,8 +21,9 @@ sig
    * ---------------------
    *)
 
-  val insertCommitNode : unit -> action_id
-  val insertRollbackNode : unit -> action_id
+  val insertCommitNode    : unit -> action_id
+  val insertRollbackNode  : unit -> action_id
+  val insertNoopNode      : unit -> action_id
   val handleInit  : {parentAid: action_id} -> action_id
   val handleSpawn : {childTid : RepTypes.thread_id} -> {spawnAid: action_id, spawnNode: node}
   val handleSend  : {cid : RepTypes.channel_id} -> comm_result
