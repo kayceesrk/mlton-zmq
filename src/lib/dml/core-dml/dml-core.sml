@@ -19,7 +19,6 @@ struct
   open GraphManager
   open CycleDetector
 
-  structure IntDict = IntSplayDict
   structure S = CML.Scheduler
   structure C = CML
   structure ISS = IntSplaySet
@@ -114,14 +113,17 @@ struct
             let
               val _ = Assert.assertAtomic' ("DmlCore.processSend(5)", SOME 1)
               val _ = debug' ("DmlCore.processSend(5)")
-              val _ = setMatchAid sendWaitNode recvActAid value
-              val _ = setMatchAid recvWaitNode sendActAid emptyW8Vec
+              val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
+                                   matchAid = recvActAid, value = value}
+              val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
+                                   matchAid = sendActAid, value = emptyW8Vec}
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
-              (* Resume blocked recv *)
-              val _ = SH.resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
             in
-              ()
+              (* Resume blocked recv *)
+              if isLastNode recvWaitNode then
+                SH.resumeThread (aidToTidInt recvActAid) value
+              else ()
             end
     val _ = debug' ("DmlCore.processSend(6)")
     val _ = Assert.assertAtomic' ("DmlCore.processSend(6)", SOME 1)
@@ -168,12 +170,16 @@ struct
         | SOME (sendActAid, {sendWaitNode, value}) => (* matching local send *)
             let
               val _ = debug' ("DmlCore.processRecv(5)")
-              val _ = setMatchAid sendWaitNode recvActAid value
-              val _ = setMatchAid recvWaitNode sendActAid emptyW8Vec
+              val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
+                                   matchAid = recvActAid, value = value}
+              val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
+                                   matchAid = sendActAid, value = emptyW8Vec}
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val () = case callerKind of
-                          Daemon => SH.resumeThreadIfLastAidIs (getNextAid recvActAid) (aidToTidInt recvActAid) value
+                          Daemon => if isLastNode recvWaitNode then
+                                      SH.resumeThread (aidToTidInt recvActAid) value
+                                    else ()
                         | Client => S.atomicEnd ()
             in
               value
@@ -215,7 +221,7 @@ struct
     end
 
 
-  fun updateRemoteChannels (ACTION {act, ...}, prev) =
+  fun updateRemoteChannels (act, prev) =
     case prev of
          SOME (ACTION {act = SEND_ACT _, aid = sendActAid}) =>
            (case act of
@@ -246,12 +252,12 @@ struct
             MatchedComm.NOOP => ()
           | MatchedComm.SUCCESS {value, waitNode = recvWaitNode} =>
               let
-                val _ = setMatchAid recvWaitNode sendActAid value
-                val tidInt = aidToTidInt recvActAid
-                val recvWaitAid = getNextAid recvActAid
-                val _ = SH.resumeThreadIfLastAidIs recvWaitAid tidInt value
+                val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
+                                     matchAid = sendActAid, value = value}
               in
-                ()
+                if isLastNode recvWaitNode then
+                  SH.resumeThread (aidToTidInt recvActAid) value
+                else ()
               end
           | MatchedComm.FAILURE {actAid = recvActAid2, waitNode = recvWaitNode, ...} =>
             let
@@ -266,7 +272,8 @@ struct
                     * which will (and should) never be deserialized to the
                     * type of recv result. *)
                     (SH.forceCommit (recvWaitNode);
-                     setMatchAid recvWaitNode (actionToAid (nodeToAction recvWaitNode)) emptyW8Vec;
+                     setMatchAid {waitNode = recvWaitNode, actAid = recvActAid, value = emptyW8Vec,
+                                  matchAid = getWaitAid {actAid = recvActAid, waitNode = recvWaitNode}};
                      debug' ("SUCCESS'"))
               else
                 ignore (processRecv {callerKind = Daemon, channel = c,
@@ -281,7 +288,8 @@ struct
           MatchedComm.NOOP => ()
         | MatchedComm.SUCCESS {waitNode = sendWaitNode, ...} =>
             let
-              val _ = setMatchAid sendWaitNode recvActAid emptyW8Vec
+              val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
+                                   matchAid = recvActAid, value = emptyW8Vec}
             in
               ()
             end
@@ -383,9 +391,9 @@ struct
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
-      | AR_REQ_ADD {action as ACTION{aid, ...}, prevAction} =>
+      | AR_REQ_ADD {action as ACTION{aid, act}, prevAction} =>
           if MessageFilter.isAllowed aid then
-            (updateRemoteChannels (action, prevAction);
+            (updateRemoteChannels (act, prevAction);
              processAdd {action = action, prevAction = prevAction})
           else ()
       | _ => ()
@@ -541,7 +549,7 @@ struct
                   else ()
           val _ = insertNoopNode ()
           val serM = case getValue waitNode of
-                       NONE => serM (* For non-spec exec *)
+                       NONE => serM (* For spec exec *)
                      | SOME s => s
           val result = MLton.deserialize serM
         in

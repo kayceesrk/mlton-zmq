@@ -36,7 +36,7 @@ struct
                        | CACHED of RepTypes.w8vec
 
   exception NodeExn of {action: action,
-                        callback: (unit -> unit) option,
+                        callback: (unit -> unit),
                         value: w8vec option}
 
   exception CacheItem of {actNum: int,  (* recvWait or sendWait's action number *)
@@ -46,35 +46,45 @@ struct
   fun getActionFromArrayAtIndex (array, index) =
     case RA.sub (array, index) of
          NodeExn {action,...} => action
-       | _ => raise Fail "getActionFromArrayAtIndex"
+       | _ => raise Fail "NodeExn"
 
   fun getValueFromArrayAtIndex (array, index) =
     case RA.sub (array, index) of
          NodeExn {value,...} => value
-       | _ => raise Fail "getActionFromArrayAtIndex"
+       | _ => raise Fail "NodeExn"
 
   fun updateActionArray (array, index, act, value) =
   let
-    val _ =  case RA.sub (array, index) of
-                 NodeExn {callback = SOME f, ...} => f ()
-               | _ => ()
+    val callback =  case RA.sub (array, index) of
+                 NodeExn {callback = f, ...} => f
+               | _ => (fn () => ())
+    val _ = RA.update (array, index,
+      NodeExn {action = act, callback = fn () => (), value = SOME value})
   in
-    RA.update (array, index, NodeExn {action = act, callback = NONE, value = SOME value})
+    callback ()
+  end
+
+  fun doOnUpdateNode (NODE{array, index}) wakeup =
+  let
+    val _ = Assert.assertAtomic' ("PoHelper.doOnUpdateLastNode", NONE)
+    val {action, value, callback} =
+      case RA.sub (array, index) of
+           NodeExn m => m
+         | _ => raise Fail "NodeExn"
+  in
+    RA.update (array, index, NodeExn {action = action, callback = wakeup o callback, value = value})
   end
 
   fun doOnUpdateLastNode wakeup =
   let
-    val _ = Assert.assertAtomic' ("PoHelper.doOnUpdateLastNode", NONE)
     val array = S.tidActions ()
-    val lastIndex = RA.length array - 1
-    val act = getActionFromArrayAtIndex (array, lastIndex)
-    val v = getValueFromArrayAtIndex (array, lastIndex)
+    val index = RA.length array - 1
   in
-    RA.update (array, lastIndex, NodeExn {action = act, callback = SOME wakeup, value = v})
+    doOnUpdateNode (NODE {array = array, index = index}) wakeup
   end
 
   fun addToActionsEnd (array, act) =
-    RA.addToEnd (array, NodeExn {action = act, callback = NONE, value = NONE})
+    RA.addToEnd (array, NodeExn {action = act, callback = fn () => (), value = NONE})
 
 
   (********************************************************************
@@ -83,13 +93,28 @@ struct
 
   fun sendToCycleDetector (NODE {array, index}) =
   let
-    val prevAction =
-      if index = 0 then NONE
-      else SOME (getActionFromArrayAtIndex (array, index - 1))
-    val action = getActionFromArrayAtIndex (array, index)
-    val _ = CycleDetector.processAdd {action = action, prevAction = prevAction}
+    val _ = Assert.assert ([], fn () => "GraphManager.sendToCycleDetector",
+            fn () => case getActionFromArrayAtIndex (array, index) of
+                   ACTION _ => true
+                 | EVENT _ => false)
+    fun sendCore prevAction =
+    let
+      val action = getActionFromArrayAtIndex (array, index)
+      val _ = CycleDetector.processAdd {action = action, prevAction = prevAction}
+    in
+      msgSendSafe (AR_REQ_ADD {action = action, prevAction = prevAction})
+    end
+
   in
-    msgSendSafe (AR_REQ_ADD {action = action, prevAction = prevAction})
+    if index = 0 then sendCore NONE
+    else (case getActionFromArrayAtIndex (array, index - 1) of
+               ACTION m => sendCore (SOME (ACTION m))
+             | EVENT _ =>
+                 let
+                   val node = NODE {array = array, index = index}
+                 in
+                  doOnUpdateNode node (fn () => sendToCycleDetector node)
+                 end)
   end
 
   fun getFinalAction () =
@@ -183,9 +208,11 @@ struct
     {spawnAid = spawnAid, spawnNode = spawnNode}
   end
 
-  fun setMatchAid (n as NODE {array, index}) (matchAid: action_id) (value: w8vec) =
+  fun setMatchAidSimple (n as NODE {array, index}) (matchAid: action_id) (value: w8vec) =
   let
-    val (ACTION {aid, act}) = getActionFromArrayAtIndex (array, index)
+    val {aid, act} = case getActionFromArrayAtIndex (array, index) of
+                        ACTION m => m
+                      | _ => raise Fail "setMatAidSimple: unexpected!"
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
@@ -198,6 +225,41 @@ struct
     ()
   end
 
+  fun setMatchAid {waitNode as NODE{array, index}, actAid, matchAid, value} =
+    (Assert.assertAtomic' ("setMatchAid", NONE);
+     case getActionFromArrayAtIndex (array, index) of
+          ACTION _ => setMatchAidSimple waitNode matchAid value
+        | EVENT {txid, actions = axns} =>
+            let
+              val _ = TransactionId.force txid
+
+              (* helper function to replace EVENT with ACTION in a node *)
+              fun updateNode (NODE {array, index}) aid =
+              let
+                val (action, callback, value) =
+                  case RA.sub (array, index) of
+                       NodeExn {action, callback, value} => (action, callback, value)
+                     | _ => raise Fail "NodeExn"
+                val actions = case action of
+                                   EVENT {actions, ...} => actions
+                                 | _ => raise Fail "setMatchAid: unexpected"
+                val act = AidDict.lookup actions aid
+                val newNode = NodeExn {action = ACTION {aid = aid, act = act}, callback = callback, value = value}
+              in
+                RA.update (array, index, newNode)
+              end
+              (* update act node *)
+              val actNode = NODE{array = array, index = index - 1}
+              val _ = updateNode actNode actAid
+              (* update wait node *)
+              val waitAid = actNumPlus actAid (AidDict.size axns)
+              val _ = updateNode waitNode waitAid
+              (* send out clean message *)
+              val axns = AidDict.remove axns actAid
+              val _ = msgSendSafe (CLEAN {aids = AidDict.domain axns})
+            in
+              setMatchAidSimple waitNode matchAid value
+            end)
 
   fun handleSend {cid: channel_id} =
   let
@@ -228,7 +290,7 @@ struct
             | _ => raise Fail "handleSendCached: impossible!"
           val _ = Assert.assert ([], fn () => "handleSendCached: actNum mis-match!",
             fn () => actNum - 1 = aidToActNum actAid)
-          val _ = setMatchAid waitNode actAid value
+          val _ = setMatchAidSimple waitNode actAid value
           val _ = cache := ctl
         in
           CACHED value
@@ -270,7 +332,7 @@ struct
               | _ => raise Fail "handleRecvCached: impossible!"
             val _ = Assert.assert ([], fn () => "handleRecvCached: actNum mis-match!",
             fn () => actNum - 1 = aidToActNum actAid)
-            val _ = setMatchAid waitNode actAid value
+            val _ = setMatchAidSimple waitNode actAid value
             val _ = cache := ctl
           in
             CACHED value
@@ -294,27 +356,22 @@ struct
        | _ => raise Fail "GraphManager.inNonSpecExecMode: first action is not BEGIN, COM or RB"
   end
 
+  exception RET_FALSE
+
   fun isLastNodeMatched () =
   let
     val actions = S.tidActions ()
     val lastIndex = RA.length actions - 1
-    val ACTION {act, ...} = getActionFromArrayAtIndex (actions, lastIndex)
+    val act =
+      case getActionFromArrayAtIndex (actions, lastIndex) of
+           EVENT _ => raise RET_FALSE
+         | ACTION {act, ...} => act
   in
     case act of
       SEND_WAIT {matchAid = NONE, ...} => false
     | RECV_WAIT {matchAid = NONE, ...} => false
     | _ => true
-  end
-
-  fun isLastAidOnThread (t, aid) =
-  let
-    val tid = S.getThreadId t
-    val actions = CML.tidToActions tid
-    val lastIndex = RA.length actions - 1
-    val ACTION {aid = lastAid, ...} = getActionFromArrayAtIndex (actions, lastIndex)
-  in
-    ActionIdOrdered.eq (aid, lastAid)
-  end
+  end handle RET_FALSE => false
 
   fun isLastNode (NODE{array, index}) =
     (debug' ("isLastNode: arrayLength="^(Int.toString (RA.length array))^" index="^(Int.toString index));
@@ -344,7 +401,9 @@ struct
     fun getCacheItem anum idx =
       CacheItem {actNum = anum, value = valOf (getValueFromArrayAtIndex (actions, idx))}
 
-    val ACTION {aid, ...} = getActionFromArrayAtIndex (actions, 0)
+    val aid = case getActionFromArrayAtIndex (actions, 0) of
+                ACTION {aid, ...} => aid
+              | _ => raise Fail "GraphManager.restoreCont: first action is a choice?"
     val anumOfFirstAction = aidToActNum aid
 
     fun loop idx acc =
@@ -360,5 +419,10 @@ struct
   in
     S.restoreCont cache
   end handle CML.Kill => S.switchToNext (fn _ => ())
+
+  fun getWaitAid {actAid, waitNode = NODE {array, index}} =
+    case getActionFromArrayAtIndex (array, index) of
+         ACTION _ => getNextAid actAid
+       | EVENT {actions, ...} => actNumPlus actAid (AidDict.size actions)
 
 end

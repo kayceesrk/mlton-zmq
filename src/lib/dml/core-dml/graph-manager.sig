@@ -31,16 +31,18 @@ sig
 
   (* ---------------------- *)
 
-  val setMatchAid : node -> action_id -> RepTypes.w8vec -> unit
+  val setMatchAid : {waitNode: node, actAid: action_id,
+                     matchAid: action_id, value: RepTypes.w8vec} -> unit
   val getPrevNode : node -> node
   val isLastNode  : node -> bool
   val nodeToAction: node -> action
   val getValue    : node -> RepTypes.w8vec option
 
+
   val getFinalAction     : unit -> RepTypes.action
   val doOnUpdateLastNode : (unit -> unit) -> unit
   val isLastNodeMatched  : unit -> bool
-  val isLastAidOnThread  : 'a CML.Scheduler.thread * action_id -> bool
+  val getWaitAid : {actAid: action_id, waitNode: node} -> action_id
 
   val saveCont    : (unit -> unit) -> unit
   (* Takes as input the last valid action number that is not part of a cycle.

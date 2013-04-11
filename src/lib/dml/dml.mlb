@@ -10,6 +10,8 @@ in
 			cml.mlb
       util/util.mlb
 			core-dml/rep-types.sml
+			core-dml/txid.sig
+			core-dml/txid.sml
 			core-dml/action-helper.sig
 			core-dml/action-helper.sml
 			core-dml/communication-helper.sig

@@ -80,7 +80,10 @@ struct
                        | COM (* This indicates the node that is inserted after commit or rollback *)
                        | RB
 
+  datatype trans_id = TXID of bool ref
+
   datatype action = ACTION of {aid: action_id, act: action_type}
+                  | EVENT  of {actions: action_type AidDict.dict, txid: trans_id}
 
   datatype msg = S_ACT    of {channel: channel_id, sendActAid: action_id, value: w8vec}
                | R_ACT    of {channel: channel_id, recvActAid: action_id}
@@ -89,6 +92,7 @@ struct
                | R_JOIN   of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | R_MATCH  of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN     of {pid: process_id}
+               | CLEAN    of {aids: action_id list}
                (* CycleDetector Communication *)
                | AR_REQ_ADD   of {action: action, prevAction: action option}
                | AR_RES_SUCC  of {dfsStartAct: action}

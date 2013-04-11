@@ -53,17 +53,6 @@ struct
     S.ready rt
   end handle IntDict.Absent => ()
 
-  fun resumeThreadIfLastAidIs aid tidInt (value : w8vec) =
-  let
-    val _ = Assert.assertAtomic' ("DmlCore.unblockthread", SOME 1)
-    val t = IntDict.lookup (!blockedThreads) tidInt
-    val _ = if not (GraphManager.isLastAidOnThread (t, aid)) then raise IntDict.Absent else ()
-    val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
-    val rt = S.prepVal (t, value)
-  in
-    S.ready rt
-  end handle IntDict.Absent => ()
-
   fun rollbackBlockedThreads ptrDict =
   let
     val _ = Assert.assertAtomic' ("DmlCore.rollbackBlockedThreads", SOME 1)
@@ -120,7 +109,7 @@ struct
 
     fun handleBlockedThread () =
     let
-      val t as S.THRD (cmlTid, _) = IntDict.lookup (!blockedThreads) tidInt
+      val t = IntDict.lookup (!blockedThreads) tidInt
       val _ = blockedThreads := IntDict.remove (!blockedThreads) tidInt
       fun prolog () = ((!commitRef) (); emptyW8Vec)
       val rt = S.prep (S.prepend (t, prolog))

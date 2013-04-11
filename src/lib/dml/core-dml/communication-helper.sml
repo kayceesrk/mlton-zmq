@@ -49,6 +49,7 @@ struct
                    case prevAction of NONE => "NONE" | SOME a => actionToString a, "]"]
        | AR_RES_SUCC {dfsStartAct} => concat ["AR_RES_SUCC[", actionToString dfsStartAct, "]"]
        | AR_RES_FAIL {dfsStartAct, ...} => concat ["AR_RES_FAIL[", actionToString dfsStartAct, "]"]
+       | CLEAN {aids} => concat ["C(", ListMLton.fold (aids, "", fn (aid,acc) => (aidToString aid)^acc), ")"]
 
 
   fun msgSend (msg : msg) =

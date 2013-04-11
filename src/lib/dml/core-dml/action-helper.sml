@@ -55,7 +55,18 @@ struct
        | COM => "COM"
        | RB => "RB"
 
-  fun actionToString (ACTION {aid, act}) = concat ["[",aidToString aid,", ",actTypeToString act,"]"]
+  fun actionToString axn =
+    case axn of
+         ACTION {aid, act} => concat ["[",aidToString aid,", ",actTypeToString act,"]"]
+       | EVENT {actions, ...} =>
+           let
+             val prolog = "Event["
+             val body = AidDict.foldr (fn (k,v,str) => (actionToString (ACTION{aid = k, act = v})^str)) "" actions
+             val epilog = "]"
+           in
+             concat [prolog, body, epilog]
+           end
+
 
   fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =
     pidInt = (!processId)
@@ -68,5 +79,11 @@ struct
 
   fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
 
-  fun actionToAid (ACTION {aid, ...}) = aid
+  fun actionToAid axn =
+    case axn of
+         ACTION {aid, ...} => aid
+       | _ => raise Fail "ActionHelper.actionToAid: saw event"
+
+  fun actNumPlus (ACTION_ID {pid, tid, rid, aid}) inc =
+    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + inc}
 end

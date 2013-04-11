@@ -42,7 +42,8 @@ struct
   struct
     val dict : N.t AidDict.dict ref = ref (AidDict.empty)
 
-    fun node (action as ACTION {aid, ...}) =
+    fun node (EVENT _) = raise Fail "NodeLocator.node: saw event"
+      | node (action as ACTION {aid, ...}) =
     let
       fun insertAndGetNewNode () =
       let
@@ -74,7 +75,10 @@ struct
 
     fun numSuccessorsExpected node =
     let
-      val ACTION {act, ...} = nodeGetAct node
+      val act =
+        case nodeGetAct node of
+             ACTION {act, ...} => act
+           | EVENT _ => raise Fail "NodeWaiter.numSuccessorsExpected: saw event"
     in
       case act of
            SEND_WAIT _ => 2 (* parent, match *)
@@ -94,7 +98,7 @@ struct
         let
           val _ = S.atomicSwitchToNext (fn t =>
             let
-              val ACTION {aid, ...} = nodeGetAct node
+              val aid = actionToAid (nodeGetAct node)
               val _ = debug (fn () => "NodeWaiter.waitTillSated: waiting on "^(aidToString aid))
               fun merge l = t::l
             in
@@ -109,7 +113,7 @@ struct
 
     fun resumeThreads node =
     let
-      val ACTION {aid, ...} = nodeGetAct node
+      val aid = actionToAid (nodeGetAct node)
       val threadList = AidDict.lookup (!dict) aid
       val _ = dict := AidDict.remove (!dict) aid
       val _ = ListMLton.map (threadList, fn t => S.ready (S.prep t))
@@ -230,7 +234,9 @@ struct
       val _ = case prevAction of
                     NONE => ()
                   | SOME prev => addEdge {to = NL.node prev, from = curNode}
-      val ACTION {act, aid} = action
+      val {act, aid} = case action of
+                            ACTION m => m
+                          | EVENT _ => raise Fail "CycleDetector.processAdd: saw event"
     in
       case act of
            BEGIN {parentAid} =>
