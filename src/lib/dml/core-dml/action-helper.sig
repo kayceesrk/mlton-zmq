@@ -27,6 +27,7 @@ sig
   (* val getPrevAid  : action_id -> action_id *)
   val getNextAid  : action_id -> action_id
   val actNumPlus  : action_id -> int -> action_id
+  val actNumMinus : action_id -> int -> action_id
   val aidToPtr    : action_id -> ptr
   val ptrToString : ptr -> string
 

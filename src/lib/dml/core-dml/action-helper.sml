@@ -86,4 +86,7 @@ struct
 
   fun actNumPlus (ACTION_ID {pid, tid, rid, aid}) inc =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + inc}
+
+  fun actNumMinus (ACTION_ID {pid, tid, rid, aid}) dec =
+    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - dec}
 end
