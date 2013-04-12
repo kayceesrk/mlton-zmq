@@ -83,7 +83,7 @@ struct
   datatype trans_id = TXID of bool ref
 
   datatype action = BASE  of {aid: action_id, act: action_type}
-                  | EVENT of {actions: action_type AidDict.dict, txid: trans_id}
+                  | EVENT of {actions: action_type AidDict.dict}
 
   datatype msg = S_ACT    of {channel: channel_id, sendActAid: action_id, value: w8vec}
                | R_ACT    of {channel: channel_id, recvActAid: action_id}

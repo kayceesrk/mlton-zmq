@@ -220,10 +220,8 @@ struct
     (Assert.assertAtomic' ("setMatchAid", NONE);
      case getActionFromArrayAtIndex (array, index) of
           BASE _ => setMatchAidSimple waitNode matchAid value
-        | EVENT {txid, actions = axns} =>
+        | EVENT {actions = axns} =>
             let
-              val _ = TransactionId.force txid
-
               (* helper function to replace EVENT with BASE in a node *)
               fun updateNode (NODE {array, index}) aid =
               let
