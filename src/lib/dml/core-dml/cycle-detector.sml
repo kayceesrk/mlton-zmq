@@ -43,7 +43,7 @@ struct
     val dict : N.t AidDict.dict ref = ref (AidDict.empty)
 
     fun node (EVENT _) = raise Fail "NodeLocator.node: saw event"
-      | node (action as ACTION {aid, ...}) =
+      | node (action as BASE {aid, ...}) =
     let
       fun insertAndGetNewNode () =
       let
@@ -77,7 +77,7 @@ struct
     let
       val act =
         case nodeGetAct node of
-             ACTION {act, ...} => act
+             BASE {act, ...} => act
            | EVENT _ => raise Fail "NodeWaiter.numSuccessorsExpected: saw event"
     in
       case act of
@@ -235,25 +235,25 @@ struct
                     NONE => ()
                   | SOME prev => addEdge {to = NL.node prev, from = curNode}
       val {act, aid} = case action of
-                            ACTION m => m
+                            BASE m => m
                           | EVENT _ => raise Fail "CycleDetector.processAdd: saw event"
     in
       case act of
            BEGIN {parentAid} =>
               let
-                val spawnAct = ACTION {aid = parentAid, act = SPAWN {childTid = aidToTid aid}}
+                val spawnAct = BASE {aid = parentAid, act = SPAWN {childTid = aidToTid aid}}
               in
                 addEdge {from = curNode, to = NL.node spawnAct}
               end
          | SEND_WAIT {cid, matchAid = SOME matchAid} =>
              let
-               val recvAct = ACTION {aid = matchAid, act = RECV_ACT {cid = cid}}
+               val recvAct = BASE {aid = matchAid, act = RECV_ACT {cid = cid}}
              in
                addEdge {from = curNode, to = NL.node recvAct}
              end
          | RECV_WAIT {cid, matchAid = SOME matchAid} =>
              let
-               val sendAct = ACTION {aid = matchAid, act = SEND_ACT {cid = cid}}
+               val sendAct = BASE {aid = matchAid, act = SEND_ACT {cid = cid}}
              in
                addEdge {from = curNode, to = NL.node sendAct}
              end

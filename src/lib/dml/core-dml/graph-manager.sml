@@ -95,7 +95,7 @@ struct
   let
     val _ = Assert.assert ([], fn () => "GraphManager.sendToCycleDetector",
             fn () => case getActionFromArrayAtIndex (array, index) of
-                   ACTION _ => true
+                   BASE _ => true
                  | EVENT _ => false)
     fun sendCore prevAction =
     let
@@ -108,7 +108,7 @@ struct
   in
     if index = 0 then sendCore NONE
     else (case getActionFromArrayAtIndex (array, index - 1) of
-               ACTION m => sendCore (SOME (ACTION m))
+               BASE m => sendCore (SOME (BASE m))
              | EVENT _ =>
                  let
                    val node = NODE {array = array, index = index}
@@ -138,12 +138,9 @@ struct
     val _ = S.atomicBegin ()
     val actions = S.tidActions ()
     val beginAid = newAid ()
-    val act = ACTION {aid = beginAid, act = BEGIN {parentAid = parentAid}}
+    val act = BASE {aid = beginAid, act = BEGIN {parentAid = parentAid}}
     val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
-    (* initial action can be immediately added arbitrator since it will be
-    * immediately added to finalSatedComm using forceAddSatedComm (See
-    * dml-core.sml where call to handleInit is made.) *)
     val _ = sendToCycleDetector node
     val _ = S.atomicEnd ()
   in
@@ -155,7 +152,7 @@ struct
     val _ = S.atomicBegin ()
     val actions = S.tidActions ()
     val noopAid = newAid ()
-    val act = ACTION {aid = noopAid, act = NOOP}
+    val act = BASE {aid = noopAid, act = NOOP}
     val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
     val _ = sendToCycleDetector node
@@ -169,12 +166,9 @@ struct
     val _ = S.atomicBegin ()
     val actions = S.tidActions ()
     val comAid = newAid ()
-    val act = ACTION {aid = comAid, act = COM}
+    val act = BASE {aid = comAid, act = COM}
     val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
-    (* initial action can be immediately added arbitrator since it will be
-    * immediately added to finalSatedComm using forceAddSatedComm (See
-    * dml-core.sml where call to insertCommitNode is made.) *)
     val _ = sendToCycleDetector node
     val _ = S.atomicEnd ()
   in
@@ -185,12 +179,9 @@ struct
   let
     val actions = S.tidActions ()
     val rbAid = newAid ()
-    val act = ACTION {aid = rbAid, act = RB}
+    val act = BASE {aid = rbAid, act = RB}
     val _ = addToActionsEnd (actions, act)
     val node = NODE {array = actions, index = RA.length actions - 1}
-    (* initial action can be immediately added arbitrator since it will be
-    * immediately added to finalSatedrbm using forceAddSatedrbm (See
-    * dml-core.sml where call to insertRollbackNode is made.) *)
     val _ = sendToCycleDetector node
   in
     rbAid
@@ -200,7 +191,7 @@ struct
   let
     val actions = S.tidActions ()
     val spawnAid = newAid ()
-    val spawnAct = ACTION {aid = spawnAid, act = SPAWN {childTid = childTid}}
+    val spawnAct = BASE {aid = spawnAid, act = SPAWN {childTid = childTid}}
     val _ = addToActionsEnd (actions, spawnAct)
     val spawnNode = NODE {array = actions, index = RA.length actions - 1}
     val _ = sendToCycleDetector spawnNode
@@ -211,14 +202,14 @@ struct
   fun setMatchAidSimple (n as NODE {array, index}) (matchAid: action_id) (value: w8vec) =
   let
     val {aid, act} = case getActionFromArrayAtIndex (array, index) of
-                        ACTION m => m
+                        BASE m => m
                       | _ => raise Fail "setMatAidSimple: unexpected!"
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
                     | _ => raise Fail ("GraphManager.setMatchAid: Action="^
-                                       (actionToString (ACTION {aid=aid,act=act})))
-    val _ = updateActionArray (array, index, ACTION {aid = aid, act = newAct}, value)
+                                       (actionToString (BASE {aid=aid,act=act})))
+    val _ = updateActionArray (array, index, BASE {aid = aid, act = newAct}, value)
     val _ = sendToCycleDetector (getPrevNode n)
     val _ = sendToCycleDetector n
   in
@@ -228,12 +219,12 @@ struct
   fun setMatchAid {waitNode as NODE{array, index}, actAid, matchAid, value} =
     (Assert.assertAtomic' ("setMatchAid", NONE);
      case getActionFromArrayAtIndex (array, index) of
-          ACTION _ => setMatchAidSimple waitNode matchAid value
+          BASE _ => setMatchAidSimple waitNode matchAid value
         | EVENT {txid, actions = axns} =>
             let
               val _ = TransactionId.force txid
 
-              (* helper function to replace EVENT with ACTION in a node *)
+              (* helper function to replace EVENT with BASE in a node *)
               fun updateNode (NODE {array, index}) aid =
               let
                 val (action, callback, value) =
@@ -244,7 +235,7 @@ struct
                                    EVENT {actions, ...} => actions
                                  | _ => raise Fail "setMatchAid: unexpected"
                 val act = AidDict.lookup actions aid
-                val newNode = NodeExn {action = ACTION {aid = aid, act = act}, callback = callback, value = value}
+                val newNode = NodeExn {action = BASE {aid = aid, act = act}, callback = callback, value = value}
               in
                 RA.update (array, index, newNode)
               end
@@ -269,11 +260,11 @@ struct
       val actions = S.tidActions ()
       (* act *)
       val actAid = newAid ()
-      val actAct = ACTION {aid = actAid, act = SEND_ACT {cid = cid}}
+      val actAct = BASE {aid = actAid, act = SEND_ACT {cid = cid}}
       val _ = addToActionsEnd (actions, actAct)
       (* wait *)
       val waitAid = newAid ()
-      val waitAct = ACTION {aid = waitAid, act = SEND_WAIT {cid = cid, matchAid = NONE}}
+      val waitAct = BASE {aid = waitAid, act = SEND_WAIT {cid = cid, matchAid = NONE}}
       val _ = addToActionsEnd (actions, waitAct)
       val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
     in
@@ -311,11 +302,11 @@ struct
       val actions = S.tidActions ()
       (* act *)
       val actAid = newAid ()
-      val actAct = ACTION {aid = actAid, act = RECV_ACT {cid = cid}}
+      val actAct = BASE {aid = actAid, act = RECV_ACT {cid = cid}}
       val _ = addToActionsEnd (actions, actAct)
       (* wait *)
       val waitAid = newAid ()
-      val waitAct = ACTION {aid = waitAid, act = RECV_WAIT {cid = cid, matchAid = NONE}}
+      val waitAct = BASE {aid = waitAid, act = RECV_WAIT {cid = cid, matchAid = NONE}}
       val _ = addToActionsEnd (actions, waitAct)
       val waitNode = NODE {array = actions, index = (RA.length actions) - 1}
     in
@@ -350,9 +341,9 @@ struct
     val actions = S.tidActions ()
   in
     case getActionFromArrayAtIndex (actions, 0) of
-         ACTION {act = COM, ...} => false
-       | ACTION {act = BEGIN _, ...} => false
-       | ACTION {act = RB, ...} => true
+         BASE {act = COM, ...} => false
+       | BASE {act = BEGIN _, ...} => false
+       | BASE {act = RB, ...} => true
        | _ => raise Fail "GraphManager.inNonSpecExecMode: first action is not BEGIN, COM or RB"
   end
 
@@ -365,7 +356,7 @@ struct
     val act =
       case getActionFromArrayAtIndex (actions, lastIndex) of
            EVENT _ => raise RET_FALSE
-         | ACTION {act, ...} => act
+         | BASE {act, ...} => act
   in
     case act of
       SEND_WAIT {matchAid = NONE, ...} => false
@@ -402,15 +393,15 @@ struct
       CacheItem {actNum = anum, value = valOf (getValueFromArrayAtIndex (actions, idx))}
 
     val aid = case getActionFromArrayAtIndex (actions, 0) of
-                ACTION {aid, ...} => aid
+                BASE {aid, ...} => aid
               | _ => raise Fail "GraphManager.restoreCont: first action is a choice?"
     val anumOfFirstAction = aidToActNum aid
 
     fun loop idx acc =
       if (idx + anumOfFirstAction) < actionNum then
         case getActionFromArrayAtIndex (actions, idx) of
-          ACTION {aid, act = SEND_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
-        | ACTION {aid, act = RECV_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
+          BASE {aid, act = SEND_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
+        | BASE {aid, act = RECV_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
         | _ => loop (idx+1) acc
       else acc
 
@@ -422,7 +413,7 @@ struct
 
   fun getWaitAid {actAid, waitNode = NODE {array, index}} =
     case getActionFromArrayAtIndex (array, index) of
-         ACTION _ => getNextAid actAid
+         BASE _ => getNextAid actAid
        | EVENT {actions, ...} => actNumPlus actAid (AidDict.size actions)
 
 end

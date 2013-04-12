@@ -223,7 +223,7 @@ struct
 
   fun updateRemoteChannels (act, prev) =
     case prev of
-         SOME (ACTION {act = SEND_ACT _, aid = sendActAid}) =>
+         SOME (BASE {act = SEND_ACT _, aid = sendActAid}) =>
            (case act of
               SEND_WAIT {cid, matchAid = SOME recvActAid} =>
                 (debug' ("updateRemoteChannels(1): removing send "^(aidToString sendActAid));
@@ -233,7 +233,7 @@ struct
                  processSendJoin {channel = cid, sendActAid = sendActAid,
                                   recvActAid = recvActAid, ignoreFailure = false})
               | _ => raise Fail "updateRemoteChannels(1)")
-       | SOME (ACTION {act = RECV_ACT _, aid = recvActAid}) =>
+       | SOME (BASE {act = RECV_ACT _, aid = recvActAid}) =>
            (case act of
               RECV_WAIT {cid, matchAid = SOME sendActAid} =>
                 (debug' ("updateRemoteChannels(2): removing send "^(aidToString sendActAid));
@@ -391,7 +391,7 @@ struct
       | AR_RES_SUCC {dfsStartAct = _} => ()
           (* If you have the committed thread in your finalSatedComm structure, move to memoized *)
       | AR_RES_FAIL {dfsStartAct, rollbackAids} => processRollbackMsg rollbackAids dfsStartAct
-      | AR_REQ_ADD {action as ACTION{aid, act}, prevAction} =>
+      | AR_REQ_ADD {action as BASE {aid, act}, prevAction} =>
           if MessageFilter.isAllowed aid then
             (updateRemoteChannels (act, prevAction);
              processAdd {action = action, prevAction = prevAction})

@@ -57,11 +57,11 @@ struct
 
   fun actionToString axn =
     case axn of
-         ACTION {aid, act} => concat ["[",aidToString aid,", ",actTypeToString act,"]"]
+         BASE {aid, act} => concat ["[",aidToString aid,", ",actTypeToString act,"]"]
        | EVENT {actions, ...} =>
            let
              val prolog = "Event["
-             val body = AidDict.foldr (fn (k,v,str) => (actionToString (ACTION{aid = k, act = v})^str)) "" actions
+             val body = AidDict.foldr (fn (k,v,str) => (actionToString (BASE {aid = k, act = v})^str)) "" actions
              val epilog = "]"
            in
              concat [prolog, body, epilog]
@@ -81,7 +81,7 @@ struct
 
   fun actionToAid axn =
     case axn of
-         ACTION {aid, ...} => aid
+         BASE {aid, ...} => aid
        | _ => raise Fail "ActionHelper.actionToAid: saw event"
 
   fun actNumPlus (ACTION_ID {pid, tid, rid, aid}) inc =
