@@ -216,11 +216,16 @@ struct
     ()
   end
 
+
+  fun cleanPendingDummy (actAid : action_id) waitNode = ()
+
+  val cleanPending = ref cleanPendingDummy
+
   fun setMatchAid {waitNode as NODE{array, index}, actAid, matchAid, value} =
     (Assert.assertAtomic' ("setMatchAid", NONE);
      case getActionFromArrayAtIndex (array, index) of
           BASE _ => setMatchAidSimple waitNode matchAid value
-        | EVENT {actions = axns} =>
+        | EVENT {actions = axns, parentAid} =>
             let
               (* helper function to replace EVENT with BASE in a node *)
               fun updateNode (NODE {array, index}) aid =
@@ -245,10 +250,11 @@ struct
               val waitAid = actNumPlus actAid (AidDict.size axns)
               val _ = updateNode waitNode waitAid
 
-              val _ = setMatchAidSimple waitNode matchAid value
-              (* send out clean message *)
+              (* cleanup *)
+              val _ = (!cleanPending) actAid waitNode
               val axns = AidDict.remove axns actAid
               val _ = msgSend (CLEAN {actions = axns})
+              val _ = setMatchAidSimple waitNode matchAid value
             in
               ()
             end)

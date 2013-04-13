@@ -86,6 +86,8 @@ struct
                 | _ => raise Fail "cleanPending") actions
            end
 
+  val _ = GraphManager.cleanPending := cleanPending
+
   fun processSend {callerKind = _, channel = c, sendActAid, sendWaitNode, value} =
   let
     val _ = Assert.assertAtomic' ("DmlCore.processSend(1)", SOME 1)
@@ -112,7 +114,6 @@ struct
                       let
                         val _ = Assert.assertAtomic' ("DmlCore.processSend(4)", SOME 1)
                         val _ = debug' ("DmlCore.processSend(4)")
-                        val _ = cleanPending sendActAid sendWaitNode
                         val _ = msgSend (S_MATCH {channel = c, sendActAid = sendActAid, recvActAid = recvActAid, value = value})
                         val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
                                   remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
@@ -123,7 +124,6 @@ struct
         | SOME (recvActAid, {recvWaitNode}) => (* matching local recv *)
             let
               val _ = Assert.assertAtomic' ("DmlCore.processSend(5)", SOME 1)
-              val _ = cleanPending recvActAid recvWaitNode
               val _ = debug' ("DmlCore.processSend(5)")
               val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
                                    matchAid = recvActAid, value = value}
@@ -169,7 +169,6 @@ struct
                   | SOME (sendActAid, value) => (* matching remote send *)
                       let
                         val _ = debug' ("DmlCore.processRecv(4)")
-                        val _ = cleanPending recvActAid recvWaitNode
                         val _ = msgSend (R_MATCH {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
                                   remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
@@ -183,7 +182,6 @@ struct
         | SOME (sendActAid, {sendWaitNode, value}) => (* matching local send *)
             let
               val _ = debug' ("DmlCore.processRecv(5)")
-              val _ = cleanPending sendActAid sendWaitNode
               val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
                                    matchAid = recvActAid, value = value}
               val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
@@ -347,7 +345,6 @@ struct
    else
      let
        val {recvWaitNode} = valOf (PendingComm.removeAid pendingLocalRecvs c recvActAid)
-       val _ = cleanPending recvActAid recvWaitNode
        val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
        val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
                  remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
@@ -369,7 +366,6 @@ struct
    else
      let
        val {sendWaitNode, value} = valOf (PendingComm.removeAid pendingLocalSends c sendActAid)
-       val _ = cleanPending sendActAid sendWaitNode
        val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
        val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
                  remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
@@ -391,7 +387,6 @@ struct
                   PendingComm.addAid pendingRemoteSends c sendActAid value
               | SOME (recvActAid, {recvWaitNode}) => (* matching recv *)
                   let
-                    val _ = cleanPending recvActAid recvWaitNode
                     val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                   in
                     MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
@@ -406,7 +401,6 @@ struct
                   PendingComm.addAid pendingRemoteRecvs c recvActAid ()
               | SOME (sendActAid, {sendWaitNode, value}) => (* matching send *)
                 let
-                  val _ = cleanPending sendActAid sendWaitNode
                   val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                 in
                   MatchedComm.add matchedSends {channel = c, actAid = sendActAid,

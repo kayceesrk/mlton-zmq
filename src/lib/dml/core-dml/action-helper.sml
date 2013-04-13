@@ -58,9 +58,9 @@ struct
   fun actionToString axn =
     case axn of
          BASE {aid, act} => concat ["[",aidToString aid,", ",actTypeToString act,"]"]
-       | EVENT {actions, ...} =>
+       | EVENT {actions, parentAid} =>
            let
-             val prolog = "Event["
+             val prolog = "Event("^(aidToString parentAid)^")["
              val body = AidDict.foldr (fn (k,v,str) => (actionToString (BASE {aid = k, act = v})^str)) "" actions
              val epilog = "]"
            in
