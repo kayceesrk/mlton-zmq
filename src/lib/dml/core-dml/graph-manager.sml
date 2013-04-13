@@ -245,7 +245,7 @@ struct
               val _ = updateNode waitNode waitAid
               (* send out clean message *)
               val axns = AidDict.remove axns actAid
-              val _ = msgSendSafe (CLEAN {aids = AidDict.domain axns})
+              val _ = msgSendSafe (CLEAN {actions = axns})
             in
               setMatchAidSimple waitNode matchAid value
             end)

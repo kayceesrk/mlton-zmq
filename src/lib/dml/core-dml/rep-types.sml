@@ -92,7 +92,7 @@ struct
                | R_JOIN   of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | R_MATCH  of {channel: channel_id, recvActAid: action_id, sendActAid: action_id}
                | CONN     of {pid: process_id}
-               | CLEAN    of {aids: action_id list}
+               | CLEAN    of {actions: action_type AidDict.dict}
                (* CycleDetector Communication *)
                | AR_REQ_ADD   of {action: action, prevAction: action option}
                | AR_RES_SUCC  of {dfsStartAct: action}

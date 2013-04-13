@@ -87,7 +87,7 @@ struct
               case act of
                   SEND_WAIT {cid, ...} => ignore (PendingComm.removeAid pendingLocalSends cid (actNumMinus aid diff))
                 | RECV_WAIT {cid, ...} => ignore (PendingComm.removeAid pendingLocalRecvs cid (actNumMinus aid diff))
-                | _ => ()) aids
+                | _ => raise Fail "cleanPending") aids
            end
 
   fun processSend {channel = c, sendActAid, sendWaitNode, value} =
@@ -236,8 +236,20 @@ struct
       ()
     end
 
+  fun cleanRemoteChannels (actions) =
+    AidDict.app (fn (aid, act) =>
+      case act of
+           SEND_ACT {cid} =>
+             (ignore (PendingComm.removeAid pendingRemoteSends cid aid);
+              processSendJoin {channel = cid, sendActAid = aid,
+                               recvActAid = dummyAid, ignoreFailure = false})
+         | RECV_ACT {cid} =>
+             (ignore (PendingComm.removeAid pendingRemoteRecvs cid aid);
+              processRecvJoin {channel = cid, recvActAid = aid,
+                               sendActAid = dummyAid, ignoreFailure = false})
+         | _ => raise Fail "cleanRemoteChannels") actions
 
-  fun updateRemoteChannels (act, prev) =
+   and updateRemoteChannels (act, prev) =
     case prev of
          SOME (BASE {act = SEND_ACT _, aid = sendActAid}) =>
            (case act of
@@ -418,7 +430,7 @@ struct
           else ()
       | AR_REQ_ADD {action = EVENT _, prevAction = _} => raise Fail "processMsg.AR_REQ_ADD: found EVENT"
       | CONN _ => ()
-      | CLEAN _ => raise Fail "processMsg.CLEAN: not implemented!"
+      | CLEAN {actions} => cleanRemoteChannels actions
   end
 
   fun clientDaemon () =
