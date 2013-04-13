@@ -71,23 +71,6 @@ struct
 
   datatype caller_kind = Client | Daemon
 
-  fun cleanPending actAid waitNode =
-    case nodeToAction waitNode of
-         BASE _ => ()
-       | EVENT {actions} =>
-           let
-             val diff = AidDict.size actions
-             val actions = AidDict.remove actions actAid
-           in
-            AidDict.app (fn (aid, act) =>
-              case act of
-                  SEND_WAIT {cid, ...} => ignore (PendingComm.removeAid pendingLocalSends cid (actNumMinus aid diff))
-                | RECV_WAIT {cid, ...} => ignore (PendingComm.removeAid pendingLocalRecvs cid (actNumMinus aid diff))
-                | _ => raise Fail "cleanPending") actions
-           end
-
-  val _ = GraphManager.cleanPending := cleanPending
-
   fun processSend {callerKind = _, channel = c, sendActAid, sendWaitNode, value} =
   let
     val _ = Assert.assertAtomic' ("DmlCore.processSend(1)", SOME 1)
@@ -423,7 +406,6 @@ struct
             (updateRemoteChannels (act, prevAction);
              processAdd {action = action, prevAction = prevAction})
           else ()
-      | AR_REQ_ADD {action = EVENT _, prevAction = _} => raise Fail "processMsg.AR_REQ_ADD: found EVENT"
       | CONN _ => ()
       | CLEAN {actions} => cleanRemoteChannels actions
   end

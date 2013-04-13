@@ -56,16 +56,7 @@ struct
        | RB => "RB"
 
   fun actionToString axn =
-    case axn of
-         BASE {aid, act} => concat ["[",aidToString aid,", ",actTypeToString act,"]"]
-       | EVENT {actions, parentAid} =>
-           let
-             val prolog = "Event("^(aidToString parentAid)^")["
-             val body = AidDict.foldr (fn (k,v,str) => (actionToString (BASE {aid = k, act = v})^str)) "" actions
-             val epilog = "]"
-           in
-             concat [prolog, body, epilog]
-           end
+    case axn of BASE {aid, act} => concat ["[",aidToString aid,", ",actTypeToString act,"]"]
 
 
   fun isAidLocal (ACTION_ID {pid = ProcessId pidInt, ...}) =

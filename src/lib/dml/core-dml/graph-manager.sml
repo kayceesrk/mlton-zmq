@@ -93,10 +93,6 @@ struct
 
   fun sendToCycleDetector (NODE {array, index}) =
   let
-    val _ = Assert.assert ([], fn () => "GraphManager.sendToCycleDetector",
-            fn () => case getActionFromArrayAtIndex (array, index) of
-                   BASE _ => true
-                 | EVENT _ => false)
     fun sendCore prevAction =
     let
       val action = getActionFromArrayAtIndex (array, index)
@@ -108,13 +104,7 @@ struct
   in
     if index = 0 then sendCore NONE
     else (case getActionFromArrayAtIndex (array, index - 1) of
-               BASE m => sendCore (SOME (BASE m))
-             | EVENT _ =>
-                 let
-                   val node = NODE {array = array, index = index}
-                 in
-                  doOnUpdateNode node (fn () => sendToCycleDetector node)
-                 end)
+               BASE m => sendCore (SOME (BASE m)))
   end
 
   fun getFinalAction () =
@@ -216,48 +206,10 @@ struct
     ()
   end
 
-
-  fun cleanPendingDummy (actAid : action_id) waitNode = ()
-
-  val cleanPending = ref cleanPendingDummy
-
   fun setMatchAid {waitNode as NODE{array, index}, actAid, matchAid, value} =
     (Assert.assertAtomic' ("setMatchAid", NONE);
      case getActionFromArrayAtIndex (array, index) of
-          BASE _ => setMatchAidSimple waitNode matchAid value
-        | EVENT {actions = axns, parentAid} =>
-            let
-              (* helper function to replace EVENT with BASE in a node *)
-              fun updateNode (NODE {array, index}) aid =
-              let
-                val (action, callback, value) =
-                  case RA.sub (array, index) of
-                       NodeExn {action, callback, value} => (action, callback, value)
-                     | _ => raise Fail "NodeExn"
-                val actions = case action of
-                                   EVENT {actions, ...} => actions
-                                 | _ => raise Fail "setMatchAid: unexpected"
-                val act = AidDict.lookup actions aid
-                val newNode = NodeExn {action = BASE {aid = aid, act = act}, callback = callback, value = value}
-              in
-                RA.update (array, index, newNode)
-              end
-
-              (* update act node *)
-              val actNode = NODE{array = array, index = index - 1}
-              val _ = updateNode actNode actAid
-              (* update wait node *)
-              val waitAid = actNumPlus actAid (AidDict.size axns)
-              val _ = updateNode waitNode waitAid
-
-              (* cleanup *)
-              val _ = (!cleanPending) actAid waitNode
-              val axns = AidDict.remove axns actAid
-              val _ = msgSend (CLEAN {actions = axns})
-              val _ = setMatchAidSimple waitNode matchAid value
-            in
-              ()
-            end)
+          BASE _ => setMatchAidSimple waitNode matchAid value)
 
   fun handleSend {cid: channel_id} =
   let
@@ -362,8 +314,7 @@ struct
     val lastIndex = RA.length actions - 1
     val act =
       case getActionFromArrayAtIndex (actions, lastIndex) of
-           EVENT _ => raise RET_FALSE
-         | BASE {act, ...} => act
+          BASE {act, ...} => act
   in
     case act of
       SEND_WAIT {matchAid = NONE, ...} => false
@@ -421,6 +372,5 @@ struct
   fun getWaitAid {actAid, waitNode = NODE {array, index}} =
     case getActionFromArrayAtIndex (array, index) of
          BASE _ => getNextAid actAid
-       | EVENT {actions, ...} => actNumPlus actAid (AidDict.size actions)
 
 end

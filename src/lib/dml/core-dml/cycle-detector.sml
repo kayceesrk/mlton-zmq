@@ -42,8 +42,7 @@ struct
   struct
     val dict : N.t AidDict.dict ref = ref (AidDict.empty)
 
-    fun node (EVENT _) = raise Fail "NodeLocator.node: saw event"
-      | node (action as BASE {aid, ...}) =
+    fun node (action as BASE {aid, ...}) =
     let
       fun insertAndGetNewNode () =
       let
@@ -78,7 +77,6 @@ struct
       val act =
         case nodeGetAct node of
              BASE {act, ...} => act
-           | EVENT _ => raise Fail "NodeWaiter.numSuccessorsExpected: saw event"
     in
       case act of
            SEND_WAIT _ => 2 (* parent, match *)
@@ -236,7 +234,6 @@ struct
                   | SOME prev => addEdge {to = NL.node prev, from = curNode}
       val {act, aid} = case action of
                             BASE m => m
-                          | EVENT _ => raise Fail "CycleDetector.processAdd: saw event"
     in
       case act of
            BEGIN {parentAid} =>
