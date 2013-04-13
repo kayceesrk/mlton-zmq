@@ -86,7 +86,7 @@ struct
                 | _ => raise Fail "cleanPending") actions
            end
 
-  fun processSend {channel = c, sendActAid, sendWaitNode, value} =
+  fun processSend {callerKind = _, channel = c, sendActAid, sendWaitNode, value} =
   let
     val _ = Assert.assertAtomic' ("DmlCore.processSend(1)", SOME 1)
     val _ = debug' ("DmlCore.processSend(1)")
@@ -112,6 +112,7 @@ struct
                       let
                         val _ = Assert.assertAtomic' ("DmlCore.processSend(4)", SOME 1)
                         val _ = debug' ("DmlCore.processSend(4)")
+                        val _ = cleanPending sendActAid sendWaitNode
                         val _ = msgSend (S_MATCH {channel = c, sendActAid = sendActAid, recvActAid = recvActAid, value = value})
                         val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
                                   remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
@@ -168,6 +169,7 @@ struct
                   | SOME (sendActAid, value) => (* matching remote send *)
                       let
                         val _ = debug' ("DmlCore.processRecv(4)")
+                        val _ = cleanPending recvActAid recvWaitNode
                         val _ = msgSend (R_MATCH {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                         val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
                                   remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
@@ -209,20 +211,23 @@ struct
       val _ = dfsStartAct (* silence warning *)
       val _ = debug' ("processRollbackMsg")
       val _ = PTRDict.app (fn (k,a) => debug' (ptrToString k^":"^(Int.toString a))) rollbackAids
+
       (* Clean up pending acts *)
       val () = PendingComm.cleanup pendingLocalSends rollbackAids
       val () = PendingComm.cleanup pendingRemoteSends rollbackAids
       val () = PendingComm.cleanup pendingLocalRecvs rollbackAids
       val () = PendingComm.cleanup pendingRemoteRecvs rollbackAids
+
       (* Cleanup matched acts *)
       val failList = MatchedComm.cleanup matchedSends rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value} =>
-                processSend {channel = channel, sendActAid = actAid,
-                sendWaitNode = waitNode, value = value})
+                processSend {callerKind = Daemon, channel = channel,
+                sendActAid = actAid, sendWaitNode = waitNode, value = value})
       val failList = MatchedComm.cleanup matchedRecvs rollbackAids
       val _ = ListMLton.map (failList, fn {channel, actAid, waitNode, value = _} =>
                 processRecv {callerKind = Daemon, channel = channel,
-                    recvActAid = actAid, recvWaitNode = waitNode})
+                recvActAid = actAid, recvWaitNode = waitNode})
+
       (* Add message filter *)
       val _ = MessageFilter.addToFilter rollbackAids
       (* rollback threads *)
@@ -324,7 +329,7 @@ struct
                             msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = dummyAid})
                       else ()
             in
-              ignore (processSend {channel = c, sendActAid = sendActAid2,
+              ignore (processSend {callerKind = Daemon, channel = c, sendActAid = sendActAid2,
                                    sendWaitNode = sendWaitNode, value = value})
             end
       else ())

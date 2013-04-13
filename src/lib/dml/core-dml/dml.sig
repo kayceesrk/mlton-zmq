@@ -30,6 +30,11 @@ sig
   val send  : 'a chan * 'a -> unit
   val recv  : 'a chan -> 'a
 
+  (* val sendEvt : 'a chan * 'a -> unit event
+  val recvEvt : 'a chan -> 'a event
+  val choose  : 'a event list -> 'a event
+  val sync    : 'a event -> 'a *)
+
   val getThreadId : unit -> {pid: int, tid: int}
   val spawn : (unit -> unit) -> unit
   val yield : unit -> unit
@@ -44,19 +49,11 @@ sig
    * important to note that this only ensure that the last communication is
    * paired up, and does not assure the absence of divergent behavior from
    * synchronous execution. *)
-
   val touchLastComm : unit -> unit
 
   (* Quits the communication manager and arbitrator for the calling instance.
    * This ensure that the instance cleanly quits. *)
   val exitDaemon : unit -> unit
-
-  (* ------------------------------------------------------*)
-  (* Extra *)
-  (* -----
-   * For testing purposes only. Should be removed in the release.
-   * *)
-  (* ------------------------------------------------------*)
 end
 
 signature DML_INTERNAL =

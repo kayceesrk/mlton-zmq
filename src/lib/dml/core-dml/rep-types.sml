@@ -104,4 +104,6 @@ struct
   val processId = ref ~1
 
   val emptyW8Vec : w8vec = Vector.tabulate (0, fn _ => 0wx0)
+
+  datatype 'a chan = CHANNEL of channel_id
 end

@@ -18,7 +18,8 @@ sig
   val processSend : {channel: RepTypes.channel_id,
                      sendActAid: RepTypes.action_id,
                      sendWaitNode: GraphManager.node,
-                     value: RepTypes.w8vec} -> unit
+                     value: RepTypes.w8vec,
+                     callerKind: caller_kind} -> unit
   val processRecv : {channel: RepTypes.channel_id,
                      recvActAid: RepTypes.action_id,
                      recvWaitNode: GraphManager.node,

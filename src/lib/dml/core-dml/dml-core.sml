@@ -25,6 +25,7 @@ struct
 
   datatype z1 = datatype GraphManager.comm_result
   datatype z2 = datatype Orchestrator.caller_kind
+  datatype chan = datatype RepTypes.chan
 
   (* -------------------------------------------------------------------- *)
   (* Debug helper functions *)
@@ -32,12 +33,6 @@ struct
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
   fun debug' msg = debug (fn () => msg)
-
-  (* -------------------------------------------------------------------- *)
-  (* Datatype and value definitions *)
-  (* -------------------------------------------------------------------- *)
-
-  datatype 'a chan = CHANNEL of channel_id
 
   (* -------------------------------------------------------------------- *)
 
@@ -83,9 +78,8 @@ struct
       UNCACHED {actAid, waitNode} =>
         let
           val m = MLton.serialize (m)
-          val _ = O.processSend
-            {channel = c, sendActAid = actAid,
-            sendWaitNode = waitNode, value = m}
+          val _ = O.processSend {callerKind = Client, channel = c,
+            sendActAid = actAid, sendWaitNode = waitNode, value = m}
         in
           if O.inNonSpecExecMode () andalso
               not (GM.isLastNodeMatched ()) then
@@ -111,7 +105,7 @@ struct
       UNCACHED {actAid, waitNode} =>
         let
           val serM = O.processRecv {callerKind = Client, channel = c,
-                      recvActAid = actAid, recvWaitNode = waitNode}
+            recvActAid = actAid, recvWaitNode = waitNode}
           val _ = if (nonSpec orelse O.inNonSpecExecMode ()) andalso
                     not (GM.isLastNodeMatched ()) then
                     let
