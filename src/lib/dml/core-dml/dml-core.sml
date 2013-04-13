@@ -76,18 +76,20 @@ struct
 
   datatype caller_kind = Client | Daemon
 
-  fun cleanPending waitNode =
+  fun cleanPending actAid waitNode =
     case nodeToAction waitNode of
          BASE _ => ()
-       | EVENT {actions = aids} =>
+       | EVENT {actions} =>
            let
-             val diff = AidDict.size aids
+             val diff = AidDict.size actions
+             val actions = AidDict.remove actions actAid
+             val _ = msgSend (CLEAN {actions = actions})
            in
             AidDict.app (fn (aid, act) =>
               case act of
                   SEND_WAIT {cid, ...} => ignore (PendingComm.removeAid pendingLocalSends cid (actNumMinus aid diff))
                 | RECV_WAIT {cid, ...} => ignore (PendingComm.removeAid pendingLocalRecvs cid (actNumMinus aid diff))
-                | _ => raise Fail "cleanPending") aids
+                | _ => raise Fail "cleanPending") actions
            end
 
   fun processSend {channel = c, sendActAid, sendWaitNode, value} =
@@ -126,7 +128,7 @@ struct
         | SOME (recvActAid, {recvWaitNode}) => (* matching local recv *)
             let
               val _ = Assert.assertAtomic' ("DmlCore.processSend(5)", SOME 1)
-              val _ = cleanPending (recvWaitNode)
+              val _ = cleanPending recvActAid recvWaitNode
               val _ = debug' ("DmlCore.processSend(5)")
               val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
                                    matchAid = recvActAid, value = value}
@@ -185,7 +187,7 @@ struct
         | SOME (sendActAid, {sendWaitNode, value}) => (* matching local send *)
             let
               val _ = debug' ("DmlCore.processRecv(5)")
-              val _ = cleanPending sendWaitNode
+              val _ = cleanPending sendActAid sendWaitNode
               val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
                                    matchAid = recvActAid, value = value}
               val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
@@ -346,7 +348,7 @@ struct
    else
      let
        val {recvWaitNode} = valOf (PendingComm.removeAid pendingLocalRecvs c recvActAid)
-       val _ = cleanPending recvWaitNode
+       val _ = cleanPending recvActAid recvWaitNode
        val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
        val _ = MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
                  remoteMatchAid = sendActAid, waitNode = recvWaitNode} value
@@ -368,7 +370,7 @@ struct
    else
      let
        val {sendWaitNode, value} = valOf (PendingComm.removeAid pendingLocalSends c sendActAid)
-       val _ = cleanPending sendWaitNode
+       val _ = cleanPending sendActAid sendWaitNode
        val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
        val _ = MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
                  remoteMatchAid = recvActAid, waitNode = sendWaitNode} value
@@ -390,7 +392,7 @@ struct
                   PendingComm.addAid pendingRemoteSends c sendActAid value
               | SOME (recvActAid, {recvWaitNode}) => (* matching recv *)
                   let
-                    val _ = cleanPending recvWaitNode
+                    val _ = cleanPending recvActAid recvWaitNode
                     val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                   in
                     MatchedComm.add matchedRecvs {channel = c, actAid = recvActAid,
@@ -405,7 +407,7 @@ struct
                   PendingComm.addAid pendingRemoteRecvs c recvActAid ()
               | SOME (sendActAid, {sendWaitNode, value}) => (* matching send *)
                 let
-                  val _ = cleanPending sendWaitNode
+                  val _ = cleanPending sendActAid sendWaitNode
                   val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
                 in
                   MatchedComm.add matchedSends {channel = c, actAid = sendActAid,
