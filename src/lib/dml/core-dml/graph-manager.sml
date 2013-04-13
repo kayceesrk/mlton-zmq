@@ -237,14 +237,20 @@ struct
               in
                 RA.update (array, index, newNode)
               end
+
               (* update act node *)
               val actNode = NODE{array = array, index = index - 1}
               val _ = updateNode actNode actAid
               (* update wait node *)
               val waitAid = actNumPlus actAid (AidDict.size axns)
               val _ = updateNode waitNode waitAid
+
+              val _ = setMatchAidSimple waitNode matchAid value
+              (* send out clean message *)
+              val axns = AidDict.remove axns actAid
+              val _ = msgSend (CLEAN {actions = axns})
             in
-              setMatchAidSimple waitNode matchAid value
+              ()
             end)
 
   fun handleSend {cid: channel_id} =
