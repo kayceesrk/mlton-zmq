@@ -7,4 +7,14 @@
  * See the file MLton-LICENSE for details.
  *)
 
-structure Dml : DML = DmlCore
+signature DML_OUT =
+sig
+  include DML
+  include EVENT
+end
+
+structure Dml : DML_OUT =
+struct
+  open DmlCore
+  open Event
+end

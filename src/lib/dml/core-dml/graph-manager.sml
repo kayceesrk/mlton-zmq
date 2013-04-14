@@ -217,7 +217,7 @@ struct
     ()
   end
 
-  fun setMatchAid {waitNode as NODE{array, index}, actAid, matchAid, value} =
+  fun setMatchAid {waitNode as NODE{array, index}, actAid = _, matchAid, value} =
     (Assert.assertAtomic' ("setMatchAid", NONE);
      case getActionFromArrayAtIndex (array, index) of
           BASE _ => setMatchAidSimple waitNode matchAid value)
