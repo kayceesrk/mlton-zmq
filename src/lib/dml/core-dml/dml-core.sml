@@ -120,11 +120,13 @@ struct
                        NONE => serM (* For spec exec *)
                      | SOME s => s
           val result = MLton.deserialize serM
+          val _ = debug' ("DmlCore.recv(2.1)")
         in
           result
         end
     | CACHED value =>
          (S.atomicEnd ();
+          debug' ("DmlCore.recv(2.2)");
           MLton.deserialize value)
   end
 

@@ -109,9 +109,9 @@ struct
               val _ = Assert.assertAtomic' ("DmlCore.processSend(5)", SOME 1)
               val _ = debug' ("DmlCore.processSend(5)")
               val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
-                                   matchAid = recvActAid, value = value}
+                                   matchAid = recvActAid, value = emptyW8Vec}
               val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
-                                   matchAid = sendActAid, value = emptyW8Vec}
+                                   matchAid = sendActAid, value = value}
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
             in
@@ -166,9 +166,9 @@ struct
             let
               val _ = debug' ("DmlCore.processRecv(5)")
               val _ = setMatchAid {waitNode = sendWaitNode, actAid = sendActAid,
-                                   matchAid = recvActAid, value = value}
+                                   matchAid = recvActAid, value = emptyW8Vec}
               val _ = setMatchAid {waitNode = recvWaitNode, actAid = recvActAid,
-                                   matchAid = sendActAid, value = emptyW8Vec}
+                                   matchAid = sendActAid, value = value}
               val _ = msgSend (S_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val _ = msgSend (R_JOIN {channel = c, sendActAid = sendActAid, recvActAid = recvActAid})
               val () = case callerKind of
