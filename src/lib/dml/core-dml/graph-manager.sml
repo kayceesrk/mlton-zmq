@@ -123,7 +123,7 @@ struct
   fun getPrevNode (NODE {array, index}) =
     NODE {array = array, index = index - 1}
 
-  fun handleInit {parentAid : action_id} =
+  fun handleInit {parentAid : action_id option} =
   let
     val _ = S.atomicBegin ()
     val actions = S.tidActions ()
@@ -189,11 +189,22 @@ struct
     {spawnAid = spawnAid, spawnNode = spawnNode}
   end
 
+  fun setParentAid (n as NODE {array, ...}) parentAid =
+  let
+    val beginAct = BEGIN {parentAid = SOME parentAid}
+    val _ =
+      case getActionFromArrayAtIndex (array, 0) of
+          BASE {act = BEGIN {parentAid = NONE, ...}, aid} =>
+            updateActionArray (array, 0, BASE {aid = aid, act = beginAct}, emptyW8Vec)
+        | _ => raise Fail "setParentAid"
+  in
+    sendToCycleDetector n
+  end
+
   fun setMatchAidSimple (n as NODE {array, index}) (matchAid: action_id) (value: w8vec) =
   let
     val {aid, act} = case getActionFromArrayAtIndex (array, index) of
                         BASE m => m
-                      | _ => raise Fail "setMatAidSimple: unexpected!"
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
@@ -301,7 +312,8 @@ struct
   in
     case getActionFromArrayAtIndex (actions, 0) of
          BASE {act = COM, ...} => false
-       | BASE {act = BEGIN _, ...} => false
+       | BASE {act = BEGIN {parentAid = NONE}, ...} => true
+       | BASE {act = BEGIN {parentAid = SOME _}, ...} => false
        | BASE {act = RB, ...} => true
        | _ => raise Fail "GraphManager.inNonSpecExecMode: first action is not BEGIN, COM or RB"
   end
@@ -352,7 +364,6 @@ struct
 
     val aid = case getActionFromArrayAtIndex (actions, 0) of
                 BASE {aid, ...} => aid
-              | _ => raise Fail "GraphManager.restoreCont: first action is a choice?"
     val anumOfFirstAction = aidToActNum aid
 
     fun loop idx acc =
@@ -373,4 +384,25 @@ struct
     case getActionFromArrayAtIndex (array, index) of
          BASE _ => getNextAid actAid
 
+  fun abortChoice () =
+  let
+    val _ = Assert.assertAtomic' ("GraphManager.abort", SOME 1)
+    val array = CML.tidToActions (S.getCurThreadId ())
+    val beginNode = NODE{array = array, index = 0}
+    val _ = setParentAid beginNode (actionToAid (nodeToAction beginNode))
+    val _ = S.atomicEnd ()
+  in
+    ()
+  end
+
+  fun commitChoice parentAid =
+  let
+    val _ = Assert.assertAtomic' ("GraphManager.abort", SOME 1)
+    val array = CML.tidToActions (S.getCurThreadId ())
+    val beginNode = NODE{array = array, index = 0}
+    val _ = if ActionIdOrdered.eq (parentAid, dummyAid) then () else setParentAid beginNode parentAid
+    val _ = S.atomicEnd ()
+  in
+    ()
+  end
 end

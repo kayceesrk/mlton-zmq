@@ -24,7 +24,7 @@ sig
   val insertCommitNode    : unit -> action_id
   val insertRollbackNode  : unit -> action_id
   val insertNoopNode      : unit -> action_id
-  val handleInit  : {parentAid: action_id} -> action_id
+  val handleInit  : {parentAid: action_id option} -> action_id
   val handleSpawn : {childTid : RepTypes.thread_id} -> {spawnAid: action_id, spawnNode: node}
   val handleSend  : {cid : RepTypes.channel_id} -> comm_result
   val handleRecv  : {cid : RepTypes.channel_id} -> comm_result
@@ -49,4 +49,7 @@ sig
    * resumes *)
   val restoreCont : int -> unit
   val inNonSpecExecMode : unit -> bool
+
+  val abortChoice : unit -> unit
+  val commitChoice : action_id -> unit
 end

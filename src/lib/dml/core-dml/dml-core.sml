@@ -172,7 +172,7 @@ struct
       fun prolog () =
         let
           val _ = S.atomicBegin ()
-          val _ = GM.handleInit {parentAid = spawnAid}
+          val _ = GM.handleInit {parentAid = SOME spawnAid}
           val _ = S.atomicEnd ()
         in
           O.saveCont ()

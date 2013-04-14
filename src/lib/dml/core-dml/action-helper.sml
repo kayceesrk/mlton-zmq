@@ -49,7 +49,8 @@ struct
        | RECV_WAIT {cid = ChannelId cstr, matchAid = NONE} => concat ["RW(",cstr,",*)"]
        | RECV_WAIT {cid = ChannelId cstr, matchAid = SOME act} => concat ["RW(",cstr,",",aidToString act,")"]
        | RECV_ACT {cid = ChannelId cstr} => concat ["RA(", cstr, ")"]
-       | BEGIN {parentAid} => concat ["B(", aidToString parentAid, ")"]
+       | BEGIN {parentAid = SOME parentAid} => concat ["B(", aidToString parentAid, ")"]
+       | BEGIN {parentAid = NONE} => concat ["B(NONE)"]
        | SPAWN {childTid = ThreadId tid} => concat ["F(", Int.toString tid, ")"]
        | NOOP => "NOOP"
        | COM => "COM"
@@ -73,11 +74,4 @@ struct
   fun actionToAid axn =
     case axn of
          BASE {aid, ...} => aid
-       | _ => raise Fail "ActionHelper.actionToAid: saw event"
-
-  fun actNumPlus (ACTION_ID {pid, tid, rid, aid}) inc =
-    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + inc}
-
-  fun actNumMinus (ACTION_ID {pid, tid, rid, aid}) dec =
-    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - dec}
 end

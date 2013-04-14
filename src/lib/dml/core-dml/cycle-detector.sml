@@ -236,7 +236,7 @@ struct
                             BASE m => m
     in
       case act of
-           BEGIN {parentAid} =>
+           BEGIN {parentAid = SOME parentAid} =>
               let
                 val spawnAct = BASE {aid = parentAid, act = SPAWN {childTid = aidToTid aid}}
               in

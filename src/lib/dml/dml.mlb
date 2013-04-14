@@ -28,10 +28,10 @@ in
 			core-dml/ivar.sml
 			core-dml/orchestrator.sig
 			core-dml/orchestrator.sml
-			core-dml/event.sig
-			core-dml/event.sml
 			core-dml/dml.sig
 			core-dml/dml-core.sml
+			core-dml/event.sig
+			core-dml/event.sml
 			core-dml/dml.sml
 			core-dml/bchan.sig
 			core-dml/bchan.sml
