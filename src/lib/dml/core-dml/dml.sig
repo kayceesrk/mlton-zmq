@@ -30,11 +30,6 @@ sig
   val send  : 'a chan * 'a -> unit
   val recv  : 'a chan -> 'a
 
-  (* val sendEvt : 'a chan * 'a -> unit event
-  val recvEvt : 'a chan -> 'a event
-  val choose  : 'a event list -> 'a event
-  val sync    : 'a event -> 'a *)
-
   val getThreadId : unit -> {pid: int, tid: int}
   val spawn : (unit -> unit) -> unit
   val yield : unit -> unit
