@@ -24,21 +24,34 @@ struct
   (* -------------------------------------------------------------------- *)
 
   fun debug msg = Debug.sayDebug ([S.atomicMsg, S.tidMsg], msg)
+  fun debug' msg = debug (fn () => msg)
 
   datatype event_info = INFO of {parentAid: action_id, committedRef: bool ref}
   datatype 'a event = EVENT of (event_info -> 'a) list
 
   fun constructBaseEvent f (INFO {parentAid, committedRef}) =
   let
+    (* Check if the choice has already been matched. If so, kill this thread *)
+    val _ = S.atomicBegin ()
+    val _ = if (!committedRef) then
+              (debug' ("ChoiceHelper: (early) aborting");
+               S.atomicEnd ();
+               raise CML.Kill)
+            else S.atomicEnd ()
+
     val r = f ()
+
+    (* Commit or abort choice *)
     val _ = S.atomicBegin ()
     val _ =
       if not (!committedRef) then
-        (committedRef := true;
-        GM.commitChoice parentAid)
+        (debug' ("ChoiceHelper: committing");
+         committedRef := true;
+         GM.commitChoice parentAid)
       else
-        (GM.abortChoice ();
-        DmlCore.commit ())
+        (debug' ("ChoiceHelper: aborting");
+         GM.abortChoice ();
+         DmlCore.commit ())
   in
     r
   end
@@ -51,29 +64,38 @@ struct
   fun choose evts =
     ListMLton.fold (evts, EVENT [], fn (EVENT l, EVENT acc) => EVENT (l@acc))
 
-  fun syncEvtList evts =
+  fun syncEvtList (evts: (event_info -> 'a) list) =
   let
     val _ = S.atomicBegin ()
 
     val pidInt = !processId
     val tidInt = S.tidInt ()
     val committedRef = ref false
-    val resultChan = DmlCore.channel ((Int.toString pidInt)^(Int.toString tidInt)^"_choiceResult")
-
-    fun prolog () = ignore (GM.handleInit {parentAid = NONE})
-    fun epilog v = (DmlCore.send (resultChan, v); DmlCore.commit ())
+    val resultChan = DmlCore.channel ((Int.toString pidInt)^"_"^(Int.toString tidInt)^"_choiceResult")
 
     val _ = ListMLton.map (evts, fn evt =>
       let
         val childTid = S.newTid ()
         val childTidInt = CML.tidToInt childTid
+        val _ = debug' ("Event.syncEvtList: spawning ChoiceHelper thread "^(Int.toString childTidInt))
         val {spawnAid, spawnNode = _} = GM.handleSpawn {childTid = ThreadId childTidInt}
-        val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
-        val childFun = epilog o (fn () => evt arg) o prolog
+
+        fun childFun () =
+          let
+            val _ = ignore (GM.handleInit {parentAid = NONE})
+            val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
+            val v = evt arg
+            val _ = DmlCore.send (resultChan, v)
+            val _ = DmlCore.commit ()
+          in
+            ()
+          end handle CML.Kill => ()
+
         val _ = ignore (CML.spawnWithTid (childFun, childTid))
       in
         ()
       end)
+
     val _ = S.atomicEnd ()
 
     val result = DmlCore.recv resultChan
@@ -83,8 +105,7 @@ struct
 
   fun sync (EVENT evts: 'a event) =
   let
-    (* XXX TODO KC *)
-    val _ = DmlCore.commit ()
+    val _ = debug' ("sync")
     val evt = List.nth (evts, 0)
   in
     if length evts = 1 then
