@@ -27,11 +27,10 @@ struct
   fun debug' msg = debug (fn () => msg)
 
   datatype event_info = INFO of {parentAid: action_id,
-                                 committedRef: bool ref,
-                                 ackChan: unit DmlCore.chan option}
+                                 committedRef: bool ref}
   datatype 'a event = EVENT of (event_info -> 'a) list
 
-  fun constructBaseEvent f (INFO {parentAid, committedRef, ackChan}) =
+  fun constructBaseEvent f (INFO {parentAid, committedRef}) =
   let
     (* Check if the choice has already been matched. If so, kill this thread *)
     val _ = S.atomicBegin ()
@@ -49,10 +48,8 @@ struct
       if not (!committedRef) then
         (debug' ("ChoiceHelper: committing");
          committedRef := true;
-         GM.commitChoice parentAid;
-         case ackChan of
-              NONE => ()
-            | SOME c => DmlCore.send (c, ()))
+         CML.tidCompensate (S.getCurThreadId (), fn () => committedRef := false);
+         GM.commitChoice parentAid)
       else
         (debug' ("ChoiceHelper: aborting");
          GM.abortChoice ();
@@ -76,7 +73,6 @@ struct
     val pidInt = !processId
     val tidInt = S.tidInt ()
     val committedRef = ref false
-    val ackChan = DmlCore.channel ((Int.toString pidInt)^"_"^(Int.toString tidInt)^"_choiceAck")
     val resultChan = DmlCore.channel ((Int.toString pidInt)^"_"^(Int.toString tidInt)^"_choiceResult")
 
     val _ = ListMLton.map (evts, fn evt =>
@@ -90,7 +86,7 @@ struct
           let
             val _ = ignore (GM.handleInit {parentAid = NONE})
             val _ = O.saveCont ()
-            val arg = INFO {parentAid = spawnAid, committedRef = committedRef, ackChan = SOME ackChan}
+            val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
             val v = evt arg
             val _ = DmlCore.send (resultChan, v)
             val _ = DmlCore.commit ()
@@ -105,11 +101,7 @@ struct
 
     val _ = S.atomicEnd ()
 
-    (* XXX TODO: if this thread was aborted, then set committedRef to true to abort the choices? *)
-    val _ = DmlCore.recv ackChan
-    val _ = debug' ("Event.syncEvtList: got ack")
     val result = DmlCore.recv resultChan
-    val _ = debug' ("Event.syncEvtList: got value")
   in
     result
   end
@@ -121,7 +113,7 @@ struct
   in
     if length evts = 1 then
       let
-        val arg = INFO {parentAid = ActionHelper.dummyAid, committedRef = ref false, ackChan = NONE}
+        val arg = INFO {parentAid = ActionHelper.dummyAid, committedRef = ref false}
         val r = evt arg
       in
         r

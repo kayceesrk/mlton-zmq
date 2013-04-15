@@ -48,6 +48,8 @@ structure ThreadID : THREAD_ID_EXTRA =
         ()
       end
 
+      fun tidCompensate (TID {cont, ...}, doBeforeRestore) =
+        cont := (!cont o doBeforeRestore)
 
       fun tidSaveCont (TID {cont, actionNum, ...}, doBeforeRestore) =
         MLton.Cont.callcc (fn k =>
