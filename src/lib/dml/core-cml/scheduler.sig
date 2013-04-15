@@ -31,8 +31,9 @@ sig
   val tidActions : unit -> exn ResizableArray.t
   val tidCache : unit -> exn list ref
 
-  val saveCont : (unit -> unit) (* action to do before restore *) -> unit
+  val saveCont    : (unit -> unit) (* action to do before restore *) -> unit
   val restoreCont : exn list -> unit
+  val deleteCont  : unit -> unit
 
   val ready : rdy_thread -> unit
   val next : unit -> rdy_thread

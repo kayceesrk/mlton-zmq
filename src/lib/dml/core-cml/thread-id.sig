@@ -27,6 +27,7 @@ sig
   val tidToCache   : thread_id -> exn list ref
 
   val tidSaveCont    : thread_id * (unit -> unit) -> unit
+  val tidDeleteCont  : thread_id -> unit
   val tidRestoreCont : thread_id * exn list -> unit
 
   val mark     : thread_id -> unit

@@ -77,6 +77,7 @@ structure Scheduler : SCHEDULER =
 
       fun saveCont f = TID.tidSaveCont (getCurThreadId (), f)
       fun restoreCont c = TID.tidRestoreCont (getCurThreadId (), c)
+      fun deleteCont () = TID.tidDeleteCont (getCurThreadId ())
 
       (* The thread ready queues:
        * rdyQ1 is the primary queue and rdyQ2 is the secondary queue.

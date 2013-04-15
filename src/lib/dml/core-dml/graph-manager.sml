@@ -390,6 +390,7 @@ struct
     val array = CML.tidToActions (S.getCurThreadId ())
     val beginNode = NODE{array = array, index = 0}
     val _ = setParentAid beginNode (actionToAid (nodeToAction beginNode))
+    val _ = S.deleteCont ()
     val _ = S.atomicEnd ()
   in
     ()

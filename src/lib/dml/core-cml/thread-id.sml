@@ -61,6 +61,9 @@ structure ThreadID : THREAD_ID_EXTRA =
             cont := (fn () => (ignore (comp ()); MLton.Cont.throw (k, ())))
           end)
 
+      fun tidDeleteCont (TID {cont, ...}) =
+        cont := (fn () => raise Kill)
+
       fun tidRestoreCont (TID {cont, revisionId, actions, cache, ...}, newCache) =
       let
         (* XXX racy *)

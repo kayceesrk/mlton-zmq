@@ -28,7 +28,7 @@ let
   let
     val _ = spawn (recvThread c1)
     val _ = spawn (recvThread c2)
-    val e = choose [sendEvt (c1,1), sendEvt (c2,2)]
+    val e = choose [sendEvt (c2,2), sendEvt (c1,1)]
     val _ = sync e
     val _ = commit ()
   in
