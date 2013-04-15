@@ -88,8 +88,8 @@ struct
             val _ = O.saveCont ()
             val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
             val v = evt arg
-            val _ = DmlCore.send (resultChan, v)
             val _ = DmlCore.commit ()
+            val _ = DmlCore.send (resultChan, v)
           in
             ()
           end handle CML.Kill => ()

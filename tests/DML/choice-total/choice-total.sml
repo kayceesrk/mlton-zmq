@@ -18,11 +18,24 @@ let
 
   fun newThread () =
   let
-    val e1 = wrap (sendEvt (c2, 1)) (fn () => "picked send on c2")
-    val e2 = wrap (recvEvt c1) (fn _ => "picked recv on c1")
+    val e1 = wrap (sendEvt (c2, 2)) (fn () =>
+              let
+                val _ = print "picked send on c2\n"
+                val _ = recv c1
+                val _ = print "finished recv on c1\n"
+              in
+                ()
+              end)
+    val e2 = wrap (recvEvt c1) (fn _ =>
+              let
+                val _ = print "picked recv on c1\n"
+                val _ = send (c2, 2)
+                val _ = print "finished send on c2\n"
+              in
+                ()
+              end)
     val e = choose [e2,e1]
-    val s = sync e
-    val _ = print (s^"\n")
+    val _ = sync e
     val _ = commit ()
   in
     ()
@@ -31,11 +44,24 @@ let
   fun core () =
   let
     val _ = spawn newThread
-    val e1 = wrap (sendEvt (c1, 1)) (fn () => "picked send on c1")
-    val e2 = wrap (recvEvt c2) (fn _ => "picked recv on c2")
+    val e1 = wrap (sendEvt (c1, 1)) (fn () =>
+              let
+                val _ = print "picked send on c1\n"
+                val _ = recv c2
+                val _ = print "finished recv on c2\n"
+              in
+                ()
+              end)
+    val e2 = wrap (recvEvt c2) (fn _ =>
+              let
+                val _ = print "picked recv on c2\n"
+                val _ = send (c1, 1)
+                val _ = print "finished send on c1\n"
+              in
+                ()
+              end)
     val e = choose [e2,e1]
-    val s = sync e
-    val _ = print (s^"\n")
+    val _ = sync e
     val _ = commit ()
   in
     exitDaemon ()

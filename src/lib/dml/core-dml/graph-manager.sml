@@ -196,6 +196,8 @@ struct
       case getActionFromArrayAtIndex (array, 0) of
           BASE {act = BEGIN {parentAid = NONE, ...}, aid} =>
             updateActionArray (array, 0, BASE {aid = aid, act = beginAct}, emptyW8Vec)
+        | BASE {act = COM, ...} => debug' ("setParentAid: top node is COM - noop")
+        | BASE {act = RB, ...} => debug' ("setParentAid: top node is RB - noop")
         | _ => raise Fail "setParentAid"
   in
     sendToCycleDetector n
