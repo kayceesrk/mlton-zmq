@@ -13,6 +13,7 @@ struct
   structure S = CML.Scheduler
   structure O = Orchestrator
   structure GM = GraphManager
+  structure AH = ActionHelper
 
   structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
@@ -70,10 +71,9 @@ struct
   let
     val _ = S.atomicBegin ()
 
-    val pidInt = !processId
-    val tidInt = S.tidInt ()
+    val ptrString = (AH.ptrToString o AH.aidToPtr o AH.actionToAid o GM.getFinalAction) ()
+    val resultChan = DmlCore.channel (ptrString^"_choice")
     val committedRef = ref false
-    val resultChan = DmlCore.channel ((Int.toString pidInt)^"_"^(Int.toString tidInt)^"_choiceResult")
 
     val _ = ListMLton.map (evts, fn evt =>
       let
