@@ -10,10 +10,12 @@
 structure Event : EVENT_INTERNAL =
 struct
   open RepTypes
+
   structure S = CML.Scheduler
   structure O = Orchestrator
   structure GM = GraphManager
   structure AH = ActionHelper
+  structure SH = SchedulerHelper
 
   structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
@@ -31,6 +33,8 @@ struct
                                  committedRef: bool ref}
   datatype 'a event = EVENT of (event_info -> 'a) list
 
+  exception NotifySyncThread
+
   fun constructBaseEvent f (INFO {parentAid, committedRef}) =
   let
     (* Check if the choice has already been matched. If so, kill this thread *)
@@ -39,6 +43,14 @@ struct
               (debug' ("ChoiceHelper: (early) aborting");
                S.atomicEnd ();
                raise CML.Kill)
+            else ()
+
+    (* check if the base event has failed *)
+    val _ = if GM.firstActionIsRB () andalso
+               GM.cacheIsEmpty () then
+               (if SH.threadIsAlive parentAid then
+                 (S.atomicEnd (); raise NotifySyncThread)
+                else (S.atomicEnd (); raise CML.Kill))
             else S.atomicEnd ()
 
     val r = f ()
@@ -89,10 +101,13 @@ struct
             val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
             val v = evt arg
             val _ = DmlCore.commit ()
-            val _ = DmlCore.send (resultChan, v)
+            val _ = DmlCore.send (resultChan, SOME v)
           in
             ()
-          end handle CML.Kill => ()
+          end handle CML.Kill => debug' ("killed self")
+                   | NotifySyncThread =>
+                       (debug' ("notifying sync thread");
+                        DmlCore.send (resultChan, NONE))
 
         val _ = ignore (CML.spawnWithTid (childFun, childTid))
       in
@@ -101,7 +116,11 @@ struct
 
     val _ = S.atomicEnd ()
 
-    val result = DmlCore.recv resultChan
+    val result = case DmlCore.recv resultChan of
+                      SOME v => v
+                    | NONE =>
+                        (debug' "retry choice";
+                         syncEvtList evts)
   in
     result
   end

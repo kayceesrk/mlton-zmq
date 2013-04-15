@@ -137,5 +137,10 @@ struct
     handleBlockedThread ()
   end
 
-
+  fun threadIsAlive aid =
+  let
+    val S.THRD (cmlTid, _) = IntDict.lookup (!blockedThreads) (aidToTidInt aid)
+  in
+    CML.tidToRev cmlTid = (aidToRidInt aid)
+  end handle IntDict.Absent => false
 end

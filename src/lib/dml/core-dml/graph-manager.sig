@@ -41,6 +41,8 @@ sig
   val getFinalAction     : unit -> RepTypes.action
   val doOnUpdateLastNode : (unit -> unit) -> unit
   val isLastNodeMatched  : unit -> bool
+  val firstActionIsRB    : unit -> bool
+  val cacheIsEmpty       : unit -> bool
   val getWaitAid : {actAid: action_id, waitNode: node} -> action_id
 
   val saveCont    : (unit -> unit) -> unit
@@ -52,4 +54,5 @@ sig
 
   val abortChoice : unit -> unit
   val commitChoice : action_id -> unit
+
 end

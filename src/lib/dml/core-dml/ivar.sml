@@ -13,7 +13,8 @@ struct
   open RepTypes
 
   structure Assert = LocalAssert(val assert = true)
-  structure Debug = LocalDebug(val debug = true)
+  structure Debug = LocalDebug(val debug = false)
+
   structure S = CML.Scheduler
   structure SH = SchedulerHelper
 

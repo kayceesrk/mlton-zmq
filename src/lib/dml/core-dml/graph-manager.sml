@@ -408,4 +408,17 @@ struct
   in
     ()
   end
+
+  fun firstActionIsRB () =
+  let
+    val _ = Assert.assertAtomic' ("GraphManager.firstActionIsRB", NONE)
+    val array = CML.tidToActions (S.getCurThreadId ())
+  in
+    case getActionFromArrayAtIndex (array, 0) of
+         BASE {act = RB, ...} => true
+       | _ => false
+  end
+
+  val cacheIsEmpty = fn () => List.length (!(S.tidCache ())) = 0
+
 end
