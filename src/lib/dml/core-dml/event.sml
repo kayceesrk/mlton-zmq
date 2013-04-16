@@ -30,13 +30,12 @@ struct
   fun debug' msg = debug (fn () => msg)
 
   datatype event_info = INFO of {parentAid: action_id,
-                                 committedRef: bool ref,
-                                 choiceIndex: int}
+                                 committedRef: bool ref}
   datatype 'a event = EVENT of (event_info -> 'a) list
 
   exception NotifySyncThread
 
-  fun constructBaseEvent f (INFO {parentAid, committedRef, choiceIndex = _}) =
+  fun constructBaseEvent f (INFO {parentAid, committedRef}) =
   let
     (* Check if the choice has already been matched. If so, kill this thread *)
     val _ = S.atomicBegin ()
@@ -85,10 +84,10 @@ struct
     val _ = S.atomicBegin ()
 
     val ptrString = (AH.ptrToString o AH.aidToPtr o AH.actionToAid o GM.getFinalAction) ()
-    val resultChan : ('a * int) option DmlCore.chan = DmlCore.channel (ptrString^"_choice")
+    val resultChan = DmlCore.channel (ptrString^"_choice")
     val committedRef = ref false
 
-    val _ = ListMLton.mapi (evts, fn (choiceIndex, evt) =>
+    val _ = ListMLton.map (evts, fn evt =>
       let
         val childTid = S.newTid ()
         val childTidInt = CML.tidToInt childTid
@@ -99,11 +98,10 @@ struct
           let
             val _ = ignore (GM.handleInit {parentAid = NONE})
             val _ = O.saveCont ()
-            val arg = INFO {parentAid = spawnAid, committedRef = committedRef,
-                            choiceIndex = choiceIndex}
+            val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
             val v = evt arg
             val _ = DmlCore.commit ()
-            val _ = DmlCore.send (resultChan, SOME (v, choiceIndex))
+            val _ = DmlCore.send (resultChan, SOME v)
           in
             ()
           end handle CML.Kill => debug' ("killed self")
@@ -120,8 +118,15 @@ struct
 
     val result =
       case DmlCore.recv resultChan of
-        SOME (v, _) => v
+        SOME v => v
       | NONE => (debug' "retry choice"; syncEvtList evts)
+
+    (* KC: This commit will immediately succeed and will not block since the
+     * event picked in the choice just committed. However, this commit is
+     * important since it precludes any spawns (associated with the event
+     * synchronization), to be part of the rollback log (cache)
+     *)
+    val _ = DmlCore.commit ()
   in
     result
   end
@@ -133,8 +138,7 @@ struct
   in
     if length evts = 1 then
       let
-        val arg = INFO {parentAid = ActionHelper.dummyAid,
-          committedRef = ref false, choiceIndex = 0}
+        val arg = INFO {parentAid = ActionHelper.dummyAid, committedRef = ref false}
         val r = evt arg
       in
         r
