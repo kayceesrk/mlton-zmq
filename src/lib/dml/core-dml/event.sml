@@ -30,12 +30,13 @@ struct
   fun debug' msg = debug (fn () => msg)
 
   datatype event_info = INFO of {parentAid: action_id,
-                                 committedRef: bool ref}
+                                 committedRef: bool ref,
+                                 choiceIndex: int}
   datatype 'a event = EVENT of (event_info -> 'a) list
 
   exception NotifySyncThread
 
-  fun constructBaseEvent f (INFO {parentAid, committedRef}) =
+  fun constructBaseEvent f (INFO {parentAid, committedRef, choiceIndex = _}) =
   let
     (* Check if the choice has already been matched. If so, kill this thread *)
     val _ = S.atomicBegin ()
@@ -84,10 +85,10 @@ struct
     val _ = S.atomicBegin ()
 
     val ptrString = (AH.ptrToString o AH.aidToPtr o AH.actionToAid o GM.getFinalAction) ()
-    val resultChan = DmlCore.channel (ptrString^"_choice")
+    val resultChan : ('a * int) option DmlCore.chan = DmlCore.channel (ptrString^"_choice")
     val committedRef = ref false
 
-    val _ = ListMLton.map (evts, fn evt =>
+    val _ = ListMLton.mapi (evts, fn (choiceIndex, evt) =>
       let
         val childTid = S.newTid ()
         val childTidInt = CML.tidToInt childTid
@@ -98,10 +99,11 @@ struct
           let
             val _ = ignore (GM.handleInit {parentAid = NONE})
             val _ = O.saveCont ()
-            val arg = INFO {parentAid = spawnAid, committedRef = committedRef}
+            val arg = INFO {parentAid = spawnAid, committedRef = committedRef,
+                            choiceIndex = choiceIndex}
             val v = evt arg
             val _ = DmlCore.commit ()
-            val _ = DmlCore.send (resultChan, SOME v)
+            val _ = DmlCore.send (resultChan, SOME (v, choiceIndex))
           in
             ()
           end handle CML.Kill => debug' ("killed self")
@@ -116,23 +118,23 @@ struct
 
     val _ = S.atomicEnd ()
 
-    val result = case DmlCore.recv resultChan of
-                      SOME v => v
-                    | NONE =>
-                        (debug' "retry choice";
-                         syncEvtList evts)
+    val result =
+      case DmlCore.recv resultChan of
+        SOME (v, _) => v
+      | NONE => (debug' "retry choice"; syncEvtList evts)
   in
     result
   end
 
-  fun sync (EVENT evts: 'a event) =
+  fun sync (EVENT evts: 'a event) : 'a =
   let
     val _ = debug' ("sync")
     val evt = List.nth (evts, 0)
   in
     if length evts = 1 then
       let
-        val arg = INFO {parentAid = ActionHelper.dummyAid, committedRef = ref false}
+        val arg = INFO {parentAid = ActionHelper.dummyAid,
+          committedRef = ref false, choiceIndex = 0}
         val r = evt arg
       in
         r
