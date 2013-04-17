@@ -25,15 +25,16 @@ struct
   datatype action_id = ACTION_ID of {pid: process_id,
                                      tid: thread_id,
                                      rid: int, (* revision id *)
-                                     aid: int} (* action number *)
+                                     aid: int, (* action number *)
+                                     affId: int} (* affiliation *)
 
   structure ActionIdOrdered
     :> ORDERED where type t = action_id
   = struct
     type t = action_id
 
-    fun eq (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1},
-            ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2}) =
+    fun eq (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1, ...},
+            ACTION_ID {pid = ProcessId pid2, tid = ThreadId tid2, rid = rid2, aid = aid2, ...}) =
             MLton.equal ((pid1,tid1,rid1,aid1),(pid2,tid2,rid2,aid2))
     val _  = eq
     fun compare (ACTION_ID {pid = ProcessId pid1, tid = ThreadId tid1, rid = rid1, aid = aid1, ...},

@@ -22,6 +22,7 @@ sig
   val aidToTidInt : action_id -> int
   val aidToRidInt : action_id -> int
   val aidToTid    : action_id -> RepTypes.thread_id
+  val aidToAffId  : action_id -> int
   val aidToString : action_id -> string
   val aidToActNum : action_id -> int
   val isAidLocal  : action_id -> bool

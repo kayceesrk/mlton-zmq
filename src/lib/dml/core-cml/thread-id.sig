@@ -25,6 +25,7 @@ sig
   val tidNextActionNum : thread_id -> int
   val tidCommit    : thread_id -> unit
   val tidToCache   : thread_id -> exn list ref
+  val tidToAffId   : thread_id -> int
 
   val tidCompensate  : thread_id * (unit -> unit) -> unit
   val tidSaveCont    : thread_id * (unit -> unit) -> unit
@@ -43,4 +44,5 @@ sig
   val new : unit -> thread_id
   val bogus : string -> thread_id
   val reset : unit -> unit
+  val newWithAffId : int -> thread_id
 end

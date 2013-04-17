@@ -30,6 +30,8 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun tidToRev (TID {revisionId,...}) = !revisionId
       fun tidToActions (TID {actions, ...}) = !actions
       fun tidToCache (TID {cache, ...}) = cache
+      fun tidToAffId (TID {affId, ...}) = affId
+
       fun tidNextActionNum (TID {actionNum,...}) =
       let
         val res = !actionNum + 1
@@ -79,8 +81,9 @@ structure ThreadID : THREAD_ID_EXTRA =
       fun exnHandler (_ : exn) = ()
       val defaultExnHandler = ref exnHandler
 
-      fun new' n =
+      fun new' (n, affId) =
          TID {id = n,
+              affId = affId,
               exnHandler = ref (!defaultExnHandler),
               props = ref [],
               actions = ref (ResizableArray.empty ()),
@@ -98,7 +101,16 @@ structure ThreadID : THREAD_ID_EXTRA =
                val n = !tidCounter
                val _ = tidCounter := n + 1
             in
-               new' n
+               new' (n, Random.natLessThan (valOf (Int.maxInt)))
+            end
+
+         fun newWithAffId affId =
+            let
+               val _ = Assert.assertAtomic' ("ThreadID.newTidAffId", NONE)
+               val n = !tidCounter
+               val _ = tidCounter := n + 1
+            in
+               new' (n, affId)
             end
 
          fun reset () = tidCounter := 0
@@ -106,7 +118,7 @@ structure ThreadID : THREAD_ID_EXTRA =
 
       fun bogus s =
          let val n = CharVector.foldr (fn (c, n) => 2 * n - Char.ord c) 0 s
-         in new' n
+         in new' (n, Random.natLessThan (valOf (Int.maxInt)))
          end
 
       fun mark (TID{done_comm, ...}) =

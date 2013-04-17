@@ -68,5 +68,6 @@ in
 			structure File
 			structure Dot
 			structure Layout
+			structure Random
 	 end
 end

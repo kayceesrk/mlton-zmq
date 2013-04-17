@@ -17,7 +17,6 @@ struct
   structure AH = ActionHelper
   structure SH = SchedulerHelper
 
-  structure Assert = LocalAssert(val assert = true)
   structure Debug = LocalDebug(val debug = true)
 
   datatype z1 = datatype O.caller_kind
@@ -86,10 +85,11 @@ struct
     val ptrString = (AH.ptrToString o AH.aidToPtr o AH.actionToAid o GM.getFinalAction) ()
     val resultChan = DmlCore.channel (ptrString^"_choice")
     val committedRef = ref false
+    val affId = Random.natLessThan (valOf (Int.maxInt))
 
     val _ = ListMLton.map (evts, fn evt =>
       let
-        val childTid = S.newTid ()
+        val childTid = S.newTidWithAffId affId
         val childTidInt = CML.tidToInt childTid
         val _ = debug' ("Event.syncEvtList: spawning ChoiceHelper thread "^(Int.toString childTidInt))
         val {spawnAid, spawnNode = _} = GM.handleSpawn {childTid = ThreadId childTidInt}

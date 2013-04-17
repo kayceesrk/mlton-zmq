@@ -16,7 +16,7 @@ struct
    * Action
    *******************************************************************)
 
-  fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid}) =
+  fun aidToString (ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid, aid, ...}) =
     concat [Int.toString pid, ".", Int.toString tid, ".",
             Int.toString rid, ".", Int.toString aid]
 
@@ -29,18 +29,19 @@ struct
     val tid = S.tidInt ()
     val aid = S.tidNextActionNum ()
     val rid = S.tidRev ()
+    val affId = CML.tidToAffId (S.getCurThreadId ())
   in
-    ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid = rid, aid = aid}
+    ACTION_ID {pid = ProcessId pid, tid = ThreadId tid, rid = rid, aid = aid, affId = affId}
   end
 
-  val dummyAid = ACTION_ID {pid = ProcessId ~1, tid = ThreadId ~1, rid = ~1, aid = ~1}
+  val dummyAid = ACTION_ID {pid = ProcessId ~1, tid = ThreadId ~1, rid = ~1, aid = ~1, affId = ~1}
 
   fun aidToPidInt (ACTION_ID {pid = ProcessId pidInt, ...}) = pidInt
   fun aidToTidInt (ACTION_ID {tid = ThreadId tidInt, ...}) = tidInt
   fun aidToRidInt (ACTION_ID {rid, ...}) = rid
   fun aidToActNum (ACTION_ID {aid, ...}) = aid
-  (* fun aidToPid (ACTION_ID {pid, ...}) = pid *)
   fun aidToTid (ACTION_ID {tid, ...}) = tid
+  fun aidToAffId (ACTION_ID {affId, ...}) = affId
 
   fun actTypeToString at =
     case at of
@@ -67,8 +68,8 @@ struct
   (* fun getPrevAid (ACTION_ID {pid, tid, rid, aid, vid}) =
     ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid - 1, vid = vid} *)
 
-  fun getNextAid (ACTION_ID {pid, tid, rid, aid}) =
-    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1}
+  fun getNextAid (ACTION_ID {pid, tid, rid, aid, affId}) =
+    ACTION_ID {pid = pid, tid = tid, rid = rid, aid = aid + 1, affId = affId}
 
   fun aidToPtr (ACTION_ID {pid, tid, rid, ...}) = {pid = pid, tid = tid, rid = rid}
 

@@ -48,6 +48,7 @@ sig
   val atomicReadyAndSwitchToNext : (unit -> unit) -> unit
 
   val newTid     : unit -> thread_id
+  val newTidWithAffId : int -> thread_id
   val new        : (thread_id -> ('a -> unit)) -> 'a thread
   val newWithTid : ((thread_id -> ('a -> unit)) * thread_id) -> 'a thread
 

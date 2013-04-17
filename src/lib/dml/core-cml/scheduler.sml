@@ -161,6 +161,7 @@ structure Scheduler : SCHEDULER =
       end
 
       val newTid = TID.new
+      val newTidWithAffId = TID.newWithAffId
 
       fun new (f : thread_id -> ('a -> unit)) : 'a thread =
          let

@@ -57,9 +57,11 @@ struct
     let
       val _ = AidDict.app (fn (k, _) =>
                 (debug' ("PendingComm.deque: "^(aidToString k));
-                if (aidToTidInt k = aidToTidInt againstAid) andalso
-                    (aidToPidInt k = aidToPidInt againstAid)
-                then () (* dont match actions from the same thread *)
+                (* dont match actions between threads with the same affiliation *)
+                if ((aidToAffId k = aidToAffId againstAid) andalso
+                    (aidToPidInt k = aidToPidInt againstAid))
+                then debug' ("PendingComm.deque: prevented matching "^
+                             (aidToString k)^" with "^(aidToString againstAid))
                 else raise FIRST k)) aidDict
     in
       raise AidDict.Absent

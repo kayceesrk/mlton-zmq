@@ -35,7 +35,12 @@ structure RepTypes =
             (* thread local action identifier generator *)
             actionNum: int ref,
             (* set this whenever this thread does some concurrency operation *)
-            done_comm : bool ref
+            done_comm : bool ref,
+            (* Affiliation is used to prevent certain threads from
+             * communicating. In particular, threads with the same affiliation
+             * do not talk to each other. Affiliation is a tuple with
+             * (processId: int, affId: int). *)
+             affId : int
             }
 
       (** threads --- see scheduler.sml and threads.sml **)
