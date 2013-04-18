@@ -44,7 +44,7 @@ structure ThreadID : THREAD_ID_EXTRA =
       let
         val _ = revisionId := !revisionId + 1
         val _ = actionNum := !actionNum + 1
-        val _ = actions := (ResizableArray.empty ())
+        val _ = actions := ResizableArray.empty ()
         val _ = cache := []
       in
         ()
@@ -72,10 +72,10 @@ structure ThreadID : THREAD_ID_EXTRA =
       let
         (* XXX racy *)
         val _ = revisionId := !revisionId + 1
-        val _ = actions := (ResizableArray.empty ())
+        val _ = actions := ResizableArray.empty ()
         val _ = cache := newCache
       in
-        (!cont) ()
+        !cont $ ()
       end
 
       fun exnHandler (_ : exn) = ()
@@ -86,7 +86,7 @@ structure ThreadID : THREAD_ID_EXTRA =
               affId = affId,
               exnHandler = ref (!defaultExnHandler),
               props = ref [],
-              actions = ref (ResizableArray.empty ()),
+              actions = ref $ ResizableArray.empty (),
               cache = ref [],
               cont = ref (fn _ => raise Kill),
               revisionId =  ref 0,
@@ -118,7 +118,7 @@ structure ThreadID : THREAD_ID_EXTRA =
 
       fun bogus s =
          let val n = CharVector.foldr (fn (c, n) => 2 * n - Char.ord c) 0 s
-         in new' (n, Random.natLessThan (valOf (Int.maxInt)))
+         in new' (n, Random.natLessThan $ valOf $ Int.maxInt)
          end
 
       fun mark (TID{done_comm, ...}) =

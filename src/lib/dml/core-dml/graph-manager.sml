@@ -98,13 +98,13 @@ struct
       val action = getActionFromArrayAtIndex (array, index)
       val _ = CycleDetector.processAdd {action = action, prevAction = prevAction}
     in
-      msgSendSafe (AR_REQ_ADD {action = action, prevAction = prevAction})
+      msgSendSafe $ AR_REQ_ADD {action = action, prevAction = prevAction}
     end
 
   in
     if index = 0 then sendCore NONE
     else (case getActionFromArrayAtIndex (array, index - 1) of
-               BASE m => sendCore (SOME (BASE m)))
+               BASE m => sendCore $ SOME $ BASE m)
   end
 
   fun getFinalAction () =
@@ -210,10 +210,9 @@ struct
     val newAct = case act of
                       SEND_WAIT {cid, matchAid = NONE} => SEND_WAIT {cid = cid, matchAid = SOME matchAid}
                     | RECV_WAIT {cid, matchAid = NONE} => RECV_WAIT {cid = cid, matchAid = SOME matchAid}
-                    | _ => raise Fail ("GraphManager.setMatchAid: Action="^
-                                       (actionToString (BASE {aid=aid,act=act})))
+                    | _ => raise Fail $ "GraphManager.setMatchAid: Action="^ (actionToString $ BASE {aid=aid,act=act})
     val _ = updateActionArray (array, index, BASE {aid = aid, act = newAct}, value)
-    val _ = sendToCycleDetector (getPrevNode n)
+    val _ = sendToCycleDetector $ getPrevNode n
     val _ = sendToCycleDetector n
   in
     ()
@@ -294,7 +293,7 @@ struct
                 UNCACHED {waitNode, actAid} => (waitNode, actAid)
               | _ => raise Fail "handleRecvCached: impossible!"
             val _ = Assert.assert ([], fn () => "handleRecvCached: actNum mis-match!",
-            fn () => actNum - 1 = aidToActNum actAid)
+                     fn () => actNum - 1 = aidToActNum actAid)
             val _ = setMatchAidSimple waitNode actAid value
             val _ = cache := ctl
           in
@@ -337,7 +336,7 @@ struct
   end handle RET_FALSE => false
 
   fun isLastNode (NODE{array, index}) =
-    (debug' ("isLastNode: arrayLength="^(Int.toString (RA.length array))^" index="^(Int.toString index));
+    (debug' ("isLastNode: arrayLength="^(Int.toString $ RA.length array)^" index="^(Int.toString index));
      RA.length array - 1 = index)
 
   fun nodeToAction (NODE{array, index}) = getActionFromArrayAtIndex (array, index)
@@ -359,10 +358,10 @@ struct
   fun restoreCont actionNum =
   let
     val _ = debug (fn () => "ActionHelper.restoreCont")
-    val actions = CML.tidToActions (S.getCurThreadId ())
+    val actions = CML.tidToActions $ S.getCurThreadId ()
 
     fun getCacheItem anum idx =
-      CacheItem {actNum = anum, value = valOf (getValueFromArrayAtIndex (actions, idx))}
+      CacheItem {actNum = anum, value = valOf $ getValueFromArrayAtIndex (actions, idx)}
 
     val aid = case getActionFromArrayAtIndex (actions, 0) of
                 BASE {aid, ...} => aid
@@ -371,13 +370,13 @@ struct
     fun loop idx acc =
       if (idx + anumOfFirstAction) < actionNum then
         case getActionFromArrayAtIndex (actions, idx) of
-          BASE {aid, act = SEND_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
-        | BASE {aid, act = RECV_WAIT _} => loop (idx+1) ((getCacheItem (aidToActNum aid) idx)::acc)
+          BASE {aid, act = SEND_WAIT _} => loop (idx+1) $ (getCacheItem (aidToActNum aid) idx)::acc
+        | BASE {aid, act = RECV_WAIT _} => loop (idx+1) $ (getCacheItem (aidToActNum aid) idx)::acc
         | _ => loop (idx+1) acc
       else acc
 
     val cache = rev (loop 0 [])
-    val _ = debug (fn () => "ActionHelper.restoreCont: cacheLength="^(Int.toString (length cache)))
+    val _ = debug (fn () => "ActionHelper.restoreCont: cacheLength="^(Int.toString $ length cache))
   in
     S.restoreCont cache
   end handle CML.Kill => S.switchToNext (fn _ => ())
@@ -389,9 +388,9 @@ struct
   fun abortChoice () =
   let
     val _ = Assert.assertAtomic' ("GraphManager.abort", SOME 1)
-    val array = CML.tidToActions (S.getCurThreadId ())
+    val array = CML.tidToActions $ S.getCurThreadId ()
     val beginNode = NODE{array = array, index = 0}
-    val _ = setParentAid beginNode (actionToAid (nodeToAction beginNode))
+    val _ = setParentAid beginNode $ actionToAid $ nodeToAction beginNode
     val _ = S.deleteCont ()
     val _ = S.atomicEnd ()
   in
@@ -412,7 +411,7 @@ struct
   fun firstActionIsRB () =
   let
     val _ = Assert.assertAtomic' ("GraphManager.firstActionIsRB", NONE)
-    val array = CML.tidToActions (S.getCurThreadId ())
+    val array = CML.tidToActions $ S.getCurThreadId ()
   in
     case getActionFromArrayAtIndex (array, 0) of
          BASE {act = RB, ...} => true

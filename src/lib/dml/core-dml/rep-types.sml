@@ -7,6 +7,10 @@
  * See the file MLton-LICENSE for details.
  *)
 
+
+infix 3 \> fun f \> y = f y (* Left application *)
+infixr 1 $ val op$ = op\>  (* Right pipe *)
+
 structure RepTypes =
 struct
   structure ZMQ = MLton.ZMQ

@@ -25,7 +25,7 @@ struct
                 | VALUE of 'a
                 | EMPTY
 
-  fun kToString (k) =
+  fun kToString k =
     case k of
           THREAD (ThreadId tidInt) => concat ["Thread(", Int.toString tidInt, ")"]
         | EMPTY => "EMPTY"
@@ -38,7 +38,7 @@ struct
     let
       val _ = debug' ("IVar.write(1)")
       val _ = S.atomicBegin ()
-      val _ = debug (fn () => ("IVar.write: "^(kToString (!r))))
+      val _ = debug (fn () => ("IVar.write: "^(kToString $ !r)))
       val _ = case (!r) of
                     EMPTY => r := VALUE v
                   | THREAD (ThreadId tidInt) => (r := VALUE v; SH.resumeThread tidInt emptyW8Vec)
@@ -52,7 +52,7 @@ struct
       val _ = Assert.assertNonAtomic' ("IVar.read(1)")
       val _ = debug' ("IVar.read(1)")
       val _ = S.atomicBegin ()
-      val _ = debug (fn () => ("IVar.read: "^(kToString (!r))))
+      val _ = debug (fn () => ("IVar.read: "^(kToString $ !r)))
       val v = case (!r) of
                     EMPTY =>
                     let
@@ -71,7 +71,7 @@ struct
                       read ()
                     end
                   | VALUE v => (S.atomicEnd (); v)
-      val _ = Assert.assertNonAtomic' ("IVar.read(2)")
+      val _ = Assert.assertNonAtomic' "IVar.read(2)"
     in
       v
     end

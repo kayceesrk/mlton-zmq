@@ -461,7 +461,7 @@ struct
                         val _ = if ISS.member (!peers) pidInt then ()
                                 else peers := ISS.insert (!peers) pidInt
                       in
-                        if ISS.size (!peers) = (numPeers-1) then msgSendSafe (CONN {pid = ProcessId (!processId)})
+                        if ISS.size (!peers) = (numPeers-1) then msgSendSafe $ CONN {pid = ProcessId (!processId)}
                         else join n
                       end
                   | SOME m => raise Fail ("DmlCore.connect: unexpected message during connect" ^ (msgToString m))

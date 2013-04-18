@@ -61,7 +61,7 @@ struct
     fun findNode aid =
       AidDict.find (!dict) aid
 
-    (* XXX Cleanup *)
+    (* TODO XXX Cleanup *)
   end
   structure NL = NodeLocator
 
@@ -70,7 +70,7 @@ struct
     val dict : unit S.thread list AidDict.dict ref = ref (AidDict.empty)
 
     fun numSuccessors node =
-      length (N.successors (graph, node))
+      length $ N.successors (graph, node)
 
     fun numSuccessorsExpected node =
     let
@@ -114,7 +114,7 @@ struct
       val aid = actionToAid (nodeGetAct node)
       val threadList = AidDict.lookup (!dict) aid
       val _ = dict := AidDict.remove (!dict) aid
-      val _ = ListMLton.map (threadList, fn t => S.ready (S.prep t))
+      val _ = ListMLton.map (threadList, fn t => S.ready $ S.prep t)
     in
       ()
     end handle AidDict.Absent => ()
@@ -138,10 +138,10 @@ struct
       val _ = foundCycle := true
       fun foo (n, acc) =
       let
-        val _ = debug' ("handleCycle: n="^(aidToString (actionToAid (nodeGetAct n))))
+        val _ = debug' $ "handleCycle: n="^(aidToString $ actionToAid $ nodeGetAct n)
         val _ = mustRollbackOnVisit n := true
       in
-        AidSet.insert acc (actionToAid (nodeGetAct n))
+        AidSet.insert acc $ actionToAid $ nodeGetAct n
       end
     in
       unsafeActions := ListMLton.fold (!stack, !unsafeActions, foo)
@@ -168,7 +168,7 @@ struct
                end,
              finishNode = fn n =>
                let
-                 val _ = if MLton.equal (hd(!stack), n) then ignore (ListMLton.pop stack) else ()
+                 val _ = if MLton.equal (hd(!stack), n) then ignore $ ListMLton.pop stack else ()
                  val _ = amVisiting n := false
 
                  (* Remove outoing edges *)
@@ -178,8 +178,8 @@ struct
                  ()
                end,
              handleNonTreeEdge =
-              fn e => if !(amVisiting (E.to (graph, e))) orelse
-                         AidSet.member (!unsafeActions) (actionToAid (nodeGetAct (E.to (graph, e)))) then
+              fn e => if ! $ amVisiting $ E.to (graph, e) orelse
+                         AidSet.member (!unsafeActions) (actionToAid $ nodeGetAct $ E.to (graph, e)) then
                         handleCycle ()
                       else (),
              handleTreeEdge = D.ignore,
@@ -191,10 +191,10 @@ struct
     val res =
       if !foundCycle then
         let
-          val _ = AidSet.app (fn aid => debug' ("unsafeAid: "^(aidToString aid))) (!unsafeActions)
+          val _ = AidSet.app (fn aid => debug' $ "unsafeAid: "^(aidToString aid)) (!unsafeActions)
           val rollbackAids = AidSet.foldr (fn (aid, acc) =>
             let
-              fun merge anum = if (aidToActNum aid) < anum then (aidToActNum aid) else anum
+              fun merge anum = if (aidToActNum aid) < anum then aidToActNum aid else anum
             in
               PTRDict.insertMerge acc (aidToPtr aid) (aidToActNum aid) merge
             end) PTRDict.empty (!unsafeActions)
@@ -215,13 +215,13 @@ struct
     val _ = pushResult res
   in
     ()
-  end handle Empty => (debug' ("processCommit raised exception"); S.atomicEnd ())
+  end handle Empty => (debug' "processCommit raised exception"; S.atomicEnd ())
 
   fun processAdd {action, prevAction} =
     let
       fun addEdge {from, to} =
       let
-        val _ = ignore (G.addEdge (graph, {to = to, from = from}))
+        val _ = ignore $ G.addEdge (graph, {to = to, from = from})
       in
         NW.resumeThreads from
       end

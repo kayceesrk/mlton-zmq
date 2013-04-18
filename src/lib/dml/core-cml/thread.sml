@@ -51,7 +51,7 @@ structure Thread : THREAD =
 
       fun doHandler (TID {exnHandler, ...}, exn) =
          (debug (fn () => concat ["Exception: ", exnName exn, " : ", exnMessage exn])
-          ; debug (stringHistory exn)
+          ; debug $ stringHistory exn
           ; ((!exnHandler) exn) handle _ => ())
 
       fun atomicSpawnc tid f x =
@@ -61,7 +61,7 @@ structure Thread : THREAD =
               (ignore (f x) handle ex => doHandler (tid, ex)
               ; generalExit (SOME tid, false))
            val t = S.newWithTid (thread, tid)
-           val () = S.ready (S.prep t)
+           val () = S.ready $ S.prep t
            val () = debug (fn () => concat ["spawnc ", tidToString tid])  (* NonAtomic *)
          in
            tid

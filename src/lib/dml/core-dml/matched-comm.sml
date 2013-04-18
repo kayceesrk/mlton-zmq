@@ -66,7 +66,7 @@ struct
     val _ = aidDictRef := AidDict.remove (!aidDictRef) remoteAid
   in
     result
-  end handle AidDict.Absent => (debug' ("NOOP"); NOOP)
+  end handle AidDict.Absent => (debug' "NOOP"; NOOP)
 
   fun cleanup aidDictRef rollbackAids =
   let

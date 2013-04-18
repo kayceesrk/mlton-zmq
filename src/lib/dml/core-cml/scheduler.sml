@@ -66,12 +66,12 @@ structure Scheduler : SCHEDULER =
                curTid := tid
             end
       end
-      fun tidMsg () = TID.tidToString (getCurThreadId ())
-      fun tidInt () = TID.tidToInt (getCurThreadId ())
-      fun tidRev () = TID.tidToRev (getCurThreadId ())
-      fun tidNextActionNum () = TID.tidNextActionNum (getCurThreadId ())
-      fun tidActions () = TID.tidToActions (getCurThreadId ())
-      fun tidCache () = TID.tidToCache (getCurThreadId ())
+      fun tidMsg () = TID.tidToString $ getCurThreadId ()
+      fun tidInt () = TID.tidToInt $ getCurThreadId ()
+      fun tidRev () = TID.tidToRev $ getCurThreadId ()
+      fun tidNextActionNum () = TID.tidNextActionNum $ getCurThreadId ()
+      fun tidActions () = TID.tidToActions $ getCurThreadId ()
+      fun tidCache () = TID.tidToCache $ getCurThreadId ()
       (* fun debug msg = Debug.sayDebug ([atomicMsg, tidMsg], msg) *)
       (* fun debug' msg = debug (fn () => msg) *)
 
@@ -136,7 +136,7 @@ structure Scheduler : SCHEDULER =
                                let
                                   val tid = getCurThreadId ()
                                   val () = TID.mark tid
-                                  val RTHRD (tid',t') = f (THRD (tid, t))
+                                  val RTHRD (tid',t') = f $ THRD (tid, t)
                                   val () = setCurThreadId tid'
                                in
                                   t'
@@ -175,7 +175,7 @@ structure Scheduler : SCHEDULER =
       fun newWithTid (f: thread_id -> ('a -> unit), tid) : 'a thread =
          let
             val () = Assert.assertAtomic' ("Scheduler.newWithTid", NONE)
-            val t = T.new (f tid)
+            val t = T.new $ f tid
          in
             THRD (tid, t)
          end
@@ -193,7 +193,7 @@ structure Scheduler : SCHEDULER =
          let
             val () = Assert.assertAtomic' ("Scheduler.unwrap", NONE)
             val tid = getCurThreadId ()
-            val RTHRD (tid', t') = f (RTHRD (tid, t))
+            val RTHRD (tid', t') = f $ RTHRD (tid, t)
             val () = setCurThreadId tid'
          in
             t'
@@ -205,7 +205,7 @@ structure Scheduler : SCHEDULER =
          (atomicBegin ()
           ; setCurThreadId dummyTid
           ; Q.reset rdyQ1; Q.reset rdyQ2
-          ; if not running then ready (prep (errorThrd ())) else ()
+          ; if not running then ready $ prep $ errorThrd () else ()
           ; atomicEnd ())
       (* what to do at a preemption (with the current thread) *)
       fun preempt (thrd as RTHRD (tid, _)) =
@@ -231,7 +231,7 @@ structure Scheduler : SCHEDULER =
           fun phase1 acc =
             case Q.deque q of
                  NONE => acc
-               | SOME rt => phase1 ((f rt)::acc)
+               | SOME rt => phase1 $ (f rt)::acc
           val phase1Res = rev (phase1 [])
           val _ = app (fn rt => Q.enque (q, rt)) phase1Res
         in

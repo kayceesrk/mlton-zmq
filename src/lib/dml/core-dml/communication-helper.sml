@@ -76,7 +76,7 @@ struct
     val _ = Assert.assertAtomic' ("DmlCore.msgRecv", NONE)
     val PROXY {source, ...} = !proxy
   in
-    case ZMQ.recvNB (valOf source) of
+    case ZMQ.recvNB $ valOf source of
          NONE => NONE
        | SOME (ROOTED_MSG {msg, sender = ProcessId pidInt}) =>
            if pidInt = (!processId) then NONE

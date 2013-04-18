@@ -154,11 +154,11 @@ struct
     (* Committed Successfully *)
     val _ = debug' ("DmlCore.commit: SUCCESS")
     (* --- Racy code --- *)
-    val _ = CML.tidCommit (S.getCurThreadId ())
+    val _ = CML.tidCommit $ S.getCurThreadId ()
     (* --- End racy code --- *)
     val _ = GM.insertCommitNode ()
     val _ = O.saveCont ()
-    val _ = Assert.assertNonAtomic' ("DmlCore.commit")
+    val _ = Assert.assertNonAtomic' "DmlCore.commit"
   in
     ()
   end
@@ -177,7 +177,7 @@ struct
         in
           O.saveCont ()
         end
-      val _ = ignore (C.spawnWithTid (f o prolog, tid))
+      val _ = ignore $ C.spawnWithTid (f o prolog, tid)
       val _ = commit ()
     in
       ()

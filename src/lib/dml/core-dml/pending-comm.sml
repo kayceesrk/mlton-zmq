@@ -56,12 +56,12 @@ struct
     fun getOne () =
     let
       val _ = AidDict.app (fn (k, _) =>
-                (debug' ("PendingComm.deque: "^(aidToString k));
+                (debug' $ "PendingComm.deque: "^(aidToString k);
                 (* dont match actions between threads with the same affiliation *)
                 if ((aidToAffId k = aidToAffId againstAid) andalso
                     (aidToPidInt k = aidToPidInt againstAid))
-                then debug' ("PendingComm.deque: prevented matching "^
-                             (aidToString k)^" with "^(aidToString againstAid))
+                then debug' $ "PendingComm.deque: prevented matching "^
+                             (aidToString k)^" with "^(aidToString againstAid)
                 else raise FIRST k)) aidDict
     in
       raise AidDict.Absent
@@ -76,7 +76,7 @@ struct
 
   fun cleanup strDictRef rollbackAids =
   let
-    val _ = debug (fn () => "PendingComm.cleanup: length="^(Int.toString (StrDict.size(!strDictRef))))
+    val _ = debug (fn () => "PendingComm.cleanup: length="^(Int.toString $ StrDict.size (!strDictRef)))
     val _ = Assert.assertAtomic' ("PendingComm.cleanup", SOME 1)
     val oldStrDict = !strDictRef
     fun getNewAidDict oldAidDict =

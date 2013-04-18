@@ -39,7 +39,7 @@ struct
     (* Check if the choice has already been matched. If so, kill this thread *)
     val _ = S.atomicBegin ()
     val _ = if (!committedRef) then
-              (debug' ("ChoiceHelper: (early) aborting");
+              (debug' "ChoiceHelper: (early) aborting";
                S.atomicEnd ();
                raise CML.Kill)
             else ()
