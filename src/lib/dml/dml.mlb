@@ -2,4 +2,5 @@ ann
 	 "forceUsed"
 in
  	core-dml/core-dml.mlb
+	lib/lib.mlb
 end

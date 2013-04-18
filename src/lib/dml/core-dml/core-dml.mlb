@@ -37,10 +37,7 @@ in
 			event.sig
 			event.sml
 			dml.sml
-			bchan.sig
-			bchan.sml
 	 in
 			structure Dml
-			structure BChan
 	 end
 end
