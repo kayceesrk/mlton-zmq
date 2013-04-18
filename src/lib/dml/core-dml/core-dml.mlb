@@ -1,0 +1,46 @@
+ann
+   "sequenceNonUnit warn"
+   "nonexhaustiveMatch warn" "redundantMatch warn"
+   "warnUnused true"
+in
+   local
+      $(SML_LIB)/basis/basis.mlb
+      $(SML_LIB)/basis/mlton.mlb
+			../cmlib/cmlib.mlb
+			ann
+			  "forceUsed"
+			in
+				../core-cml/core-cml.mlb
+			end
+      ../util/util.mlb
+			rep-types.sml
+			action-helper.sig
+			action-helper.sml
+			communication-helper.sig
+			communication-helper.sml
+			cycle-detector.sig
+			cycle-detector.sml
+			graph-manager.sig
+			graph-manager.sml
+			pending-comm.sig
+			pending-comm.sml
+			matched-comm.sig
+			matched-comm.sml
+			message-filter.sml
+			scheduler-helper.sml
+			ivar.sig
+			ivar.sml
+			orchestrator.sig
+			orchestrator.sml
+			dml.sig
+			dml-core.sml
+			event.sig
+			event.sml
+			dml.sml
+			bchan.sig
+			bchan.sml
+	 in
+			structure Dml
+			structure BChan
+	 end
+end
